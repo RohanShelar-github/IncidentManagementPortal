@@ -1,0 +1,2168 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta content="true" name="cf-disable-email-obfuscation"/>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta content="Magic Cloud Incident Management &amp; Reporting Portal — Track, manage and resolve incidents in real time." name="description"/>
+<meta content="#0d0f1a" name="theme-color"/>
+<link href="data:image/svg+xml,&lt;svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'&gt;&lt;rect width='32' height='32' rx='8' fill='%234f8ef7'/&gt;&lt;text x='16' y='22' text-anchor='middle' font-size='18' font-family='sans-serif' font-weight='bold' fill='white'&gt;M&lt;/text&gt;&lt;/svg&gt;" rel="icon" type="image/svg+xml"/>
+<title>Magic Cloud — Incident Management &amp; Reporting Portal</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&amp;family=DM+Mono:wght@300;400;500&amp;family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&amp;display=swap" rel="stylesheet"/>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="./css/styles.css" rel="stylesheet"/></head>
+<body>
+<!-- ─── LOGIN SCREEN ──────────────────────────────────────────── -->
+<div id="loginScreen">
+<div class="login-bg"></div>
+<div class="login-card">
+<div class="login-header">
+<div class="login-logo">
+<img alt="Magic Cloud" src="data:image/png;base64,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" style="width:72px;height:72px;object-fit:contain"/>
+</div>
+<div class="login-title">Welcome</div>
+<div class="login-subtitle">Sign in to Incident Management &amp; Reporting Portal</div>
+</div>
+<div class="login-form-box">
+<div class="login-field">
+<label>Email</label>
+<div class="input-wrap">
+<span class="input-icon"><svg fill="none" height="16" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="16"><rect height="16" rx="2" width="20" x="2" y="4"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg></span>
+<input autocomplete="email" id="loginEmail" placeholder="Enter your email" type="text"/>
+</div>
+</div>
+<div class="login-field">
+<label>Password</label>
+<div class="input-wrap">
+<span class="input-icon"><svg fill="none" height="16" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="16"><rect height="11" rx="2" width="18" x="3" y="11"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></span>
+<input autocomplete="current-password" id="loginPassword" placeholder="Enter your password" type="password"/>
+<span class="eye-toggle" id="eyeIcon"><svg fill="none" height="16" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="16"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"></path><circle cx="12" cy="12" r="3"></circle></svg></span>
+</div>
+</div>
+<button class="login-btn" id="loginBtn">
+<div class="login-btn-inner">
+<div class="btn-spinner" id="btnSpinner"></div>
+<span id="btnText">Sign In to Portal</span>
+</div>
+</button>
+<div class="login-error" id="loginError">⚠ Invalid credentials. Please check your email and password.</div>
+</div>
+</div>
+</div>
+<!-- ─── PORTAL APP ─────────────────────────────────────────────── -->
+<a class="skip-link" href="#mainContent" onblur="this.style.top='-100px'" onfocus="this.style.top='12px'" style="position:fixed;top:-100px;left:12px;z-index:99999;background:var(--accent);color:#fff;padding:8px 16px;border-radius:6px;font-size:13px;font-weight:600;transition:top .2s;text-decoration:none">Skip to main content</a>
+<div id="portalApp">
+<!-- SIDEBAR OVERLAY -->
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+<!-- SIDEBAR -->
+<nav aria-label="Main navigation" class="sidebar" id="sidebar" role="navigation">
+<div class="sidebar-toggle-btn" id="sidebarToggleBtn" title="Toggle sidebar">‹</div>
+<div class="sidebar-logo" id="homeNav" onclick="navigate('home', document.getElementById('homeNav'))" style="cursor:pointer" title="Go to Home">
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+<img alt="Magic Logo" src="data:image/png;base64,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" style="width:38px;height:38px;object-fit:contain;border-radius:6px"/>
+<div>
+<div class="logo-mark" onclick="navigate('home',document.getElementById('homeNav'))" style="cursor:pointer" title="Go to Home">Magic Cloud</div>
+<div class="logo-sub">Incident Management Portal</div>
+</div>
+</div>
+</div>
+<!-- Nav wrap clips inner content without affecting toggle btn -->
+<div class="sidebar-nav-wrap">
+<div class="nav-section">Main</div>
+<div class="nav-item" id="dashNav" onclick="navigate('dashboard', this)" onkeydown="if(event.key==='Enter')navigate('dashboard',this)" tabindex="0">
+<span class="nav-icon">⬡</span><span class="nav-label"> Dashboard</span>
+</div>
+<div class="nav-item" id="incidentsNav" onclick="navigate('incidents', this)">
+<span class="nav-icon">⚠</span><span class="nav-label"> Incidents</span>
+</div>
+<div class="nav-section">Reporting</div>
+<div class="nav-item" id="reportsNav" onclick="navigate('reports', this)">
+<span class="nav-icon">◈</span><span class="nav-label"> Reports</span>
+</div>
+<div class="nav-item" id="c360Nav" onclick="navigate('customer360', this)">
+<span class="nav-icon">👥</span><span class="nav-label"> Customer 360</span>
+</div>
+<div class="nav-section" id="adminSection">Admin</div>
+<div class="nav-item" data-label="Users" id="usersNav" onclick="navigate('users', this)">
+<span class="nav-icon">◉</span><span class="nav-label"> User Management</span>
+</div>
+<div class="nav-item" data-label="Data Management" id="dataMgmtNav" onclick="navigate('datamanagement', this)">
+<span class="nav-icon">🗃</span><span class="nav-label"> Data Management</span>
+</div>
+</div><!-- /sidebar-nav-wrap -->
+<div class="sidebar-footer">
+<div class="user-card">
+<div class="user-avatar" id="sidebarAvatar" style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;flex-shrink:0;letter-spacing:.5px">AU</div>
+<div class="user-info">
+<div class="user-name" id="sidebarUserName">Admin User</div>
+<div class="user-role" id="sidebarUserRole">ADMIN</div>
+</div>
+</div>
+</div>
+</nav>
+<!-- MAIN -->
+<div class="main" id="mainWrapper">
+<!-- TOPBAR -->
+<div class="topbar">
+<div style="display:flex;align-items:center;gap:12px">
+<div class="hamburger" onclick="openSidebar()">☰</div>
+<img alt="Magic Cloud" class="topbar-logo" id="topbarLogo" src="data:image/jpeg;base64,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" style="height:28px;border-radius:5px;display:none"/>
+<div class="topbar-title" id="topbarTitle">Dashboard</div>
+</div>
+<div class="topbar-right">
+<div id="topbarSearch" style="position:relative;display:flex;align-items:center">
+<div id="btnSearch" onclick="openCmdPalette()" onmouseout="this.style.background='rgba(79,142,247,0.08)';this.style.borderColor='rgba(79,142,247,0.2)';this.style.boxShadow=''" onmouseover="this.style.background='rgba(79,142,247,0.18)';this.style.borderColor='rgba(79,142,247,0.5)';this.style.boxShadow='0 0 12px rgba(79,142,247,0.25)'" style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:10px;background:rgba(79,142,247,0.08);border:1px solid rgba(79,142,247,0.2);cursor:pointer;transition:all .2s;color:#4f8ef7" title="Search (Ctrl+K)">
+<svg fill="none" height="16" stroke="#4f8ef7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" viewbox="0 0 24 24" width="16">
+<circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path>
+</svg>
+</div>
+</div>
+<div class="notif-wrap">
+<div class="topbar-btn" id="btnNotif" title="Notifications">🔔</div>
+<div class="notif-badge" id="notifBadge" style="display:none">0</div>
+</div>
+<div class="topbar-btn" id="btnTheme" title="Toggle theme">🌙</div>
+<div id="profileTrigger" style="display:flex;align-items:center;gap:7px;cursor:pointer" title="Profile">
+<div class="user-avatar-btn" id="btnProfile"></div>
+<span id="profileUserLabel" style="font-size:13px;font-weight:600;color:var(--text2);white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis"></span>
+</div>
+</div>
+</div>
+<!-- STATUS BAR -->
+<div class="status-bar" id="statusBar">
+<div class="status-bar-item"><div class="status-dot online"></div>System Online</div>
+<div class="status-bar-item" id="sbIncidentCount">— incidents</div>
+<div class="status-bar-item" id="sbOpenCount">— new</div>
+<div class="status-bar-item" id="sbCriticalCount">— critical</div>
+<div style="margin-left:auto;display:flex;gap:16px">
+<div class="status-bar-item" id="sbCurrentUser">—</div>
+<div class="status-bar-item" id="sbTime">—</div>
+</div>
+</div>
+<!-- CONTENT -->
+<div class="content" id="mainContent" role="main">
+<!-- ═══════════════ HOME PAGE ═══════════════ -->
+<div class="page active" id="page-home">
+<div id="homeView" style="min-height:100vh">
+<!-- ── HERO ── -->
+<div style="position:relative;overflow:hidden;border-radius:20px;margin-bottom:28px;min-height:340px;display:flex;align-items:center;background:linear-gradient(135deg,#080818 0%,#0f1535 50%,#0a1f3a 100%)">
+<!-- Animated background orbs -->
+<div style="position:absolute;top:-100px;right:-60px;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle,rgba(79,142,247,0.2) 0%,transparent 65%);pointer-events:none;animation:floatOrb 8s ease-in-out infinite"></div>
+<div style="position:absolute;bottom:-120px;right:30%;width:350px;height:350px;border-radius:50%;background:radial-gradient(circle,rgba(123,94,247,0.15) 0%,transparent 65%);pointer-events:none;animation:floatOrb 10s ease-in-out infinite reverse"></div>
+<div style="position:absolute;top:30px;left:40%;width:200px;height:200px;border-radius:50%;background:radial-gradient(circle,rgba(45,212,160,0.1) 0%,transparent 65%);pointer-events:none;animation:floatOrb 6s ease-in-out infinite 2s"></div>
+<!-- Dot grid -->
+<div style="position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,0.06) 1px,transparent 1px);background-size:28px 28px;pointer-events:none;border-radius:20px"></div>
+<!-- Content -->
+<div style="position:relative;z-index:1;padding:52px 56px;flex:1">
+<div style="display:inline-flex;align-items:center;gap:8px;background:rgba(79,142,247,0.1);border:1px solid rgba(79,142,247,0.2);border-radius:20px;padding:5px 14px;margin-bottom:24px">
+<span style="width:6px;height:6px;border-radius:50%;background:#4f8ef7;display:inline-block;box-shadow:0 0 8px #4f8ef7;animation:pulse 2s infinite"></span>
+<span style="font-size:11px;color:#4f8ef7;font-weight:600;letter-spacing:1.2px;text-transform:uppercase">Hello <span id="heroUserName">User</span>, Welcome back</span>
+</div>
+<h1 style="font-size:46px;font-weight:800;color:white;line-height:1.1;margin-bottom:16px;letter-spacing:-1.5px">
+              Resolve Faster.<br/>
+<span id="heroGradientText" sstyle="background:linear-gradient(90deg,#4f8ef7,#7b5ef7 50%,#2dd4a0);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">Stay Ahead.</span>
+</h1>
+<p id="heroSubtext" style="font-size:15px;color:rgba(255,255,255,0.45);max-width:460px;line-height:1.75;margin-bottom:0">
+              Your team's incidents, priorities and resolutions — all in one place.
+            </p>
+</div>
+<!-- Right: live pulse card -->
+<div style="position:relative;z-index:1;padding:52px 56px 52px 0;flex-shrink:0">
+<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:24px 28px;min-width:200px;backdrop-filter:blur(8px)">
+<div style="font-size:11px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:16px">System Status</div>
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+<span style="width:10px;height:10px;border-radius:50%;background:#2dd4a0;display:inline-block;box-shadow:0 0 12px #2dd4a0;animation:pulse 2s infinite"></span>
+<span style="font-size:13px;color:#2dd4a0;font-weight:600">All Systems Operational</span>
+</div>
+<div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:14px;margin-top:4px">
+<div style="font-size:11px;color:rgba(255,255,255,0.3);margin-bottom:6px">Open incidents right now</div>
+<div id="heroBigCount" style="font-size:36px;font-weight:800;color:white;line-height:1">—</div>
+</div>
+</div>
+</div>
+</div>
+<!-- ── QUICK ACTION CARDS ── -->
+<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:14px">Quick Actions</div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:32px">
+<div class="home-action-card" id="homeCardDashboard" onclick="navigate('dashboard',document.getElementById('dashNav'))" style="--accent:#4f8ef7">
+<div class="home-action-icon" style="background:rgba(79,142,247,0.12);border-color:rgba(79,142,247,0.2)">
+<svg fill="none" height="22" stroke="#4f8ef7" stroke-width="1.8" viewbox="0 0 24 24" width="22"><rect height="7" rx="1" width="7" x="3" y="3"></rect><rect height="7" rx="1" width="7" x="14" y="3"></rect><rect height="7" rx="1" width="7" x="3" y="14"></rect><rect height="7" rx="1" width="7" x="14" y="14"></rect></svg>
+</div>
+<div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-bottom:4px">Dashboard</div>
+<div style="font-size:12px;color:var(--text-muted)">Charts &amp; KPIs</div>
+<div class="home-action-arrow">→</div>
+</div>
+<div class="home-action-card" id="homeCardIncidents" onclick="navigate('incidents',document.querySelectorAll('.nav-item')[1])" style="--accent:#f75c7c">
+<div class="home-action-icon" style="background:rgba(247,92,124,0.12);border-color:rgba(247,92,124,0.2)">
+<svg fill="none" height="22" stroke="#f75c7c" stroke-width="1.8" viewbox="0 0 24 24" width="22"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path><line x1="12" x2="12" y1="9" y2="13"></line><line x1="12" x2="12.01" y1="17" y2="17"></line></svg>
+</div>
+<div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-bottom:4px">Incidents</div>
+<div style="font-size:12px;color:var(--text-muted)">Track &amp; manage</div>
+<div class="home-action-arrow">→</div>
+</div>
+<div class="home-action-card" id="homeCardReports" onclick="navigate('reports',document.querySelectorAll('.nav-item')[2])" style="--accent:#2dd4a0">
+<div class="home-action-icon" style="background:rgba(45,212,160,0.12);border-color:rgba(45,212,160,0.2)">
+<svg fill="none" height="22" stroke="#2dd4a0" stroke-width="1.8" viewbox="0 0 24 24" width="22"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" x2="8" y1="13" y2="13"></line><line x1="16" x2="8" y1="17" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+</div>
+<div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-bottom:4px">Reports</div>
+<div style="font-size:12px;color:var(--text-muted)">PDF &amp; Excel export</div>
+<div class="home-action-arrow">→</div>
+</div>
+<div class="home-action-card" id="homeCardCreate" onclick="openModal('incidentModal')" style="--accent:#f7b94f">
+<div class="home-action-icon" style="background:rgba(247,185,79,0.12);border-color:rgba(247,185,79,0.2)">
+<svg fill="none" height="22" stroke="#f7b94f" stroke-width="1.8" viewbox="0 0 24 24" width="22"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="16"></line><line x1="8" x2="16" y1="12" y2="12"></line></svg>
+</div>
+<div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-bottom:4px">New Incident</div>
+<div style="font-size:12px;color:var(--text-muted)">Create &amp; assign</div>
+<div class="home-action-arrow">→</div>
+</div>
+</div>
+<!-- ── SEVERITY BREAKDOWN VISUAL ── -->
+<div id="homeSeveritySection" style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:28px">
+<!-- Severity heatmap-style bars -->
+<div class="chart-card">
+<div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:4px">Severity Breakdown</div>
+<div style="font-size:12px;color:var(--text-muted);margin-bottom:20px">Live incident distribution across priority levels</div>
+<div id="homeSeverityBars"></div>
+</div>
+<!-- Status donut mini -->
+<div class="chart-card" id="homeDonutSection" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px">
+<div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:4px;align-self:flex-start">Resolution Rate</div>
+<div style="font-size:12px;color:var(--text-muted);margin-bottom:20px;align-self:flex-start">Closed vs open incidents</div>
+<canvas height="160" id="homeDonut" width="160"></canvas>
+<div id="homeDonutLegend" style="font-size:11px;color:var(--text-muted);margin-top:14px;text-align:center"></div>
+</div>
+</div>
+<!-- ── ACTIVITY FEED (full width, timeline style) ── -->
+<div class="chart-card" id="homeTimelineSection">
+<div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:4px">Recent Activity Timeline</div>
+<div style="font-size:12px;color:var(--text-muted);margin-bottom:20px">Latest actions and updates across all incidents</div>
+<div id="homeTimeline" style="position:relative;padding-left:24px"></div>
+</div>
+</div>
+</div>
+<!-- ─── DASHBOARD ─────────────────────────────────────── -->
+<div class="page" id="page-dashboard">
+<div class="page-header">
+<div>
+<div class="breadcrumb" id="bc_page-dashboard">
+<span class="breadcrumb-item" onclick="navigate('dashboard', document.getElementById('dashNav'))">🏠 Home</span>
+<span class="breadcrumb-sep">›</span>
+<span class="breadcrumb-item active">Dashboard</span>
+</div>
+<div class="page-header-title">Overview</div>
+<div class="page-header-sub" style="display:flex;align-items:center;gap:8px">
+            Real-time incident monitoring —
+            <span id="dashLastUpdated" style="color:var(--text-muted)">Last updated just now</span>
+<span id="dashRefreshBtn" onclick="refreshDashboard()" onmouseout="this.style.color='var(--text-muted)';this.style.background='transparent'" onmouseover="this.style.color='var(--accent)';this.style.background='rgba(79,142,247,0.12)'" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--text-muted);transition:color .2s,background .2s;flex-shrink:0" title="Refresh">
+<svg fill="none" height="13" id="dashRefreshIcon" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" style="transition:transform .7s ease" viewbox="0 0 24 24" width="13">
+<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+<path d="M21 3v5h-5"></path>
+<path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+<path d="M8 16H3v5"></path>
+</svg>
+</span>
+</div>
+</div>
+<div style="display:flex;gap:8px;align-items:center">
+<button class="btn btn-primary" id="createIncidentBtn" onclick="openModal('incidentModal')">+ New Incident</button>
+</div>
+</div>
+<!-- ─── DASHBOARD FILTERS ──────────────────────────────── -->
+<div id="dashFilterBar" style="position:relative;margin-bottom:24px">
+<!-- Glow backdrop -->
+<div style="position:absolute;inset:0;border-radius:20px;background:linear-gradient(135deg,rgba(79,142,247,0.06),rgba(124,92,247,0.04),rgba(79,142,247,0.02));border:1px solid rgba(79,142,247,0.15);pointer-events:none;z-index:0"></div>
+<div style="position:relative;z-index:1;padding:18px 22px 16px">
+<!-- Header row -->
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+<div style="display:flex;align-items:center;gap:10px">
+<div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,rgba(79,142,247,0.2),rgba(124,92,247,0.15));border:1px solid rgba(79,142,247,0.25);display:flex;align-items:center;justify-content:center;font-size:13px">⬡</div>
+<span style="font-family:var(--font-head);font-size:13px;font-weight:700;color:var(--text);letter-spacing:.3px">Dashboard Filters</span>
+<div id="df_active_badge" style="display:none;background:linear-gradient(135deg,rgba(79,142,247,0.2),rgba(124,92,247,0.15));border:1px solid rgba(79,142,247,0.35);color:var(--accent);border-radius:20px;padding:3px 10px;font-size:10px;font-weight:700;font-family:var(--font-mono);letter-spacing:.5px;animation:pulseGlow 2s ease infinite"></div>
+</div>
+<button id="df_clear_btn" onclick="clearDashFilters()" onmouseout="this.style.background='rgba(247,92,124,0.08)';this.style.borderColor='rgba(247,92,124,0.2)'" onmouseover="this.style.background='rgba(247,92,124,0.18)';this.style.borderColor='rgba(247,92,124,0.5)'" style="display:none;background:rgba(247,92,124,0.08);border:1px solid rgba(247,92,124,0.2);color:var(--danger);border-radius:20px;padding:5px 14px;font-size:11px;font-weight:600;cursor:pointer;font-family:var(--font-body);letter-spacing:.3px;transition:all .2s">✕  Clear filters</button>
+</div>
+<!-- Filter controls row -->
+<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+<!-- Customer -->
+<div style="flex:1.5;min-width:150px">
+<div style="font-size:9px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:7px;font-family:var(--font-mono)">◈ Customer</div>
+<div class="ms-wrap" id="df_customer_wrap">
+<div class="ms-box" id="df_customer" onclick="toggleMsDropdown('df_customer')">
+<span class="ms-placeholder" id="df_customer_ph">All Customers</span>
+</div>
+<div class="ms-dropdown" id="df_customer_dd">
+</div>
+</div>
+</div>
+<!-- Area -->
+<div style="flex:1;min-width:120px">
+<div style="font-size:9px;font-weight:700;color:#7c5cf7;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:7px;font-family:var(--font-mono)">◈ Area</div>
+<div class="ms-wrap" id="df_area_wrap">
+<div class="ms-box" id="df_area" onclick="toggleMsDropdown('df_area')">
+<span class="ms-placeholder" id="df_area_ph">All Areas</span>
+</div>
+<div class="ms-dropdown" id="df_area_dd">
+</div>
+</div>
+</div>
+<!-- Severity -->
+<div style="flex:1;min-width:120px">
+<div style="font-size:9px;font-weight:700;color:var(--warning);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:7px;font-family:var(--font-mono)">◈ Severity</div>
+<div class="ms-wrap" id="df_severity_wrap">
+<div class="ms-box" id="df_severity" onclick="toggleMsDropdown('df_severity')">
+<span class="ms-placeholder" id="df_severity_ph">All Severities</span>
+</div>
+<div class="ms-dropdown" id="df_severity_dd">
+</div>
+</div>
+</div>
+<!-- Date range -->
+<div style="flex:1;min-width:120px">
+<div style="font-size:9px;font-weight:700;color:var(--success);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:7px;font-family:var(--font-mono)">◈ From</div>
+<input id="df_from" onblur="this.style.borderColor='rgba(45,212,160,0.15)';this.style.background='rgba(45,212,160,0.05)';this.style.boxShadow=''" onchange="applyDashFilters()" onfocus="this.style.borderColor='rgba(45,212,160,0.5)';this.style.background='rgba(45,212,160,0.1)';this.style.boxShadow='0 0 0 3px rgba(45,212,160,0.08)'" style="width:100%;background:rgba(45,212,160,0.05);border:1px solid rgba(45,212,160,0.15);border-radius:10px;padding:9px 12px;color:var(--text);font-size:12px;font-family:var(--font-body);outline:none;cursor:pointer;transition:all .2s;box-sizing:border-box" type="date"/>
+</div>
+<div style="flex:1;min-width:120px">
+<div style="font-size:9px;font-weight:700;color:var(--success);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:7px;font-family:var(--font-mono)">◈ To</div>
+<input id="df_to" onblur="this.style.borderColor='rgba(45,212,160,0.15)';this.style.background='rgba(45,212,160,0.05)';this.style.boxShadow=''" onchange="applyDashFilters()" onfocus="this.style.borderColor='rgba(45,212,160,0.5)';this.style.background='rgba(45,212,160,0.1)';this.style.boxShadow='0 0 0 3px rgba(45,212,160,0.08)'" style="width:100%;background:rgba(45,212,160,0.05);border:1px solid rgba(45,212,160,0.15);border-radius:10px;padding:9px 12px;color:var(--text);font-size:12px;font-family:var(--font-body);outline:none;cursor:pointer;transition:all .2s;box-sizing:border-box" type="date"/>
+</div>
+</div>
+</div>
+</div>
+<div class="stats-grid">
+<div class="stat-card blue">
+<div class="stat-label">Total Incidents</div>
+<div class="stat-value" id="statTotal">148</div>
+<div class="stat-delta"><span class="stat-trend up">↑ +12%</span> vs last month</div>
+</div>
+<div class="stat-card red">
+<div class="stat-label">Open / Active</div>
+<div class="stat-value" id="statOpen">34</div>
+<div class="stat-delta"><span class="stat-trend down">↑ 5</span> critical now</div>
+</div>
+<div class="stat-card green">
+<div class="stat-label">Resolved</div>
+<div class="stat-value" id="statClosed">114</div>
+<div class="stat-delta"><span class="stat-trend up">↑ 77%</span> resolution rate</div>
+</div>
+<div class="stat-card purple">
+<div class="stat-label">Avg Resolution</div>
+<div class="stat-value">4.2h</div>
+<div class="stat-delta"><span class="stat-trend up">↓ 0.8h</span> vs last month</div>
+</div>
+<div class="stat-card" style="border-color:rgba(247,185,79,0.3);background:linear-gradient(135deg,rgba(247,185,79,0.08),rgba(247,185,79,0.02))">
+<div class="stat-label" style="color:var(--warning)">Total Downtime</div>
+<div class="stat-value" id="statDowntime" style="color:var(--warning)">—</div>
+<div class="stat-delta" id="statDowntimeSub" style="font-size:11px;color:var(--text-muted)">across closed incidents</div>
+</div>
+<div class="stat-card" style="border-color:rgba(247,92,124,0.3);background:linear-gradient(135deg,rgba(247,92,124,0.08),rgba(247,92,124,0.02))">
+<div class="stat-label" style="color:var(--danger)">SLA Breach Rate</div>
+<div class="stat-value" id="statSLABreach" style="color:var(--danger)">—</div>
+<div class="stat-delta" id="statSLABreachSub">of incidents breached SLA</div>
+</div>
+<div class="stat-card" style="border-color:rgba(79,142,247,0.3);background:linear-gradient(135deg,rgba(79,142,247,0.08),rgba(79,142,247,0.02))">
+<div class="stat-label" style="color:var(--accent)">Avg MTTR</div>
+<div class="stat-value" id="statAvgMTTR" style="color:var(--accent)">—</div>
+<div class="stat-delta" id="statAvgMTTRSub">mean time to resolve</div>
+</div>
+<div class="stat-card" style="border-color:rgba(45,212,160,0.3);background:linear-gradient(135deg,rgba(45,212,160,0.08),rgba(45,212,160,0.02))">
+<div class="stat-label" style="color:#2dd4a0">Resolution Rate</div>
+<div class="stat-value" id="statResRate" style="color:#2dd4a0">—</div>
+<div class="stat-delta" id="statResRateSub">incidents fully resolved</div>
+</div>
+</div>
+<div class="charts-grid">
+<div class="chart-card">
+<div class="chart-header">
+<div>
+<div class="chart-title">Incident Trend</div>
+<div class="chart-sub">Monthly incidents over the last 8 months</div>
+</div>
+</div>
+<div class="chart-container" style="height:230px">
+<canvas id="trendChart"></canvas>
+</div>
+</div>
+<div class="chart-card">
+<div class="chart-header">
+<div>
+<div class="chart-title">By Severity</div>
+<div class="chart-sub">Distribution breakdown</div>
+</div>
+</div>
+<div class="chart-container" style="height:230px">
+<canvas id="severityChart"></canvas>
+</div>
+</div>
+</div>
+<div class="charts-grid-2" style="grid-template-columns:2fr 1fr">
+<div class="chart-card">
+<div class="chart-header">
+<div>
+<div class="chart-title">Customer Distribution</div>
+<div class="chart-sub">Incidents per customer</div>
+</div>
+</div>
+<div class="chart-container" style="height:320px">
+<canvas id="customerChart"></canvas>
+</div>
+</div>
+<div class="chart-card">
+<div class="chart-header">
+<div>
+<div class="chart-title">Resolution Timeline</div>
+<div class="chart-sub">Avg hours to resolve by priority</div>
+</div>
+</div>
+<div class="chart-container" style="height:200px">
+<canvas id="resolutionChart"></canvas>
+</div>
+</div>
+</div>
+<!-- Recent + Activity -->
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:16px">
+<div class="chart-card">
+<div class="chart-header">
+<div class="chart-title">Recent Incidents</div>
+<button class="btn btn-secondary btn-sm" onclick="navigate('incidents', document.querySelector('.nav-item:nth-child(5)'))">View All</button>
+</div>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Title</th>
+<th>Severity</th>
+<th>Status</th>
+<th>Customer</th>
+</tr>
+</thead>
+<tbody id="recentTable"></tbody>
+</table>
+</div>
+<div class="chart-card">
+<div class="chart-header">
+<div class="chart-title">Activity Feed</div>
+</div>
+<div class="activity-list" id="activityFeed"></div>
+</div>
+</div>
+<!-- Incident Heatmap -->
+<!-- My Incidents + Customer Health -->
+<div class="charts-grid-2" style="margin-top:16px">
+<!-- My Incidents -->
+<div class="chart-card">
+<div class="chart-header" style="margin-bottom:4px">
+<div>
+<div class="chart-title">My Incidents</div>
+<div class="chart-sub" id="myIncSub">Open incidents assigned to you</div>
+</div>
+<span id="myIncBadge" style="background:rgba(247,92,124,0.15);color:var(--danger);font-family:var(--font-mono);font-size:11px;padding:3px 9px;border-radius:10px;font-weight:600"></span>
+</div>
+<div id="myIncList" style="margin-top:8px"></div>
+</div>
+<!-- Customer Health -->
+<div class="chart-card">
+<div class="chart-header" style="margin-bottom:12px">
+<div>
+<div class="chart-title">Customer Health</div>
+<div class="chart-sub">Based on open + critical incidents</div>
+</div>
+<div style="display:flex;gap:8px;font-size:10px;color:var(--text3);font-family:var(--font-mono);align-items:center">
+<span style="display:flex;align-items:center;gap:4px"><span style="width:7px;height:7px;border-radius:50%;background:var(--success);display:inline-block"></span>Healthy</span>
+<span style="display:flex;align-items:center;gap:4px"><span style="width:7px;height:7px;border-radius:50%;background:var(--warning);display:inline-block"></span>At Risk</span>
+<span style="display:flex;align-items:center;gap:4px"><span style="width:7px;height:7px;border-radius:50%;background:var(--danger);display:inline-block"></span>Critical</span>
+</div>
+</div>
+<div class="health-grid" id="healthGrid"></div>
+</div>
+</div>
+<!-- ─── DOWNTIME BREAKDOWN ──────────────────────────────── -->
+<div class="charts-grid" id="downtimeSection" style="grid-template-columns:1fr 1fr 1fr;margin-top:20px">
+<!-- Customer downtime -->
+<div class="chart-card">
+<div class="chart-header">
+<div>
+<div class="chart-title">Downtime by Customer</div>
+<div class="chart-sub">Total hours per customer (closed incidents)</div>
+</div>
+</div>
+<div id="downtimeCustomerList" style="padding:4px 0;overflow-y:auto;max-height:220px"></div>
+</div>
+<!-- Application downtime -->
+<div class="chart-card">
+<div class="chart-header">
+<div>
+<div class="chart-title">Downtime by Application</div>
+<div class="chart-sub">Total hours per application</div>
+</div>
+</div>
+<div id="downtimeAppList" style="padding:4px 0;overflow-y:auto;max-height:220px"></div>
+</div>
+<!-- Area downtime -->
+<div class="chart-card">
+<div class="chart-header">
+<div>
+<div class="chart-title">Downtime by Area</div>
+<div class="chart-sub">Infra / Application / Historian</div>
+</div>
+</div>
+<div id="downtimeAreaList" style="padding:4px 0;overflow-y:auto;max-height:220px"></div>
+</div>
+</div>
+<!-- ─── SLA BREACH + MTTR TREND ─────────────────────────── -->
+<div class="charts-grid" style="grid-template-columns:1fr 1fr;margin-top:16px">
+<div class="chart-card">
+<div class="chart-header">
+<div>
+<div class="chart-title">SLA Breach by Severity</div>
+<div class="chart-sub">Breached vs on-time per severity level</div>
+</div>
+</div>
+<div class="chart-container" style="height:200px"><canvas id="slaBreachChart"></canvas></div>
+</div>
+<div class="chart-card">
+<div class="chart-header">
+<div>
+<div class="chart-title">MTTR Trend</div>
+<div class="chart-sub">Avg hours to resolve — last 6 months</div>
+</div>
+</div>
+<div class="chart-container" style="height:200px"><canvas id="mttrTrendChart"></canvas></div>
+</div>
+</div>
+<!-- ─── AREA BREAKDOWN + DAY OF WEEK ─────────────────────── -->
+<div class="charts-grid" style="grid-template-columns:1fr 1fr;margin-top:16px">
+<div class="chart-card">
+<div class="chart-header">
+<div>
+<div class="chart-title">Area Breakdown</div>
+<div class="chart-sub">Open vs Closed by area</div>
+</div>
+</div>
+<div class="chart-container" style="height:200px"><canvas id="areaBreakdownChart"></canvas></div>
+</div>
+<div class="chart-card">
+<div class="chart-header">
+<div>
+<div class="chart-title">Incidents by Day of Week</div>
+<div class="chart-sub">When do incidents peak?</div>
+</div>
+</div>
+<div class="chart-container" style="height:200px"><canvas id="dowChart"></canvas></div>
+</div>
+</div>
+<!-- ─── TOP ENGINEERS + RECURRING INCIDENTS ───────────────── -->
+<div class="charts-grid" style="grid-template-columns:1fr 1fr;margin-top:16px">
+<div class="chart-card">
+<div class="chart-header">
+<div>
+<div class="chart-title">👷 Top Engineers</div>
+<div class="chart-sub">Resolved count &amp; avg MTTR</div>
+</div>
+</div>
+<div id="engineerLeaderboard" style="margin-top:4px"></div>
+</div>
+<div class="chart-card">
+<div class="chart-header">
+<div>
+<div class="chart-title">🔁 Recurring Incidents</div>
+<div class="chart-sub">Same customer + area, 2+ occurrences</div>
+</div>
+</div>
+<div id="recurringList" style="margin-top:4px;max-height:220px;overflow-y:auto"></div>
+</div>
+</div>
+<!-- ─── LIVE SLA COUNTDOWN ───────────────────────────────── -->
+<div class="chart-card" style="margin-top:16px">
+<div class="chart-header">
+<div>
+<div class="chart-title">🕐 Live SLA Countdown</div>
+<div class="chart-sub">Time remaining before breach — open Critical &amp; High incidents</div>
+</div>
+<span id="slaCountBadge" style="background:rgba(247,92,124,0.15);color:var(--danger);font-family:var(--font-mono);font-size:11px;padding:3px 9px;border-radius:10px;font-weight:600"></span>
+</div>
+<div id="slaCountdownList" style="margin-top:8px"></div>
+</div>
+</div>
+<!-- ─── INCIDENTS ─────────────────────────────────────── -->
+<div class="page" id="page-incidents">
+<div class="page-header">
+<div>
+<div class="breadcrumb" id="bc_page-incidents">
+<span class="breadcrumb-item" onclick="navigate('dashboard', document.getElementById('dashNav'))">🏠 Home</span>
+<span class="breadcrumb-sep">›</span>
+<span class="breadcrumb-item active">Incidents</span>
+</div>
+<div class="page-header-title">Incident Management</div>
+<div class="page-header-sub" id="incidentCount">Loading…</div>
+<div id="drillDownBadge" style="display:none;margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"></div>
+</div>
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+<div id="savedFiltersWrap" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+<button class="btn btn-secondary btn-sm" onclick="saveCurrentFilter()" style="font-size:11px">⭐ Save Filter</button>
+<div class="view-toggle">
+<button class="view-toggle-btn active" id="viewTableBtn" onclick="switchIncidentView('table')">☰ Table</button>
+<button class="view-toggle-btn" id="viewKanbanBtn" onclick="switchIncidentView('kanban')">⊞ Kanban</button>
+</div>
+<button class="btn btn-primary" id="createIncidentBtn2" onclick="openModal('incidentModal')">+ Create Incident</button>
+</div>
+</div>
+<!-- FILTER BAR -->
+<div class="filter-bar" id="incidentFilterBar">
+<div class="filter-group" style="flex:2;min-width:180px">
+<div class="filter-label">Search</div>
+<div class="search-box">
+<span class="search-icon">⌕</span>
+<input id="searchFilter" oninput="applyFilters()" placeholder="Search incidents…" type="text"/>
+</div>
+</div>
+<div class="filter-group">
+<div class="filter-label">Severity</div>
+<div class="ms-wrap" id="severityFilter_wrap">
+<div class="ms-box" id="severityFilter" onclick="toggleMsDropdown('severityFilter')">
+<span class="ms-placeholder" id="severityFilter_ph">All Severities</span>
+</div>
+<div class="ms-dropdown" id="severityFilter_dd">
+<label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Critical"/> Critical</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="High"/> High</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Medium"/> Medium</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Low"/> Low</label>
+</div>
+</div>
+</div>
+<div class="filter-group">
+<div class="filter-label">Status</div>
+<div class="ms-wrap" id="statusFilter_wrap">
+<div class="ms-box" id="statusFilter" onclick="toggleMsDropdown('statusFilter')">
+<span class="ms-placeholder" id="statusFilter_ph">All Statuses</span>
+</div>
+<div class="ms-dropdown" id="statusFilter_dd">
+<label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="New"/> New</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="In Progress"/> In Progress</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Tier 1 Level Support"/> Tier 1 Level Support</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Escalated to R&amp;D"/> Escalated to R&amp;D</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Escalated to CSO Devops"/> Escalated to CSO Devops</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Escalated to 3rd Party"/> Escalated to 3rd Party</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Further Investigation"/> Further Investigation</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Resolved"/> Resolved</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Closed"/> Closed</label>
+</div>
+</div>
+</div>
+<div class="filter-group">
+<div class="filter-label">Customer</div>
+<div class="ms-wrap" id="customerFilter_wrap">
+<div class="ms-box" id="customerFilter" onclick="toggleMsDropdown('customerFilter')">
+<span class="ms-placeholder" id="customerFilter_ph">All Customers</span>
+</div>
+<div class="ms-dropdown" id="customerFilter_dd"></div>
+</div>
+</div>
+<div class="filter-group">
+<div class="filter-label">Area</div>
+<div class="ms-wrap" id="areaFilter_wrap">
+<div class="ms-box" id="areaFilter" onclick="toggleMsDropdown('areaFilter')">
+<span class="ms-placeholder" id="areaFilter_ph">All Areas</span>
+</div>
+<div class="ms-dropdown" id="areaFilter_dd"></div>
+</div>
+</div>
+<div class="filter-group">
+<div class="filter-label">From Date</div>
+<input id="dateFrom" onchange="applyFilters()" type="date"/>
+</div>
+<div class="filter-group">
+<div class="filter-label">To Date</div>
+<input id="dateTo" onchange="applyFilters()" type="date"/>
+</div>
+<div class="filter-group">
+<div class="filter-label">Tag</div>
+<select id="tagFilter" onchange="applyFilters()">
+<option value="">All Tags</option>
+</select>
+</div>
+<div class="filter-group">
+<div class="filter-label">Assignee</div>
+<div class="ms-wrap" id="assigneeFilter_wrap">
+<div class="ms-box" id="assigneeFilter" onclick="toggleMsDropdown('assigneeFilter')">
+<span class="ms-placeholder" id="assigneeFilter_ph">All Assignees</span>
+</div>
+<div class="ms-dropdown" id="assigneeFilter_dd"></div>
+</div>
+</div>
+<div style="display:flex;align-items:flex-end">
+<button class="btn btn-secondary" onclick="clearFilters()">Clear</button>
+</div>
+</div>
+<div class="table-card" id="incidentTableWrap">
+<table>
+<thead>
+<tr id="incidentTableHead">
+<th style="width:34px"><input id="chkAll" style="accent-color:var(--accent);cursor:pointer" title="Select all" type="checkbox"/></th>
+<th class="sort-th" data-col="id" onclick="sortIncidents('id')" style="cursor:pointer;user-select:none;white-space:nowrap">ID</th>
+<th class="sort-th" data-col="title" onclick="sortIncidents('title')" style="cursor:pointer;user-select:none">Title</th>
+<th class="sort-th" data-col="customer" onclick="sortIncidents('customer')" style="cursor:pointer;user-select:none">Customer</th>
+<th class="sort-th" data-col="project" onclick="sortIncidents('project')" style="cursor:pointer;user-select:none">Project</th>
+<th class="sort-th" data-col="severity" onclick="sortIncidents('severity')" style="cursor:pointer;user-select:none">Severity</th>
+<th class="sort-th" data-col="status" onclick="sortIncidents('status')" style="cursor:pointer;user-select:none">Status</th>
+<th class="sort-th" data-col="engineer" onclick="sortIncidents('engineer')" style="cursor:pointer;user-select:none">Assigned To</th>
+<th class="sort-th" data-col="date" onclick="sortIncidents('date')" style="cursor:pointer;user-select:none;white-space:nowrap">Date</th>
+<th>SLA</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="incidentTable"></tbody>
+</table>
+<div class="pagination-bar">
+<div class="pg-perpage">
+            Rows per page:
+            <select id="perPageSelect" onchange="changePerPage(this.value)">
+<option value="5">5</option>
+<option selected="" value="8">8</option>
+<option value="15">15</option>
+<option value="25">25</option>
+</select>
+</div>
+<span class="pagination-info" id="paginationInfo">Showing all results</span>
+<div class="pagination-controls" id="paginationBtns"></div>
+</div>
+</div>
+<!-- Kanban Board -->
+<div class="kanban-board" id="kanbanBoard" style="display:none;margin-top:16px"></div>
+</div>
+<!-- ─── REPORTS ──────────────────────────────────────── -->
+<div class="page" id="page-reports">
+<div class="page-header">
+<div>
+<div class="breadcrumb" id="bc_page-reports">
+<span class="breadcrumb-item" onclick="navigate('dashboard', document.getElementById('dashNav'))">🏠 Home</span>
+<span class="breadcrumb-sep">›</span>
+<span class="breadcrumb-item active">Reports</span>
+</div>
+<div class="page-header-title">Reports</div>
+<div class="page-header-sub">Generate custom reports for stakeholders and operations</div>
+</div>
+</div>
+<!-- Report Filters -->
+<div class="filter-bar" style="margin-bottom:20px">
+<div class="filter-group">
+<div class="filter-label">Filter by Customer</div>
+<select id="reportCustomerFilter" onchange="updateReportPreview()">
+<option value="">All Customers</option>
+<option>demo</option>
+<option>vbc</option>
+<option>tilebar</option>
+<option>BWC</option>
+<option>christiedigital</option>
+<option>mayerelectric</option>
+<option>ramatgancityhall</option>
+<option>cccu</option>
+<option>intrado</option>
+<option>sh</option>
+<option>prettl</option>
+<option>smc</option>
+<option>toridoll</option>
+<option>mseus</option>
+<option>cloudndevops</option>
+<option>miscloud</option>
+<option>choctawnation</option>
+<option>gjkg</option>
+</select>
+</div>
+<div class="filter-group">
+<div class="filter-label">Filter by Severity</div>
+<select id="reportSeverityFilter" onchange="updateReportPreview()">
+<option value="">All Severities</option>
+<option value="Critical">Critical</option>
+<option value="High">High</option>
+<option value="Medium">Medium</option>
+<option value="Low">Low</option>
+</select>
+</div>
+<div class="filter-group">
+<div class="filter-label">Filter by Status</div>
+<select id="reportStatusFilter" onchange="updateReportPreview()">
+<option value="">All Statuses</option>
+<option value="New">New</option>
+<option value="In Progress">In Progress</option>
+<option value="Tier 1 Level Support">Tier 1 Level Support</option>
+<option value="Escalated to R&amp;D">Escalated to R&amp;D</option>
+<option value="Escalated to CSO Devops">Escalated to CSO Devops</option>
+<option value="Escalated to 3rd Party">Escalated to 3rd Party</option>
+<option value="Further Investigation">Further Investigation</option>
+<option value="Resolved">Resolved</option>
+<option value="Closed">Closed</option>
+</select>
+</div>
+<div class="filter-group">
+<div class="filter-label">Filter by Area</div>
+<select id="reportAreaFilter" onchange="updateReportPreview()">
+<option value="">All Areas</option>
+</select>
+</div>
+<div class="filter-group">
+<div class="filter-label">From Date</div>
+<input id="reportDateFrom" onchange="updateReportPreview()" type="date"/>
+</div>
+<div class="filter-group">
+<div class="filter-label">To Date</div>
+<input id="reportDateTo" onchange="updateReportPreview()" type="date"/>
+</div>
+<div style="display:flex;align-items:flex-end">
+<button class="btn btn-secondary" onclick="clearReportFilters()">Clear</button>
+</div>
+</div>
+<div class="report-grid">
+<div class="report-card">
+<div class="report-icon pdf">📄</div>
+<div class="report-card-title">PDF Stakeholder Report</div>
+<div class="report-card-desc">Generate a formatted PDF report with incident summaries, KPIs, and charts suitable for executive and stakeholder distribution.</div>
+<div style="margin-bottom:16px">
+<div class="form-group" style="margin-bottom:10px">
+<div class="filter-label">Report Period</div>
+<select id="pdfPeriod">
+<option>Last 7 days</option>
+<option selected="">Last 30 days</option>
+<option>Last 90 days</option>
+<option>This Year</option>
+</select>
+</div>
+<div class="form-group">
+<div class="filter-label">Include Sections</div>
+<label style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:13px;cursor:pointer"><input checked="" type="checkbox"/> Executive Summary</label>
+<label style="display:flex;align-items:center;gap:8px;margin-top:4px;font-size:13px;cursor:pointer"><input checked="" type="checkbox"/> Incident Statistics</label>
+<label style="display:flex;align-items:center;gap:8px;margin-top:4px;font-size:13px;cursor:pointer"><input checked="" type="checkbox"/> Customer Breakdown</label>
+<label style="display:flex;align-items:center;gap:8px;margin-top:4px;font-size:13px;cursor:pointer"><input type="checkbox"/> Detailed Incident Log</label>
+</div>
+</div>
+<button class="btn btn-danger" onclick="generatePDFReport()">⬇ Generate PDF</button>
+</div>
+<div class="report-card">
+<div class="report-icon excel">📊</div>
+<div class="report-card-title">Excel Operational Report</div>
+<div class="report-card-desc">Export raw incident data to Excel format with multiple sheets for detailed operational analysis, pivot tables, and custom filtering.</div>
+<div style="margin-bottom:16px">
+<div class="form-group" style="margin-bottom:10px">
+<div class="filter-label">Data Range</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
+<input id="xlsFrom" type="date"/>
+<input id="xlsTo" type="date"/>
+</div>
+</div>
+<div class="form-group">
+<div class="filter-label">Include Columns</div>
+<label style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:13px;cursor:pointer"><input checked="" type="checkbox"/> All Incident Fields</label>
+<label style="display:flex;align-items:center;gap:8px;margin-top:4px;font-size:13px;cursor:pointer"><input checked="" type="checkbox"/> Resolution Time</label>
+<label style="display:flex;align-items:center;gap:8px;margin-top:4px;font-size:13px;cursor:pointer"><input type="checkbox"/> Activity Log</label>
+<label style="display:flex;align-items:center;gap:8px;margin-top:4px;font-size:13px;cursor:pointer"><input type="checkbox"/> SLA Metrics</label>
+</div>
+</div>
+<button class="btn btn-success" id="exportReportBtn" onclick="generateExcelReport()">⬇ Export Excel</button>
+</div>
+</div>
+<!-- Summary Preview -->
+<div class="chart-card">
+<div class="chart-header">
+<div class="chart-title">Report Preview — Filtered Results</div>
+<div id="reportPreviewLabel" style="font-size:12px;color:var(--text3)">All incidents</div>
+</div>
+<div id="reportPreviewStats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:20px;padding:8px 0">
+<div>
+<div class="stat-label">Total Incidents</div>
+<div id="rp_total" style="font-family:var(--font-head);font-size:28px;font-weight:800;color:var(--accent)">—</div>
+<div class="progress-bar"><div class="progress-fill" id="rp_total_bar" style="width:100%;background:var(--accent)"></div></div>
+</div>
+<div>
+<div class="stat-label">Resolved</div>
+<div id="rp_closed" style="font-family:var(--font-head);font-size:28px;font-weight:800;color:var(--success)">—</div>
+<div class="progress-bar"><div class="progress-fill" id="rp_closed_bar" style="width:77%;background:var(--success)"></div></div>
+</div>
+<div>
+<div class="stat-label">Critical</div>
+<div id="rp_critical" style="font-family:var(--font-head);font-size:28px;font-weight:800;color:var(--danger)">—</div>
+<div class="progress-bar"><div class="progress-fill" id="rp_critical_bar" style="width:12%;background:var(--danger)"></div></div>
+</div>
+<div>
+<div class="stat-label">Open / Active</div>
+<div id="rp_open" style="font-family:var(--font-head);font-size:28px;font-weight:800;color:var(--accent2)">—</div>
+<div class="progress-bar"><div class="progress-fill" id="rp_open_bar" style="width:60%;background:var(--accent2)"></div></div>
+</div>
+<div>
+<div class="stat-label" style="color:var(--warning)">Total Downtime</div>
+<div id="rp_downtime" style="font-family:var(--font-head);font-size:28px;font-weight:800;color:var(--warning)">—</div>
+<div class="progress-bar"><div class="progress-fill" id="rp_downtime_bar" style="width:0%;background:var(--warning)"></div></div>
+</div>
+</div>
+<!-- Incident list preview -->
+<div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px">
+<div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px">Filtered Incident Preview</div>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Title</th>
+<th>Customer</th>
+<th>Severity</th>
+<th>Status</th>
+<th>Engineer</th>
+<th>Date</th>
+</tr>
+</thead>
+<tbody id="reportPreviewTable"></tbody>
+</table>
+<div id="reportPreviewMore" style="font-size:11px;color:var(--text3);margin-top:8px;font-family:var(--font-mono)"></div>
+</div>
+</div>
+<!-- Audit Log -->
+<div class="chart-card" style="margin-top:20px">
+<div class="chart-header">
+<div><div class="chart-title">Audit Log</div><div class="chart-sub">All portal create / edit / close / login events</div></div>
+<button class="btn btn-secondary btn-sm" id="exportAuditBtn" onclick="exportAuditCSV()">📊 Export</button>
+</div>
+<div id="auditLogEl" style="max-height:320px;overflow-y:auto"></div>
+</div>
+</div>
+<!-- ─── USERS ─────────────────────────────────────────── -->
+<div class="page" id="page-users">
+<div class="page-header">
+<div>
+<div class="breadcrumb" id="bc_page-users">
+<span class="breadcrumb-item" onclick="navigate('dashboard', document.getElementById('dashNav'))">🏠 Home</span>
+<span class="breadcrumb-sep">›</span>
+<span class="breadcrumb-item active">Users</span>
+</div>
+<div class="page-header-title">User Management</div>
+<div class="page-header-sub">Manage roles and access control</div>
+</div>
+<div style="display:flex;gap:8px">
+<button class="btn btn-secondary" onclick="navigate('roles', null)">⬡ Manage Roles</button>
+<button class="btn btn-primary" onclick="openAddUserModal()">+ Add User</button>
+</div>
+</div>
+<div class="tab-bar">
+<div class="tab active" onclick="filterUsers('all', this)">All Users</div>
+<div class="tab" onclick="filterUsers('admin', this)">Admin</div>
+<div class="tab" onclick="filterUsers('cso', this)">CSO</div>
+<div class="tab" onclick="filterUsers('pmo', this)">PMO</div>
+<div class="tab" onclick="filterUsers('aoc', this)">AOC</div>
+</div>
+<div class="table-card">
+<table>
+<thead>
+<tr>
+<th>User</th>
+<th>Email</th>
+<th>Role</th>
+<th>Assigned Incidents</th>
+<th>Last Active</th>
+<th>Status</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="usersTable"></tbody>
+</table>
+</div>
+<!-- RBAC Info -->
+<div class="section-label">Access Control Matrix</div>
+<div class="chart-card">
+<table>
+<thead>
+<tr>
+<th>Permission</th>
+<th>Admin</th>
+<th>CSO</th>
+<th>PMO</th>
+<th>AOC</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="color:var(--text)">View Dashboard</td>
+<td><span style="color:var(--success)">✓</span></td>
+<td><span style="color:var(--success)">✓</span></td>
+<td><span style="color:var(--success)">✓</span></td>
+<td><span style="color:var(--success)">✓</span></td>
+</tr>
+<tr>
+<td style="color:var(--text)">View Incidents</td>
+<td><span style="color:var(--success)">✓</span></td>
+<td><span style="color:var(--success)">✓</span></td>
+<td><span style="color:var(--success)">✓</span></td>
+<td><span style="color:var(--success)">✓</span></td>
+</tr>
+<tr>
+<td style="color:var(--text)">Create Incidents</td>
+<td><span style="color:var(--success)">✓</span></td>
+<td><span style="color:var(--success)">✓</span></td>
+<td><span style="color:var(--danger)">✗</span></td>
+<td><span style="color:var(--success)">✓</span></td>
+</tr>
+<tr>
+<td style="color:var(--text)">Edit Incidents</td>
+<td><span style="color:var(--success)">✓</span></td>
+<td><span style="color:var(--success)">✓</span></td>
+<td><span style="color:var(--danger)">✗</span></td>
+<td><span style="color:var(--success)">✓</span></td>
+</tr>
+<tr>
+<td style="color:var(--text)">Close Incidents</td>
+<td><span style="color:var(--success)">✓</span></td>
+<td><span style="color:var(--success)">✓</span></td>
+<td><span style="color:var(--danger)">✗</span></td>
+<td><span style="color:var(--success)">✓</span></td>
+</tr>
+<tr>
+<td style="color:var(--text)">Generate Reports</td>
+<td><span style="color:var(--success)">✓</span></td>
+<td><span style="color:var(--success)">✓</span></td>
+<td><span style="color:var(--success)">✓</span></td>
+<td><span style="color:var(--success)">✓</span></td>
+</tr>
+<tr>
+<td style="color:var(--text)">Manage Users</td>
+<td><span style="color:var(--success)">✓</span></td>
+<td><span style="color:var(--danger)">✗</span></td>
+<td><span style="color:var(--danger)">✗</span></td>
+<td><span style="color:var(--danger)">✗</span></td>
+</tr>
+<tr>
+<td style="color:var(--text)">Assign Roles</td>
+<td><span style="color:var(--success)">✓</span></td>
+<td><span style="color:var(--danger)">✗</span></td>
+<td><span style="color:var(--danger)">✗</span></td>
+<td><span style="color:var(--danger)">✗</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- ─── DATA MANAGEMENT (Admin only) ───────────────────────── -->
+<div class="page" id="page-datamanagement">
+<div class="page-header">
+<div>
+<div class="breadcrumb" id="bc_page-datamanagement">
+<span class="breadcrumb-item" onclick="navigate('dashboard', document.getElementById('dashNav'))">🏠 Home</span>
+<span class="breadcrumb-sep">›</span>
+<span class="breadcrumb-item active">Data Management</span>
+</div>
+<div class="page-header-title">Data Management</div>
+<div class="page-header-sub">Manage customers and area categories</div>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:8px">
+<!-- CUSTOMERS -->
+<div class="chart-card">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+<div>
+<div style="font-size:15px;font-weight:700;color:var(--text-primary)">👥 Customers</div>
+<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Customers available across all incident forms</div>
+</div>
+<div id="dmCustCount" style="font-size:11px;color:var(--text-muted)"></div>
+</div>
+<div style="display:flex;gap:8px;margin-bottom:14px">
+<input id="dmNewCustomer" onkeydown="if(event.key==='Enter') addCustomer()" placeholder="New customer name…" style="flex:1;background:var(--surface-alt,var(--bg));border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;outline:none;font-family:inherit" type="text"/>
+<button class="btn btn-primary btn-sm" onclick="addCustomer()" style="white-space:nowrap">+ Add</button>
+</div>
+<div id="dmCustomerList" style="display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto"></div>
+</div>
+<!-- AREAS -->
+<div class="chart-card">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+<div>
+<div style="font-size:15px;font-weight:700;color:var(--text-primary)">🗂 Areas</div>
+<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Area categories used in incident classification</div>
+</div>
+<div id="dmAreaCount" style="font-size:11px;color:var(--text-muted)"></div>
+</div>
+<div style="display:flex;gap:8px;margin-bottom:14px">
+<input id="dmNewArea" onkeydown="if(event.key==='Enter') addArea()" placeholder="New area name…" style="flex:1;background:var(--surface-alt,var(--bg));border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;outline:none;font-family:inherit" type="text"/>
+<button class="btn btn-primary btn-sm" onclick="addArea()" style="white-space:nowrap">+ Add</button>
+</div>
+<div id="dmAreaList" style="display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto"></div>
+</div>
+</div>
+</div>
+<!-- ─── ROLE MANAGEMENT ──────────────────────────────────── -->
+<div class="page" id="page-roles">
+<div class="page-header">
+<div>
+<div class="breadcrumb" id="bc_page-roles">
+<span class="breadcrumb-item" onclick="navigate('dashboard', document.getElementById('dashNav'))">🏠 Home</span>
+<span class="breadcrumb-sep">›</span>
+<span class="breadcrumb-item active">Roles</span>
+</div>
+<div class="page-header-title">Role Management</div>
+<div class="page-header-sub">Define roles and their permissions across the portal</div>
+</div>
+<button class="btn btn-primary" onclick="openRoleModal()">+ Add Role</button>
+</div>
+<div class="roles-grid" id="rolesGrid"></div>
+<div class="section-label">Permissions Overview</div>
+<div class="chart-card">
+<table id="rolesPermTable"></table>
+</div>
+</div>
+<!-- ═══════════════ CUSTOMER 360 ═══════════════ -->
+<div class="page" id="page-customer360">
+<div class="page-header" style="margin-bottom:20px">
+<div>
+<div class="breadcrumb"><span class="breadcrumb-item" onclick="_showC360Picker()" style="cursor:pointer">Customer 360</span><span class="breadcrumb-sep">›</span><span class="breadcrumb-item active" id="c360BreadCust">Customer</span></div>
+<div class="page-header-title" id="c360Title">Customer 360</div>
+<div class="page-header-sub" id="c360Sub">Full incident history and health metrics</div>
+</div>
+<button class="btn btn-secondary" onclick="_showC360Picker()">← All Customers</button>
+</div>
+<!-- Header card: avatar + health ring + key info -->
+<div class="c360-header" style="margin-bottom:20px">
+<div class="c360-avatar" id="c360Avatar">?</div>
+<div style="flex:1">
+<div id="c360CustName" style="font-size:22px;font-weight:800;color:var(--text-primary)">—</div>
+<div id="c360CustStats" style="font-size:13px;color:var(--text-muted);margin-top:4px">—</div>
+<div id="c360Tags" style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"></div>
+</div>
+<div style="text-align:center">
+<canvas height="90" id="c360HealthRing" width="90"></canvas>
+<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Health Score</div>
+</div>
+</div>
+<!-- Stats row -->
+<div id="c360StatsRow" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px"></div>
+<!-- Operational metrics row -->
+<div id="c360MetricsRow" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px"></div>
+<!-- Charts row: monthly trend + area breakdown -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+<div class="chart-card">
+<div class="chart-header" style="margin-bottom:4px">
+<div class="chart-title">Monthly Incident Trend</div>
+<div style="font-size:11px;color:var(--text-muted)">Last 6 months</div>
+</div>
+<canvas height="160" id="c360TrendChart" style="width:100%"></canvas>
+</div>
+<div class="chart-card">
+<div class="chart-header" style="margin-bottom:4px">
+<div class="chart-title">Area Breakdown</div>
+<div style="font-size:11px;color:var(--text-muted)">By category</div>
+</div>
+<canvas height="160" id="c360AreaChart" style="width:100%"></canvas>
+</div>
+</div>
+<!-- Severity distribution + SLA breach row -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+<div class="chart-card">
+<div class="chart-title" style="margin-bottom:14px">Severity Distribution</div>
+<div id="c360SevBars"></div>
+</div>
+<div class="chart-card">
+<div class="chart-title" style="margin-bottom:14px">Recurring Incidents</div>
+<div id="c360RecurringList" style="font-size:13px"></div>
+</div>
+</div>
+<!-- Full incident history table -->
+<div class="chart-card">
+<div class="chart-header" style="margin-bottom:16px">
+<div class="chart-title">Complete Incident History</div>
+<div style="display:flex;gap:8px;align-items:center">
+<select id="c360FilterSev" onchange="renderC360Table()" style="font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);outline:none">
+<option value="">All Severities</option>
+<option>Critical</option><option>High</option><option>Medium</option><option>Low</option>
+</select>
+<select id="c360FilterStatus" onchange="renderC360Table()" style="font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);outline:none">
+<option value="">All Statuses</option>
+<option>New</option><option>In Progress</option><option>Closed</option><option>Resolved</option>
+</select>
+<span id="c360IncCount" style="font-size:12px;color:var(--text-muted)"></span>
+</div>
+</div>
+<table>
+<thead><tr><th>ID</th><th>Title</th><th>Area</th><th>Severity</th><th>Status</th><th>SLA</th><th>MTTR</th><th>Downtime</th><th>Engineer</th><th>Date</th></tr></thead>
+<tbody id="c360Table"></tbody>
+</table>
+</div>
+</div>
+</div><!-- /content -->
+</div><!-- /main -->
+<!-- ─── INCIDENT MODAL ──────────────────────────────────────── -->
+<div class="modal-overlay" id="incidentModal">
+<div class="modal">
+<div class="modal-header">
+<div class="modal-title" id="incidentModalTitle">Create New Incident</div>
+<div class="modal-close" onclick="closeModal('incidentModal')">✕</div>
+</div>
+<div class="modal-body">
+<div class="form-grid">
+<div class="form-group form-full">
+<label class="form-label required">Incident Title</label>
+<input id="f_title" placeholder="Brief description of the incident" type="text"/>
+</div>
+<div class="form-group">
+<label class="form-label required">Customer</label>
+<select id="f_customer">
+<option value="">Select customer</option>
+<option>demo</option>
+<option>vbc</option>
+<option>tilebar</option>
+<option>BWC</option>
+<option>christiedigital</option>
+<option>mayerelectric</option>
+<option>ramatgancityhall</option>
+<option>cccu</option>
+<option>intrado</option>
+<option>sh</option>
+<option>prettl</option>
+<option>smc</option>
+<option>toridoll</option>
+<option>mseus</option>
+<option>cloudndevops</option>
+<option>miscloud</option>
+<option>choctawnation</option>
+<option>gjkg</option>
+</select>
+</div>
+<div class="form-group">
+<label class="form-label required">Project / Service</label>
+<input id="f_project" placeholder="e.g. NGC MDE, MGC MES, AgileD365…" type="text"/>
+</div>
+<div class="form-group">
+<label class="form-label required">Severity</label>
+<select id="f_severity">
+<option value="">Select severity</option>
+<option value="Critical">🔴 Critical</option>
+<option value="High">🟠 High</option>
+<option value="Medium">🟡 Medium</option>
+<option value="Low">🟢 Low</option>
+</select>
+</div>
+<div class="form-group">
+<label class="form-label required">Status</label>
+<select id="f_status">
+<option value="New">New</option>
+<option value="In Progress">In Progress</option>
+<option value="Tier 1 Level Support">Tier 1 Level Support</option>
+<option value="Escalated to R&amp;D">Escalated to R&amp;D</option>
+<option value="Escalated to CSO Devops">Escalated to CSO Devops</option>
+<option value="Escalated to 3rd Party">Escalated to 3rd Party</option>
+<option value="Further Investigation">Further Investigation</option>
+<option value="Resolved">Resolved</option>
+<option value="Closed">Closed</option>
+</select>
+</div>
+<div class="form-group">
+<label class="form-label required">Assigned Engineer</label>
+<select id="f_engineer">
+<option value="">Select assignee</option>
+<option>Babai Chatterjee</option>
+<option>Rohan Shelar</option>
+<option>Neeshu Malik</option>
+<option>Admin User</option>
+</select>
+</div>
+<div class="form-group">
+<label class="form-label">Salesforce Case No.</label>
+<input id="f_sf_case" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="e.g. 00123456" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s" type="text"/>
+</div>
+<div class="form-group">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+<label class="form-label required" style="margin:0">Incident Start Date &amp; Time</label>
+<div style="display:flex;align-items:center;gap:6px">
+<span style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">Timezone:</span>
+<div id="createTZSelector"></div>
+</div>
+</div>
+<input id="f_date" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box" type="datetime-local"/>
+<div id="f_date_tz_hint" style="font-size:10px;color:var(--text-muted);margin-top:4px;font-family:var(--font-mono)">Input timezone: IST</div>
+</div>
+<div class="form-group">
+<label class="form-label">Mean Time to Detect (MTTD)</label>
+<div style="display:flex;gap:8px;align-items:center">
+<input id="f_mttd_h" max="999" min="0" placeholder="0" style="width:70px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 10px;color:var(--text);font-size:14px;font-family:var(--font-mono);outline:none;text-align:center;box-sizing:border-box" type="number"/>
+<span style="font-size:12px;color:var(--text-muted)">h</span>
+<input id="f_mttd_m" max="59" min="0" placeholder="0" style="width:70px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 10px;color:var(--text);font-size:14px;font-family:var(--font-mono);outline:none;text-align:center;box-sizing:border-box" type="number"/>
+<span style="font-size:12px;color:var(--text-muted)">min</span>
+</div>
+</div>
+<div class="form-group form-full">
+<label class="form-label required">Description</label>
+<textarea id="f_desc" placeholder="Detailed description of the incident, impact, and steps to reproduce…" rows="3"></textarea>
+</div>
+<div class="form-group">
+<label class="form-label">Impacted Components</label>
+<input id="f_components" placeholder="e.g. Auth Service, API Gateway, DB Cluster" type="text"/>
+</div>
+<div class="form-group">
+<label class="form-label">Impacted Applications</label>
+<input id="f_applications" placeholder="e.g. Customer Portal, Mobile App, Admin Panel" type="text"/>
+</div>
+<div>
+<label class="form-label">Area <span style="color:var(--danger)">*</span></label>
+<select id="f_area" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer">
+<option value="">Select Area</option>
+</select>
+</div>
+</div>
+</div>
+<div class="form-group">
+<label class="form-label">Tags</label>
+<div onclick="document.getElementById('f_tag_input').focus()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;min-height:40px;cursor:text">
+<div id="f_tag_chips" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px"></div>
+<input id="f_tag_input" oninput="showCreateTagSuggestions(this.value)" onkeydown="handleCreateTagKey(event)" placeholder="Type tag and press Enter or comma…" style="border:none;outline:none;background:transparent;color:var(--text);font-size:12px;font-family:inherit;min-width:120px;width:100%" type="text"/>
+</div>
+<div id="f_tag_suggestions" style="display:none;position:absolute;z-index:200;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.3);max-height:160px;overflow-y:auto;min-width:200px"></div>
+</div>
+<div class="modal-footer">
+<button class="btn btn-secondary" onclick="closeModal('incidentModal')">Cancel</button>
+<button class="btn btn-primary" id="saveIncidentBtn" onclick="saveIncident()">Create Incident</button>
+</div>
+</div>
+</div>
+<!-- ─── USER MODAL ────────────────────────────────────────────── -->
+<div class="modal-overlay" id="userModal">
+<div class="modal">
+<div class="modal-header">
+<div class="modal-title">Add New User</div>
+<div class="modal-close" onclick="closeModal('userModal')">✕</div>
+</div>
+<div class="modal-body">
+<div class="form-grid">
+<div class="form-group">
+<label class="form-label required">Full Name</label>
+<input id="u_name" placeholder="Full name" type="text"/>
+</div>
+<div class="form-group">
+<label class="form-label required">Email</label>
+<input id="u_email" placeholder="user@company.com" type="email"/>
+</div>
+<div class="form-group">
+<label class="form-label required">Role</label>
+<select id="u_role">
+<option value="">Select role</option>
+<option value="admin">Admin</option>
+<option value="cso">CSO</option>
+<option value="pmo">PMO</option>
+<option value="aoc">AOC</option>
+</select>
+</div>
+<div class="form-group">
+<label class="form-label">Department</label>
+<input id="u_dept" placeholder="e.g. Engineering, Operations" type="text"/>
+</div>
+<div class="form-group">
+<label class="form-label required">Password</label>
+<div style="position:relative">
+<input id="u_password" placeholder="Minimum 4 characters" type="password"/>
+<span onclick="var i=document.getElementById('u_password');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁':'🙈'" style="position:absolute;right:14px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:15px;user-select:none;color:var(--text-muted)">👁</span>
+</div>
+</div>
+</div>
+</div>
+<div class="modal-footer">
+<button class="btn btn-secondary" onclick="closeModal('userModal')">Cancel</button>
+<button class="btn btn-primary" onclick="saveUser()">Add User</button>
+</div>
+</div>
+</div>
+<!-- ─── INCIDENT REPORT MODAL ─────────────────────────────────── -->
+<div class="modal-overlay" id="incidentReportModal">
+<div class="modal report-modal" style="max-height:90vh;overflow-y:auto;border-radius:16px;width:680px">
+<div class="ir-header">
+<div class="ir-header-top">
+<div style="flex:1">
+<div class="ir-id" id="ir_id">INC-001</div>
+<div class="ir-title" id="ir_title">Incident Title</div>
+<div class="ir-meta" id="ir_meta"></div>
+</div>
+<div class="modal-close" onclick="closeModal('incidentReportModal')" style="flex-shrink:0;font-size:18px;cursor:pointer;color:var(--text3);background:var(--surface2);border:1px solid var(--border);border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center">✕</div>
+</div>
+</div>
+<div class="ir-body">
+<!-- Subject -->
+<div class="ir-section">
+<div class="ir-section-title">Incident Subject</div>
+<div class="ir-desc-box" id="ir_subject" style="font-weight:600;font-size:14px">—</div>
+</div>
+<!-- Summary / Description -->
+<div class="ir-section">
+<div class="ir-section-title">Summary</div>
+<div class="ir-desc-box" id="ir_desc">—</div>
+</div>
+<!-- Details Grid -->
+<div class="ir-section">
+<div class="ir-section-title">Incident Details</div>
+<div class="ir-grid">
+<div class="ir-field"><div class="ir-field-label">Customer</div><div class="ir-field-value" id="ir_customer">—</div></div>
+<div class="ir-field"><div class="ir-field-label">Project / Service</div><div class="ir-field-value" id="ir_project">—</div></div>
+<div class="ir-field"><div class="ir-field-label">Severity</div><div class="ir-field-value" id="ir_severity">—</div></div>
+<div class="ir-field"><div class="ir-field-label">Status</div><div class="ir-field-value" id="ir_status">—</div></div>
+<div class="ir-field"><div class="ir-field-label">Reporter / Assigned To</div><div class="ir-field-value" id="ir_engineer">—</div></div>
+<div class="ir-field"><div class="ir-field-label">Area</div><div class="ir-field-value" id="ir_area">—</div></div>
+<div class="ir-field"><div class="ir-field-label">MTTD</div><div class="ir-field-value" id="ir_mttd">—</div></div>
+<div class="ir-field"><div class="ir-field-label">MTTR</div><div class="ir-field-value" id="ir_mttr">—</div></div>
+<div class="ir-field"><div class="ir-field-label">Reported Date</div><div class="ir-field-value" id="ir_date">—</div></div>
+</div>
+</div>
+<!-- Timeline & Downtime -->
+<div class="ir-section">
+<div class="ir-section-title">Incident Timeline &amp; Downtime</div>
+<div class="ir-grid">
+<div class="ir-field"><div class="ir-field-label" id="ir_start_label">Start Time</div><div class="ir-field-value" id="ir_start_time">—</div></div>
+<div class="ir-field"><div class="ir-field-label" id="ir_end_label">End Time</div><div class="ir-field-value" id="ir_end_time">—</div></div>
+<div class="ir-field" style="grid-column:1/-1">
+<div class="ir-field-label">⏱ Total Downtime</div>
+<div class="ir-field-value" id="ir_downtime" style="font-family:var(--font-head);font-size:22px;font-weight:800;color:var(--danger)">—</div>
+</div>
+</div>
+</div>
+<!-- RCA -->
+<div class="ir-section">
+<div class="ir-section-title">Root Cause Analysis (RCA)</div>
+<div class="ir-desc-box" id="ir_rca">—</div>
+</div>
+<!-- Resolution -->
+<div class="ir-section">
+<div class="ir-section-title">Resolution</div>
+<div class="ir-desc-box" id="ir_resolution">—</div>
+</div>
+<!-- Impacted -->
+<div class="ir-section">
+<div class="ir-section-title">Impacted Components &amp; Applications</div>
+<div class="ir-grid">
+<div class="ir-field"><div class="ir-field-label">Components</div><div class="ir-field-value" id="ir_components">—</div></div>
+<div class="ir-field"><div class="ir-field-label">Applications</div><div class="ir-field-value" id="ir_applications">—</div></div>
+</div>
+</div>
+<!-- Resolution Info -->
+<div class="ir-section">
+<div class="ir-section-title">Resolution Info</div>
+<div class="ir-grid">
+<div class="ir-field"><div class="ir-field-label">Resolved By</div><div class="ir-field-value" id="ir_resolved_by">—</div></div>
+<div class="ir-field"><div class="ir-field-label">Salesforce Case No.</div><div class="ir-field-value" id="ir_sf_case" style="color:#4f8ef7;font-weight:700;font-family:var(--font-mono)">—</div></div>
+</div>
+</div>
+</div>
+<!-- Comments -->
+<div style="padding:16px 20px;border-top:1px solid var(--border)">
+<div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:12px;display:flex;align-items:center;gap:8px">
+        💬 Comments <span id="commentCount" style="background:rgba(79,142,247,0.15);color:#4f8ef7;border-radius:10px;padding:1px 8px;font-size:11px">0</span>
+</div>
+<div id="commentsList" style="max-height:200px;overflow-y:auto;margin-bottom:10px"></div>
+<div class="comment-input-wrap">
+<textarea class="comment-input" id="commentInput" placeholder="Add a comment… use @name to mention" rows="2"></textarea>
+<button onclick="submitComment()" style="background:#4f8ef7;color:white;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;flex-shrink:0">Post</button>
+</div>
+</div>
+<div class="ir-footer">
+<div class="ir-footer-note" id="ir_footer_note">Generated by Magic Cloud Incident Portal</div>
+<div style="display:flex;gap:8px">
+<button class="btn btn-secondary btn-sm" onclick="exportIncidentExcel()">📊 Export Excel</button>
+<button class="btn btn-danger btn-sm" onclick="exportIncidentPDF()">📄 Export PDF</button>
+<button class="btn btn-secondary btn-sm" onclick="closeModal('incidentReportModal')">Close</button>
+</div>
+</div>
+</div>
+</div>
+<!-- ─── ROLE MODAL ────────────────────────────────────────────── -->
+<div class="modal-overlay" id="roleModal">
+<div class="modal" style="width:560px">
+<div class="modal-header">
+<div class="modal-title" id="roleModalTitle">Add New Role</div>
+<div class="modal-close" onclick="closeModal('roleModal')">✕</div>
+</div>
+<div class="modal-body">
+<div class="form-grid">
+<div class="form-group">
+<label class="form-label required">Role Name</label>
+<input id="r_name" placeholder="e.g. Security Officer" type="text"/>
+</div>
+<div class="form-group">
+<label class="form-label required">Role Key (short code)</label>
+<input id="r_key" maxlength="10" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9]/g,'')" placeholder="e.g. so" style="text-transform:uppercase" type="text"/>
+</div>
+<div class="form-group">
+<label class="form-label required">Icon (emoji)</label>
+<input id="r_icon" maxlength="2" placeholder="e.g. 🔐" style="font-size:20px;text-align:center" type="text"/>
+</div>
+<div class="form-group">
+<label class="form-label required">Color Theme</label>
+<select id="r_color">
+<option value="blue">🔵 Blue</option>
+<option value="green">🟢 Green</option>
+<option value="yellow">🟡 Yellow</option>
+<option value="red">🔴 Red</option>
+<option value="purple">🟣 Purple</option>
+<option value="gray">⚫ Gray</option>
+</select>
+</div>
+<div class="form-group form-full">
+<label class="form-label">Description</label>
+<textarea id="r_desc" placeholder="Brief description of this role's responsibilities…" rows="2"></textarea>
+</div>
+<div class="form-group form-full">
+<label class="form-label">Permissions</label>
+<div class="perm-grid" id="permGrid">
+<label class="perm-check" onclick="togglePerm(this)">
+<input checked="" type="checkbox" value="view_dashboard"/> View Dashboard
+            </label>
+<label class="perm-check checked" onclick="togglePerm(this)">
+<input checked="" type="checkbox" value="view_incidents"/> View Incidents
+            </label>
+<label class="perm-check" onclick="togglePerm(this)">
+<input type="checkbox" value="create_incidents"/> Create Incidents
+            </label>
+<label class="perm-check" onclick="togglePerm(this)">
+<input type="checkbox" value="edit_incidents"/> Edit Incidents
+            </label>
+<label class="perm-check" onclick="togglePerm(this)">
+<input type="checkbox" value="close_incidents"/> Close Incidents
+            </label>
+<label class="perm-check" onclick="togglePerm(this)">
+<input type="checkbox" value="view_reports"/> View Reports
+            </label>
+<label class="perm-check" onclick="togglePerm(this)">
+<input type="checkbox" value="export_reports"/> Export Reports
+            </label>
+<label class="perm-check" onclick="togglePerm(this)">
+<input type="checkbox" value="view_customer360"/> View Customer 360
+            </label>
+<label class="perm-check" onclick="togglePerm(this)">
+<input type="checkbox" value="manage_users"/> Manage Users
+            </label>
+<label class="perm-check" onclick="togglePerm(this)">
+<input type="checkbox" value="manage_roles"/> Manage Roles
+            </label>
+<label class="perm-check" onclick="togglePerm(this)">
+<input type="checkbox" value="assign_roles"/> Assign Roles
+            </label>
+<label class="perm-check" onclick="togglePerm(this)">
+<input type="checkbox" value="manage_data"/> Manage Data
+            </label>
+</div>
+</div>
+</div>
+</div>
+<div class="modal-footer">
+<button class="btn btn-secondary" onclick="closeModal('roleModal')">Cancel</button>
+<button class="btn btn-primary" id="saveRoleBtn" onclick="saveRole()">Create Role</button>
+</div>
+</div>
+</div>
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+<!-- ─── INCIDENT DETAIL OVERLAY ──────────────────────────────── -->
+<div class="detail-overlay" id="detailOverlay" onclick="closeDetailPanel()"></div>
+<!-- ─── INCIDENT DETAIL PANEL ─────────────────────────────────── -->
+<div class="detail-panel" id="detailPanel">
+<!-- HEADER -->
+<div style="display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--surface)">
+<div id="dp_id" style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--accent)">INC-000</div>
+<div id="dp_status_badge"></div>
+<div id="dp_severity_badge"></div>
+<div style="flex:1"></div>
+<div id="dp_edit_btn_wrap" style="display:flex;gap:6px">
+<button class="btn btn-success btn-sm" id="dp_close_inc_btn" onclick="openDowntimeModal(detailCurrentId)" style="display:none">✓ Close Incident</button>
+</div>
+<button onclick="closeDetailPanel()" onmouseout="this.style.color='var(--text-muted)'" onmouseover="this.style.color='var(--text)'" style="background:transparent;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;line-height:1;padding:2px 6px;border-radius:6px">✕</button>
+</div>
+<!-- ══ VIEW MODE ══════════════════════════════════════════════════ -->
+<div class="detail-view" id="detailViewMode" style="flex:1;overflow-y:auto;flex-direction:column">
+<!-- Big title -->
+<div style="padding:20px 24px 16px;border-bottom:1px solid var(--border)">
+<div id="dp_title" style="font-size:22px;font-weight:800;color:var(--text);line-height:1.3;letter-spacing:-.3px">—</div>
+</div>
+<!-- INCIDENT DETAILS section -->
+<div style="padding:18px 24px;border-bottom:1px solid var(--border)">
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;display:flex;align-items:center;gap:8px">
+<span style="font-size:12px">📋</span> Incident Details
+      </div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px">Customer</div>
+<div id="dp_customer" style="font-size:14px;font-weight:600;color:var(--text)">—</div>
+</div>
+<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px">Project</div>
+<div id="dp_project" style="font-size:14px;font-weight:600;color:var(--text)">—</div>
+</div>
+<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px">Assigned To</div>
+<div id="dp_engineer" style="font-size:14px;font-weight:600;color:var(--text)">—</div>
+</div>
+<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px">Start Date &amp; Time</div>
+<div id="dp_date" style="font-size:14px;font-weight:600;color:var(--text)">—</div>
+</div>
+<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px">End Date &amp; Time</div>
+<div id="dp_end_date" style="font-size:14px;font-weight:600;color:var(--text)">—</div>
+</div>
+<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px">Area</div>
+<div id="dp_area" style="font-size:14px;font-weight:600;color:var(--text)">—</div>
+</div>
+<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;grid-column:1/-1">
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">Tags</div>
+<div id="dp_tags_view" style="display:flex;flex-wrap:wrap;gap:6px;min-height:24px"></div>
+<div id="dp_tags_edit" style="display:none;margin-top:8px">
+<div id="dp_tags_chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+<div style="display:flex;gap:6px;align-items:center">
+<input id="dp_tag_input" oninput="showTagSuggestions(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();addTagFromInput()}" placeholder="Add tag (e.g. database, api)…" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--text);outline:none" type="text"/>
+<button class="btn btn-secondary btn-sm" onclick="addTagFromInput()" style="white-space:nowrap">+ Add</button>
+</div>
+<div id="dp_tag_suggestions" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px"></div>
+</div>
+</div>
+<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px">Severity</div>
+<div id="dp_sev_text">—</div>
+</div>
+<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px">Status</div>
+<div id="dp_stat_text">—</div>
+</div>
+</div>
+</div>
+<!-- DESCRIPTION section -->
+<div style="padding:18px 24px;border-bottom:1px solid var(--border)">
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;display:flex;align-items:center;gap:8px">
+<span style="font-size:12px">📝</span> Description
+      </div>
+<div id="dp_desc" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-size:13px;color:var(--text-secondary);line-height:1.7;white-space:pre-wrap">—</div>
+</div>
+<!-- SLA & METRICS section -->
+<div style="padding:18px 24px;border-bottom:1px solid var(--border)">
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;display:flex;align-items:center;gap:8px">
+<span style="font-size:12px">⏱</span> SLA &amp; Metrics
+      </div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+<div id="dp_sla_resp" style="font-size:28px;font-weight:800;color:var(--accent);font-family:var(--font-mono)">—</div>
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-top:6px">Response Time</div>
+</div>
+<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+<div id="dp_sla_res" style="font-size:28px;font-weight:800;font-family:var(--font-mono)">—</div>
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-top:6px">Resolution Time</div>
+</div>
+<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+<div id="dp_sla_stat" style="font-size:28px;font-weight:800;font-family:var(--font-mono)">—</div>
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-top:6px">SLA Status</div>
+</div>
+<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+<div id="dp_mttd" style="font-size:28px;font-weight:800;color:#a78bfa;font-family:var(--font-mono)">—</div>
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-top:6px">MTTD</div>
+</div>
+</div>
+</div>
+<!-- RCA section (closed incidents only) -->
+<div id="dp_rca_section" style="padding:18px 24px;border-bottom:1px solid var(--border);display:none">
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">🔍 Incident Report Details</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px">
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px">⏱ Downtime</div>
+<div id="dp_view_downtime" style="font-size:18px;font-weight:800;color:var(--warning);font-family:var(--font-mono)">—</div>
+</div>
+<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px">
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px">⚡ MTTR</div>
+<div id="dp_view_mttr" style="font-size:18px;font-weight:800;color:#2dd4a0;font-family:var(--font-mono)">—</div>
+</div>
+</div>
+<div style="margin-bottom:12px">
+<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Root Cause Analysis</div>
+<div id="dp_rca" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px;color:var(--text-secondary);line-height:1.6">—</div>
+</div>
+<div>
+<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Resolution</div>
+<div id="dp_resolution" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px;color:var(--text-secondary);line-height:1.6">—</div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+<div>
+<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Resolved By</div>
+<div id="dp_resolved_by" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px;color:var(--text-secondary);font-weight:600">—</div>
+</div>
+<div>
+<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Salesforce Case No.</div>
+<div id="dp_sf_case" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px;color:#4f8ef7;font-weight:700;font-family:var(--font-mono)">—</div>
+</div>
+</div>
+</div>
+<!-- ACTIVITY & COMMENTS section -->
+<div style="padding:18px 24px;flex:1">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;display:flex;align-items:center;gap:8px">
+<span style="font-size:12px">📋</span> Activity &amp; Comments
+        </div>
+<div id="feedFilterBtns" style="display:flex;gap:6px">
+<button class="feed-filter-btn active" onclick="setFeedFilter('all',this)">All</button>
+<button class="feed-filter-btn" onclick="setFeedFilter('comment',this)">Comments</button>
+<button class="feed-filter-btn" onclick="setFeedFilter('status',this)">System</button>
+</div>
+</div>
+<div id="dp_feed" style="max-height:200px;overflow-y:auto;margin-bottom:14px"></div>
+<!-- Comment input -->
+<div style="position:relative">
+<div id="mentionDropdown" style="display:none;position:absolute;bottom:calc(100% + 4px);left:0;right:60px;background:var(--surface);border:1px solid var(--border2);border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,0.35);z-index:999;overflow:hidden"></div>
+<div style="display:flex;gap:8px">
+<textarea id="dp_comment_input" onblur="setTimeout(closeMentionDropdown,200)" onfocus="this.style.borderColor='var(--accent)'" oninput="handleMentionInput(this)" onkeydown="handleCommentKey(event)" placeholder="Add a comment… use @name to mention" rows="2" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;resize:none;outline:none;transition:border-color .15s"></textarea>
+<button onclick="submitDpComment()" style="background:var(--accent);color:#fff;border:none;padding:0 16px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;flex-shrink:0;align-self:flex-end;height:40px">Post</button>
+</div>
+</div>
+</div>
+</div>
+<!-- ══ EDIT MODE ═══════════════════════════════════════════════════ -->
+<div class="detail-edit" id="detailEditMode" style="flex:1;overflow-y:auto;padding:24px">
+<div style="font-size:20px;font-weight:800;color:var(--text);margin-bottom:20px">Edit Incident</div>
+<div style="margin-bottom:16px">
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Incident Title <span style="color:var(--danger)">*</span></label>
+<input id="dp_f_title" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="Incident title" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s"/>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+<div>
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Customer <span style="color:var(--danger)">*</span></label>
+<select id="dp_f_customer" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer"><option>BWC</option>
+<option>cccu</option>
+<option>christiedigital</option>
+<option>cloudndevops</option>
+<option>demo</option>
+<option>intrado</option>
+<option>mayerelectric</option>
+<option>mseus</option>
+<option>prettl</option>
+<option>ramatgancityhall</option>
+<option>sh</option>
+<option>smc</option>
+<option>tilebar</option>
+<option>toridoll</option>
+<option>vbc</option>
+</select>
+</div>
+<div>
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Project <span style="color:var(--danger)">*</span></label>
+<select id="dp_f_project" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer"><option>API Platform</option>
+<option>AgileD365</option>
+<option>Analytics Platform</option>
+<option>Cloud Infrastructure</option>
+<option>Cloud Migration</option>
+<option>CloudOps</option>
+<option>Data Pipeline</option>
+<option>DataSync</option>
+<option>Database Optimization</option>
+<option>Identity Platform</option>
+<option>Infrastructure Ops</option>
+<option>MGC MES</option>
+<option>Mobile Platform</option>
+<option>MobileFirst</option>
+<option>NGC AIML</option>
+<option>NGC MDE</option>
+<option>Notification Service</option>
+<option>Reporting Engine</option>
+<option>SF_Magento</option>
+<option>SecureNet</option>
+<option>Security Audit</option>
+<option>Security Operations</option>
+<option>ShopifyToSyspro</option>
+</select>
+</div>
+<div>
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Severity <span style="color:var(--danger)">*</span></label>
+<select id="dp_f_severity" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer"><option value="Critical">🔴 Critical</option><option value="High">🟠 High</option><option value="Medium">🟡 Medium</option><option value="Low">🟢 Low</option></select>
+</div>
+<div>
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Status <span style="color:var(--danger)">*</span></label>
+<select id="dp_f_status" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer"><option>New</option>
+<option>In Progress</option>
+<option>Tier 1 Level Support</option>
+<option>Escalated to R&amp;D</option>
+<option>Escalated to CSO Devops</option>
+<option>Escalated to 3rd Party</option>
+<option>Further Investigation</option>
+<option>Resolved</option>
+<option>Closed</option></select>
+</div>
+<div>
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Assigned To <span style="color:var(--danger)">*</span></label>
+<select id="dp_f_engineer" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer"><option>Admin User</option>
+<option>Babai Chatterjee</option>
+<option>Neeshu Malik</option>
+<option>Rohan Shelar</option>
+</select>
+</div>
+<div>
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Incident Date <span style="color:var(--danger)">*</span></label>
+<input id="dp_f_date" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s" type="date"/>
+</div>
+</div>
+<div style="margin-bottom:16px">
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Description <span style="color:var(--danger)">*</span></label>
+<textarea id="dp_f_desc" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="Describe the incident…" rows="5" style="width:100%;resize:vertical;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s"></textarea>
+</div>
+<div style="margin-bottom:16px">
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Area</label>
+<select id="dp_f_area" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s;cursor:pointer">
+<option value="">Select Area</option>
+</select>
+</div>
+<!-- ── REPORT FIELDS (shown only for Closed incidents) ── -->
+<div id="dp_report_fields" style="display:none;margin-top:4px">
+<div style="display:flex;align-items:center;gap:8px;margin:18px 0 14px;padding:10px 14px;background:rgba(79,142,247,0.06);border:1px solid rgba(79,142,247,0.2);border-radius:10px">
+<span style="font-size:14px">📋</span>
+<span style="font-size:12px;font-weight:700;color:var(--accent)">Report Details</span>
+<span style="font-size:11px;color:var(--text-muted)">— fields used in the incident report</span>
+</div>
+<!-- Start / End datetime row -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+<div>
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+<label style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px">📅 Incident Start</label>
+<div style="display:flex;align-items:center;gap:5px">
+<span style="font-size:9px;color:var(--text-muted);font-family:var(--font-mono)">TZ:</span>
+<div id="editTZSelector"></div>
+</div>
+</div>
+<input id="dp_f_start_dt" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box" type="datetime-local"/>
+</div>
+<div>
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">📅 Incident End</label>
+<input id="dp_f_end_dt" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box" type="datetime-local"/>
+</div>
+</div>
+<!-- MTTR row -->
+<div style="margin-bottom:14px">
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">⚡ Mean Time to Resolve (MTTR)</label>
+<div style="display:flex;gap:10px;align-items:center">
+<div style="display:flex;align-items:center;gap:6px">
+<input id="dp_f_mttr_h" max="999" min="0" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="0" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:16px;font-weight:700;font-family:var(--font-mono);outline:none;text-align:center;box-sizing:border-box" type="number"/>
+<span style="font-size:12px;color:var(--text-muted)">hours</span>
+</div>
+<div style="display:flex;align-items:center;gap:6px">
+<input id="dp_f_mttr_m" max="59" min="0" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="0" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:16px;font-weight:700;font-family:var(--font-mono);outline:none;text-align:center;box-sizing:border-box" type="number"/>
+<span style="font-size:12px;color:var(--text-muted)">mins</span>
+</div>
+</div>
+</div>
+<!-- Downtime row -->
+<div style="margin-bottom:14px">
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">⏱ Total Downtime</label>
+<div style="display:flex;gap:10px;align-items:center">
+<div style="display:flex;align-items:center;gap:6px">
+<input id="dp_f_dtH" max="999" min="0" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="0" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:16px;font-weight:700;font-family:var(--font-mono);outline:none;text-align:center;box-sizing:border-box;transition:border-color .15s" type="number"/>
+<span style="font-size:12px;color:var(--text-muted)">hours</span>
+</div>
+<div style="display:flex;align-items:center;gap:6px">
+<input id="dp_f_dtM" max="59" min="0" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="0" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:16px;font-weight:700;font-family:var(--font-mono);outline:none;text-align:center;box-sizing:border-box;transition:border-color .15s" type="number"/>
+<span style="font-size:12px;color:var(--text-muted)">mins</span>
+</div>
+</div>
+</div>
+<!-- RCA -->
+<div style="margin-bottom:14px">
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Root Cause Analysis</label>
+<textarea id="dp_f_rca" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="Describe the root cause…" rows="3" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s;resize:vertical"></textarea>
+</div>
+<!-- Resolution Steps -->
+<div style="margin-bottom:14px">
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Resolution Steps</label>
+<textarea id="dp_f_resolution" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="Steps taken to resolve…" rows="3" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s;resize:vertical"></textarea>
+</div>
+<!-- Resolved By + Salesforce Case -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+<div>
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Resolved By</label>
+<select id="dp_f_resolved_by" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
+<option value="">— Select —</option>
+<option>By OC Team</option>
+<option>By Customer</option>
+<option>By Stakeholder</option>
+<option>By System</option>
+</select>
+</div>
+<div>
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Salesforce Case No.</label>
+<input id="dp_f_sf_case" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="e.g. 00123456" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s"/>
+</div>
+</div>
+<!-- Components + Applications -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+<div>
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Components Affected</label>
+<input id="dp_f_components" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="e.g. Auth Service, DB" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s"/>
+</div>
+<div>
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Applications Affected</label>
+<input id="dp_f_applications" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="e.g. Portal, API" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s"/>
+</div>
+</div>
+</div>
+</div>
+<!-- FOOTER -->
+<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-top:1px solid var(--border);flex-shrink:0;background:var(--surface)">
+<div id="dp_footer_note" style="font-size:11px;color:var(--text-muted)">Magic Cloud Portal</div>
+<div id="dp_footer_btns" style="display:flex;gap:8px"></div>
+</div>
+</div>
+<!-- ─── NOTIFICATIONS PANEL ─────────────────────────────────── -->
+<div class="notif-panel" id="notifPanel" style="width:380px">
+<!-- Header -->
+<div style="padding:14px 16px 0;flex-shrink:0">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+<div style="font-size:14px;font-weight:800;color:var(--text);display:flex;align-items:center;gap:8px">
+        🔔 Notifications
+        <span id="notifUnreadBadge" style="display:none;background:var(--danger);color:#fff;font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px"></span>
+</div>
+<button onclick="markAllNotifRead()" style="font-size:11px;color:var(--accent);cursor:pointer;background:transparent;border:none;font-weight:600">Mark all read</button>
+</div>
+<div style="display:flex;border-bottom:1px solid var(--border)">
+<button id="ntab_all" onclick="setNotifTab('all')" style="flex:1;background:none;border:none;border-bottom:2px solid var(--accent);color:var(--text);font-size:12px;font-weight:600;padding:6px 0;cursor:pointer">All</button>
+<button id="ntab_unread" onclick="setNotifTab('unread')" style="flex:1;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-muted);font-size:12px;font-weight:600;padding:6px 0;cursor:pointer">Unread</button>
+<button id="ntab_mentions" onclick="setNotifTab('mentions')" style="flex:1;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-muted);font-size:12px;font-weight:600;padding:6px 0;cursor:pointer">Mentions</button>
+</div>
+</div>
+<!-- List -->
+<div class="notif-list" id="notifList" style="overflow-y:auto;flex:1"></div>
+<!-- Footer -->
+<div style="padding:8px 14px;border-top:1px solid var(--border);flex-shrink:0;display:flex;justify-content:flex-end">
+<button onclick="document.getElementById('notifPanel').classList.remove('open')" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);padding:5px 14px;border-radius:7px;cursor:pointer;font-size:12px">Close</button>
+</div>
+</div>
+<!-- ─── PROFILE DROPDOWN ────────────────────────────────────── -->
+<div class="profile-dropdown" id="profileDropdown">
+<div class="profile-dd-head">
+<div class="profile-dd-avatar" id="profileDdAvatar">A</div>
+<div style="min-width:0;flex:1">
+<div class="profile-dd-name" id="profileDdName">Admin User</div>
+<div class="profile-dd-role" id="profileDdRole">ADMIN</div>
+</div>
+</div>
+<div id="profileDdEmail" style="padding:8px 16px 10px;font-size:11px;color:var(--text-muted);font-family:var(--font-mono);border-bottom:1px solid var(--border);word-break:break-all;line-height:1.5"><a class="__cf_email__" data-cfemail="7c1d181115123c111d1b151f1f10130918521513" href="/cdn-cgi/l/email-protection">[email protected]</a></div>
+<div class="profile-dd-sep"></div>
+<div class="profile-dd-item" onclick="openProfileModal()">👤 My Profile</div>
+<div class="profile-dd-item" onclick="startTour()">🎯 Guided Tour</div>
+<div class="profile-dd-sep"></div>
+<div class="profile-dd-item" onclick="doLogout()" style="color:var(--danger)">🚪 Sign Out</div>
+</div>
+<!-- ─── GLOBAL SEARCH ────────────────────────────────────────── -->
+<div class="gsearch-overlay" id="gsearchOverlay" onclick="if(event.target===this)closeGlobalSearch()">
+<div class="gsearch-box">
+<div class="gsearch-input-wrap">
+<span class="gsearch-icon">⌕</span>
+<input autocomplete="off" class="gsearch-input" id="gsearchInput" oninput="runGlobalSearch(this.value)" placeholder="Search incidents, customers, engineers…"/>
+<button class="gsearch-close" onclick="closeGlobalSearch()">ESC</button>
+</div>
+<div class="gsearch-results" id="gsearchResults"></div>
+</div>
+</div>
+<!-- ─── CONFIRM DIALOG ───────────────────────────────────────── -->
+<div class="confirm-overlay" id="confirmOverlay">
+<div class="confirm-box" id="confirmBox">
+<div class="confirm-icon" id="confirmIcon">⚠</div>
+<div class="confirm-title" id="confirmTitle">Confirm</div>
+<div class="confirm-msg" id="confirmMsg"></div>
+<div class="confirm-actions">
+<button class="btn btn-secondary" id="confirmCancel">Cancel</button>
+<button class="btn btn-danger" id="confirmOk">Confirm</button>
+</div>
+</div>
+</div>
+<!-- ─── SESSION WARNING ──────────────────────────────────────── -->
+<div class="session-warn" id="sessionWarn">
+<span>⚠ Session expiring soon</span>
+<button onclick="document.getElementById('sessionWarn').classList.remove('visible')" style="background:transparent;border:none;color:inherit;cursor:pointer;font-weight:700">✕</button>
+</div>
+<!-- ─── PROFILE MODAL ──────────────────────────────────────────── -->
+<div class="modal-overlay" id="profileModal">
+<div class="modal-box" style="max-width:520px;width:94%">
+<!-- Header -->
+<div class="modal-header">
+<div style="display:flex;align-items:center;gap:14px">
+<div id="profileModalAvatar" style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#fff;flex-shrink:0">A</div>
+<div>
+<div id="profileModalName" style="font-size:16px;font-weight:700;color:var(--text)">Admin User</div>
+<div id="profileModalRole" style="font-size:11px;color:var(--text3);font-family:var(--font-mono)">ADMIN</div>
+<div id="profileModalEmail" style="font-size:11px;color:var(--text-muted);word-break:break-all;margin-top:2px"><a class="__cf_email__" data-cfemail="3c5d585155527c515d5b555f5f50534958125553" href="/cdn-cgi/l/email-protection">[email protected]</a></div>
+</div>
+</div>
+<button class="modal-close" onclick="closeModal('profileModal')">✕</button>
+</div>
+<!-- Body -->
+<div class="modal-body" style="padding:20px 24px">
+<!-- Read-only info row -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;background:var(--surface2);border-radius:10px;padding:14px 16px;margin-bottom:20px;border:1px solid var(--border)">
+<div>
+<div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px">User ID</div>
+<div id="pf_ro_id" style="font-size:12px;font-family:var(--font-mono);color:var(--text2)">USR-001</div>
+</div>
+<div>
+<div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px">Role</div>
+<div id="pf_ro_role" style="font-size:12px;font-family:var(--font-mono);color:var(--text2)">ADMIN</div>
+</div>
+<div>
+<div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px">Email</div>
+<div id="pf_ro_email" style="font-size:12px;color:var(--text2);word-break:break-all"><a class="__cf_email__" data-cfemail="7617121b1f18361b17111f15151a190312581f19" href="/cdn-cgi/l/email-protection">[email protected]</a></div>
+</div>
+<div>
+<div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px">Last Active</div>
+<div id="pf_ro_active" style="font-size:12px;color:var(--text2)">Just now</div>
+</div>
+</div>
+<!-- Editable fields -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+<div>
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Display Name</label>
+<input id="pf_name" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="Your full name" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s"/>
+</div>
+<div>
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Phone</label>
+<input id="pf_phone" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="+91 00000 00000" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s"/>
+</div>
+<div>
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Department</label>
+<input id="pf_dept" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="e.g. Engineering" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s"/>
+</div>
+<div>
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Location</label>
+<input id="pf_location" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="e.g. Pune, India" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s"/>
+</div>
+</div>
+<div>
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Bio</label>
+<textarea id="pf_bio" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="Short bio or notes…" rows="3" style="width:100%;resize:vertical;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s"></textarea>
+</div>
+</div>
+<!-- Footer -->
+<div class="modal-footer">
+<button class="btn btn-secondary" onclick="closeModal('profileModal')">Cancel</button>
+<button class="btn btn-primary" onclick="saveProfile()">💾 Save Profile</button>
+</div>
+</div>
+</div>
+<!-- ─── SCROLL TO TOP ───────────────────────────────────────── -->
+<div class="scroll-top-btn" id="scrollTopBtn" onclick="scrollToTop()" title="Back to top">↑</div>
+<!-- ─── CLOSE INCIDENT / DOWNTIME MODAL ──────────────────────────── -->
+<div id="downtimeModal" style="display:none;position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,0.65);backdrop-filter:blur(4px);align-items:center;justify-content:center">
+<div style="background:var(--surface);border:1px solid var(--border2);border-radius:16px;width:90%;max-width:480px;box-shadow:0 24px 60px rgba(0,0,0,0.5);overflow:hidden">
+<div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+<div>
+<div style="font-size:16px;font-weight:800;color:var(--text)">✓ Close Incident</div>
+<div id="dtm_inc_id" style="font-size:11px;color:var(--text-muted);margin-top:3px">INC-000</div>
+</div>
+<button onclick="document.getElementById('downtimeModal').style.display='none'" style="background:transparent;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;padding:4px 8px;border-radius:6px">✕</button>
+</div>
+<div style="padding:20px 24px">
+<div id="dtm_title" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--text-secondary);margin-bottom:18px;font-style:italic"></div>
+<div style="margin-bottom:16px">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+<label style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px">📅 Incident End Date &amp; Time <span style="color:var(--danger)">*</span></label>
+<div style="display:flex;align-items:center;gap:6px">
+<span style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">Timezone:</span>
+<div id="closeTZSelector"></div>
+</div>
+</div>
+<input id="dtm_end_time" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:14px;font-family:inherit;outline:none;box-sizing:border-box;margin-bottom:16px" type="datetime-local"/>
+</div>
+<div style="margin-bottom:16px">
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">⏱ Total Downtime <span style="color:var(--danger)">*</span></label>
+<div style="display:flex;gap:10px;align-items:center">
+<div style="display:flex;align-items:center;gap:6px">
+<input id="dtm_hours" max="999" min="0" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="0" style="width:80px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:18px;font-weight:700;font-family:var(--font-mono);outline:none;text-align:center;box-sizing:border-box" type="number"/>
+<span style="color:var(--text-muted);font-size:13px">hours</span>
+</div>
+<div style="display:flex;align-items:center;gap:6px">
+<input id="dtm_mins" max="59" min="0" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="0" style="width:80px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:18px;font-weight:700;font-family:var(--font-mono);outline:none;text-align:center;box-sizing:border-box" type="number"/>
+<span style="r:var(--text-muted);font-size:13px">mins</span>
+</div>
+</div>
+</div>
+<div style="margin-bottom:14px">
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Root Cause Analysis <span style="color:var(--danger)">*</span></label>
+<textarea id="dtm_rca" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="Describe the root cause of this incident…" rows="3" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;resize:vertical;transition:border-color .15s"></textarea>
+</div>
+<div style="margin-bottom:16px">
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Resolution Steps <span style="color:var(--danger)">*</span></label>
+<textarea id="dtm_resolution" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="Steps taken to resolve the incident…" rows="3" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;resize:vertical;transition:border-color .15s"></textarea>
+</div>
+<input id="dtm_inc_ref" type="hidden" value=""/>
+<div style="display:flex;gap:10px;justify-content:flex-end;padding-top:4px">
+<button onclick="document.getElementById('downtimeModal').style.display='none'" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Cancel</button>
+<button onclick="confirmCloseIncident()" style="background:linear-gradient(135deg,var(--accent),#7c5cbf);color:white;border:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Save Changes</button>
+</div>
+</div>
+</div>
+</div>
+
+<!-- ─── BULK ACTION BAR ──────────────────────────── -->
+<div class="bulk-bar" id="bulkBar">
+<span class="bulk-count" id="bulkCount">0 selected</span>
+<div style="width:1px;height:20px;background:var(--border2)"></div>
+<!-- Change Severity -->
+<div id="bulkSevWrap" style="position:relative">
+<button onclick="document.getElementById('bulkSevMenu').style.display=document.getElementById('bulkSevMenu').style.display==='block'?'none':'block'" style="background:rgba(247,185,79,0.1);border:1px solid rgba(247,185,79,0.25);color:var(--warning);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px">
+        ⚡ Severity <span style="font-size:9px">▾</span>
+</button>
+<div id="bulkSevMenu" style="display:none;position:absolute;bottom:calc(100% + 8px);left:0;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:6px;min-width:130px;z-index:700;box-shadow:0 8px 24px rgba(0,0,0,0.4)">
+<div onclick="executeBulkAction('severity','Critical')" onmouseout="this.style.background=''" onmouseover="this.style.background='rgba(247,92,124,0.1)'" style="padding:7px 12px;border-radius:7px;cursor:pointer;font-size:12px;color:#f75c7c;font-weight:600;display:flex;align-items:center;gap:8px">🔴 Critical</div>
+<div onclick="executeBulkAction('severity','High')" onmouseout="this.style.background=''" onmouseover="this.style.background='rgba(247,185,79,0.1)'" style="padding:7px 12px;border-radius:7px;cursor:pointer;font-size:12px;color:#f7b94f;font-weight:600;display:flex;align-items:center;gap:8px">🟠 High</div>
+<div onclick="executeBulkAction('severity','Medium')" onmouseout="this.style.background=''" onmouseover="this.style.background='rgba(79,142,247,0.1)'" style="padding:7px 12px;border-radius:7px;cursor:pointer;font-size:12px;color:#4f8ef7;font-weight:600;display:flex;align-items:center;gap:8px">🟡 Medium</div>
+<div onclick="executeBulkAction('severity','Low')" onmouseout="this.style.background=''" onmouseover="this.style.background='rgba(45,212,160,0.1)'" style="padding:7px 12px;border-radius:7px;cursor:pointer;font-size:12px;color:#2dd4a0;font-weight:600;display:flex;align-items:center;gap:8px">🟢 Low</div>
+</div>
+</div>
+<!-- Change Status -->
+<div id="bulkStatWrap" style="position:relative">
+<button onclick="document.getElementById('bulkStatMenu').style.display=document.getElementById('bulkStatMenu').style.display==='block'?'none':'block'" style="background:rgba(124,92,247,0.1);border:1px solid rgba(124,92,247,0.25);color:var(--accent2);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px">
+        ↻ Status <span style="font-size:9px">▾</span>
+</button>
+<div id="bulkStatMenu" style="display:none;position:absolute;bottom:calc(100% + 8px);left:0;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:6px;min-width:160px;z-index:700;box-shadow:0 8px 24px rgba(0,0,0,0.4)">
+<div onclick="executeBulkAction('status','New')" onmouseout="this.style.background=''" onmouseover="this.style.background='rgba(255,255,255,0.06)'" style="padding:6px 12px;border-radius:7px;cursor:pointer;font-size:12px;color:var(--text)">New</div>
+<div onclick="executeBulkAction('status','In Progress')" onmouseout="this.style.background=''" onmouseover="this.style.background='rgba(255,255,255,0.06)'" style="padding:6px 12px;border-radius:7px;cursor:pointer;font-size:12px;color:var(--text)">In Progress</div>
+<div onclick="executeBulkAction('status','Further Investigation')" onmouseout="this.style.background=''" onmouseover="this.style.background='rgba(255,255,255,0.06)'" style="padding:6px 12px;border-radius:7px;cursor:pointer;font-size:12px;color:var(--text)">Further Investigation</div>
+<div onclick="executeBulkAction('status','Resolved')" onmouseout="this.style.background=''" onmouseover="this.style.background='rgba(255,255,255,0.06)'" style="padding:6px 12px;border-radius:7px;cursor:pointer;font-size:12px;color:var(--text)">Resolved</div>
+<div style="height:1px;background:var(--border);margin:4px 0"></div>
+<div onclick="executeBulkAction('status','Closed')" onmouseout="this.style.background=''" onmouseover="this.style.background='rgba(45,212,160,0.08)'" style="padding:6px 12px;border-radius:7px;cursor:pointer;font-size:12px;color:var(--success);font-weight:600">✓ Close All</div>
+</div>
+</div>
+<!-- Export -->
+<div id="bulkExportWrap" style="position:relative">
+<button onclick="document.getElementById('bulkExportMenu').style.display=document.getElementById('bulkExportMenu').style.display==='block'?'none':'block'" style="background:rgba(45,212,160,0.1);border:1px solid rgba(45,212,160,0.2);color:var(--success);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px">
+        ↓ Export <span style="font-size:9px">▾</span>
+</button>
+<div id="bulkExportMenu" style="display:none;position:absolute;bottom:calc(100% + 8px);left:0;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:6px;min-width:140px;z-index:700;box-shadow:0 8px 24px rgba(0,0,0,0.4)">
+<div onclick="exportIncidents('csv')" onmouseout="this.style.background=''" onmouseover="this.style.background='rgba(255,255,255,0.06)'" style="padding:7px 12px;border-radius:7px;cursor:pointer;font-size:12px;color:var(--text);display:flex;align-items:center;gap:8px"><span style="font-size:15px">📄</span> Export as CSV</div>
+<div onclick="exportIncidents('json')" onmouseout="this.style.background=''" onmouseover="this.style.background='rgba(255,255,255,0.06)'" style="padding:7px 12px;border-radius:7px;cursor:pointer;font-size:12px;color:var(--text);display:flex;align-items:center;gap:8px"><span style="font-size:15px">{ }</span> Export as JSON</div>
+</div>
+</div>
+<div style="width:1px;height:20px;background:var(--border2)"></div>
+<button onclick="clearBulkSelection()" style="background:rgba(247,92,124,0.08);border:1px solid rgba(247,92,124,0.2);color:var(--danger);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">✕ Deselect</button>
+</div>
+<!-- ── NOTIFICATION PREVIEW MODAL ──────────────────────── -->
+<div id="notifSimModal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.5);align-items:center;justify-content:center">
+<div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;max-width:480px;width:90%;max-height:80vh;overflow-y:auto">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+<div style="font-size:16px;font-weight:700;color:var(--text)">📨 Notification Preview</div>
+<button onclick="document.getElementById('notifSimModal').style.display='none'" style="background:transparent;border:none;color:var(--text-muted);font-size:18px;cursor:pointer">✕</button>
+</div>
+<div id="notifSimContent"></div>
+</div>
+</div>
+<!-- ─── COMMAND PALETTE ──────────────────────────────────────── -->
+<div id="cmdPalette" onclick="if(event.target===this)closeCmdPalette()">
+<div style="width:100%;max-width:600px;background:#16213e;border:1px solid rgba(79,142,247,0.35);border-radius:16px;overflow:hidden;box-shadow:0 32px 80px rgba(0,0,0,0.8),0 0 0 1px rgba(255,255,255,0.05)">
+<!-- Search row -->
+<div style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,0.08);background:#16213e">
+<svg fill="none" height="16" stroke="#4f8ef7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" style="flex-shrink:0" viewbox="0 0 24 24" width="16">
+<circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path>
+</svg>
+<input id="cmdInput" oninput="runCmdSearch(this.value)" placeholder="Search incidents, pages, actions..." style="flex:1;background:transparent!important;border:none!important;outline:none!important;box-shadow:none!important;font-size:14px;color:#e0e6ff;font-family:inherit;caret-color:#4f8ef7;padding:0!important" type="text"/>
+<kbd onclick="closeCmdPalette()" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:3px 9px;font-size:10px;font-family:monospace;color:rgba(255,255,255,0.45);cursor:pointer;letter-spacing:.5px;flex-shrink:0">ESC</kbd>
+</div>
+<!-- Results -->
+<div id="cmdResults" style="max-height:360px;overflow-y:auto;padding:6px;background:#16213e"></div>
+<!-- Footer -->
+<div style="display:flex;gap:16px;padding:9px 18px;border-top:1px solid rgba(255,255,255,0.06);background:rgba(0,0,0,0.2)">
+<kbd style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:3px 9px;font-size:10px;font-family:monospace;color:rgba(255,255,255,0.45);letter-spacing:.5px">↑↓ Navigate</kbd>
+<kbd style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:3px 9px;font-size:10px;font-family:monospace;color:rgba(255,255,255,0.45);letter-spacing:.5px">⏎ Select</kbd>
+<kbd style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:3px 9px;font-size:10px;font-family:monospace;color:rgba(255,255,255,0.45);letter-spacing:.5px">ESC Close</kbd>
+</div>
+</div>
+</div>
+</div>
+<!-- ─── CUSTOMER 360 PICKER OVERLAY ─────────────────────── -->
+<div id="c360PickerOverlay" style="display:none;position:fixed;inset:0;z-index:8000;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);align-items:center;justify-content:center">
+<div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;width:520px;max-width:95vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,0.5)">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+<div style="font-size:18px;font-weight:800;color:var(--text)">Select Customer</div>
+<div onclick="document.getElementById('c360PickerOverlay').style.display='none'" style="cursor:pointer;color:var(--text-muted);font-size:20px;line-height:1">✕</div>
+</div>
+<div style="position:relative;margin-bottom:14px">
+<input id="c360PickerSearch" oninput="filterC360Picker(this.value)" placeholder="Search customers…" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 14px;color:var(--text);font-size:13px;outline:none" type="text"/>
+</div>
+<div id="c360PickerList" style="overflow-y:auto;flex:1;display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
+</div>
+</div>
+<script src="./js/app.js"></script><script src="./config/config.js"></script></body>
+</html>
