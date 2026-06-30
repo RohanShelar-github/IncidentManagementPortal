@@ -429,6 +429,16 @@ function getIncDowntimeMinutes(inc) {
   return 0;
 }
 
+function getIncMttrMinutes(inc) {
+  if (inc.mttrH > 0 || inc.mttrM > 0) return (inc.mttrH || 0) * 60 + (inc.mttrM || 0);
+  return 0;
+}
+
+function getIncResolutionMinutes(inc) {
+  var mttr = getIncMttrMinutes(inc);
+  return mttr > 0 ? mttr : getIncDowntimeMinutes(inc);
+}
+
 // ─── AUDIT LOG ─────────────────────────────────────────────────────────────
 function addAudit(icon, action, detail) {
   auditLog.unshift({
@@ -626,6 +636,8 @@ function getDashboardFilteredIncidents() {
   var custs = getMsValues('df_customer');
   var sevs = getMsValues('df_severity');
   var areas = getMsValues('df_area');
+  var years = getMsValues('df_year');
+  var months = getMsValues('df_month');
   var fromEl = document.getElementById('df_from');
   var toEl = document.getElementById('df_to');
   var from = fromEl ? fromEl.value : '';
@@ -635,9 +647,35 @@ function getDashboardFilteredIncidents() {
   if (custs.length) result = result.filter(function (i) { return custs.indexOf(i.customer) >= 0; });
   if (sevs.length) result = result.filter(function (i) { return sevs.indexOf(i.severity) >= 0; });
   if (areas.length) result = result.filter(function (i) { return areas.indexOf(i.area || '') >= 0; });
+  if (years.length) result = result.filter(function (i) { return years.indexOf(getIncidentYear(i)) >= 0; });
+  if (months.length) result = result.filter(function (i) { return months.indexOf(getIncidentMonthName(i)) >= 0; });
   if (from) result = result.filter(function (i) { return i.date >= from; });
   if (to) result = result.filter(function (i) { return i.date <= to; });
   return result;
+}
+
+function getIncidentFilterDate(inc) {
+  return String((inc && (inc.date || inc.startDT || inc.date_created)) || '').substring(0, 10);
+}
+
+function getIncidentYear(inc) {
+  var d = getIncidentFilterDate(inc);
+  return d.length >= 4 ? d.substring(0, 4) : '';
+}
+
+function getIncidentMonthNumber(inc) {
+  var d = getIncidentFilterDate(inc);
+  return d.length >= 7 ? d.substring(5, 7) : '';
+}
+
+function getIncidentMonthName(inc) {
+  var monthNames = getDashboardMonthNames();
+  var idx = parseInt(getIncidentMonthNumber(inc), 10) - 1;
+  return idx >= 0 && idx < monthNames.length ? monthNames[idx] : '';
+}
+
+function getDashboardMonthNames() {
+  return ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 }
 
 // ─── DATA MANAGEMENT ──────────────────────────────────────────────────────
@@ -1055,7 +1093,7 @@ function applyDashFilters() {
   initCharts();
 
   // Count active filters (multi-select + date)
-  var msIds = ['df_customer', 'df_area', 'df_severity'];
+  var msIds = ['df_customer', 'df_area', 'df_severity', 'df_year', 'df_month'];
   var msCount = msIds.reduce(function (n, id) { return n + getMsValues(id).length; }, 0);
   var dateCount = ['df_from', 'df_to'].filter(function (id) { var el = document.getElementById(id); return el && el.value; }).length;
   var activeCount = msCount + dateCount;
@@ -1070,7 +1108,7 @@ function applyDashFilters() {
 }
 
 function clearDashFilters() {
-  ['df_customer', 'df_area', 'df_severity'].forEach(function (id) { clearMsFilter(id); });
+  ['df_customer', 'df_area', 'df_severity', 'df_year', 'df_month'].forEach(function (id) { clearMsFilter(id); });
   ['df_from', 'df_to'].forEach(function (id) { var el = document.getElementById(id); if (el) el.value = ''; });
   var badge = document.getElementById('df_active_badge');
   if (badge) badge.style.display = 'none';
@@ -3350,6 +3388,17 @@ function initDashFilterDropdowns() {
   // Customer and area options (dynamic)
   populateMsDropdown('df_customer', customers, 'All Customers');
   populateMsDropdown('df_area', areas, 'All Areas');
+  populateMsDropdown('df_year', getDashboardAvailableYears(), 'All Years');
+  populateMsDropdown('df_month', getDashboardMonthNames(), 'All Months');
+}
+
+function getDashboardAvailableYears() {
+  var map = {};
+  incidents.forEach(function (inc) {
+    var year = getIncidentYear(inc);
+    if (year) map[year] = true;
+  });
+  return Object.keys(map).sort(function (a, b) { return Number(b) - Number(a); });
 }
 
 function refreshDashboardData() {
@@ -3397,6 +3446,18 @@ function updateStats() {
   var dtSub = document.getElementById('statDowntimeSub');
   if (dtEl) dtEl.textContent = dt > 0 ? minutesToHM(dt) : '0m';
   if (dtSub) dtSub.textContent = closed + ' closed incident' + (closed !== 1 ? 's' : '');
+
+  // Avg Resolution (closed/resolved incidents with recorded database timing)
+  var withResolution = closedIncs.filter(function (i) { return getIncResolutionMinutes(i) > 0; });
+  var avgResolution = withResolution.length > 0
+    ? Math.round(withResolution.reduce(function (s, i) { return s + getIncResolutionMinutes(i); }, 0) / withResolution.length)
+    : 0;
+  var arEl = document.getElementById('statAvgResolution');
+  var arSub = document.getElementById('statAvgResolutionSub');
+  if (arEl) arEl.textContent = avgResolution > 0 ? minutesToHM(avgResolution) : '—';
+  if (arSub) arSub.textContent = withResolution.length > 0
+    ? withResolution.length + ' closed incident' + (withResolution.length !== 1 ? 's' : '') + ' measured'
+    : 'no resolution time recorded';
 
   // SLA Breach count
   var SLA_H = { Critical: 1, High: 4, Medium: 12, Low: 24 };

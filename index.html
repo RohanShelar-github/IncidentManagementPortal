@@ -319,6 +319,28 @@
 </div>
 </div>
 </div>
+<!-- Year -->
+<div style="flex:1;min-width:120px">
+<div style="font-size:9px;font-weight:700;color:#4f8ef7;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:7px;font-family:var(--font-mono)">&diams; Annual</div>
+<div class="ms-wrap" id="df_year_wrap">
+<div class="ms-box" id="df_year" onclick="toggleMsDropdown('df_year')">
+<span class="ms-placeholder" id="df_year_ph">All Years</span>
+</div>
+<div class="ms-dropdown" id="df_year_dd">
+</div>
+</div>
+</div>
+<!-- Month -->
+<div style="flex:1;min-width:120px">
+<div style="font-size:9px;font-weight:700;color:#2dd4a0;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:7px;font-family:var(--font-mono)">&diams; Monthly</div>
+<div class="ms-wrap" id="df_month_wrap">
+<div class="ms-box" id="df_month" onclick="toggleMsDropdown('df_month')">
+<span class="ms-placeholder" id="df_month_ph">All Months</span>
+</div>
+<div class="ms-dropdown" id="df_month_dd">
+</div>
+</div>
+</div>
 <!-- Date range -->
 <div style="flex:1;min-width:120px">
 <div style="font-size:9px;font-weight:700;color:var(--success);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:7px;font-family:var(--font-mono)">◈ From</div>
@@ -349,8 +371,8 @@
 </div>
 <div class="stat-card purple">
 <div class="stat-label">Avg Resolution</div>
-<div class="stat-value">4.2h</div>
-<div class="stat-delta"><span class="stat-trend up">↓ 0.8h</span> vs last month</div>
+<div class="stat-value" id="statAvgResolution">—</div>
+<div class="stat-delta" id="statAvgResolutionSub">closed incidents measured</div>
 </div>
 <div class="stat-card" style="border-color:rgba(247,185,79,0.3);background:linear-gradient(135deg,rgba(247,185,79,0.08),rgba(247,185,79,0.02))">
 <div class="stat-label" style="color:var(--warning)">Total Downtime</div>
