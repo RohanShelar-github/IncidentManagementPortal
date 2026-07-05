@@ -204,14 +204,14 @@ function normalizeIncidentFromBackend(incident) {
 
 function loadIncidentsFromBackend(callback) {
   if (!window.APP_CONFIG || !window.APP_CONFIG.ENABLE_BACKEND) {
-    if (callback) callback();
+    if (callback) callback(null);
     return;
   }
 
   const token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
   if (!token) {
     console.warn('No JWT token found. Skipping backend incident load.');
-    if (callback) callback();
+    if (callback) callback(new Error('Not authenticated. Please login first.'));
     return;
   }
 
@@ -222,20 +222,25 @@ function loadIncidentsFromBackend(callback) {
       'Authorization': `Bearer ${token}`
     }
   })
-    .then(r => r.json())
+    .then(r => {
+      if (!r.ok) throw new Error('Backend returned HTTP ' + r.status);
+      return r.json();
+    })
     .then(data => {
       if (data && data.success && Array.isArray(data.data)) {
         incidents = data.data.map(normalizeIncidentFromBackend);
         filteredIncidents = [...incidents];
         console.log('Loaded ' + incidents.length + ' incidents from backend');
+        if (callback) callback(null);
       } else {
-        console.warn('Failed to load incidents from backend:', data?.message);
+        var msg = data && data.message ? data.message : 'Failed to load incidents from backend';
+        console.warn('Failed to load incidents from backend:', msg);
+        if (callback) callback(new Error(msg));
       }
-      if (callback) callback();
     })
     .catch(err => {
       console.error('Error loading incidents from backend:', err);
-      if (callback) callback();
+      if (callback) callback(err);
     });
 }
 
@@ -3401,35 +3406,126 @@ function getDashboardAvailableYears() {
   return Object.keys(map).sort(function (a, b) { return Number(b) - Number(a); });
 }
 
-function refreshDashboardData() {
-  // Reload incidents from backend if enabled
-  if (window.APP_CONFIG && window.APP_CONFIG.ENABLE_BACKEND) {
-    loadIncidentsFromBackend(function () {
-      updateStats();
-      renderRecentTable();
-      renderActivity();
-      renderMyIncidents();
-      renderHealthGrid();
-      renderEngineerLeaderboard();
-      renderRecurringList();
-      renderSlaCountdown();
-      initCharts();
-      updateStatusBar();
-    });
-  } else {
-    updateStats();
-    renderRecentTable();
-    renderActivity();
-    renderMyIncidents();
-    renderHealthGrid();
-    renderEngineerLeaderboard();
-    renderRecurringList();
-    renderSlaCountdown();
-    initCharts();
-    updateStatusBar();
-  }
+var dashboardRefreshInFlight = false;
+
+function getDashFilterSnapshot() {
+  return {
+    ms: {
+      df_customer: getMsValues('df_customer'),
+      df_area: getMsValues('df_area'),
+      df_severity: getMsValues('df_severity'),
+      df_year: getMsValues('df_year'),
+      df_month: getMsValues('df_month')
+    },
+    dates: {
+      df_from: (document.getElementById('df_from') || {}).value || '',
+      df_to: (document.getElementById('df_to') || {}).value || ''
+    }
+  };
 }
 
+function restoreDashFilterSnapshot(snapshot) {
+  if (!snapshot) return;
+  Object.keys(snapshot.ms || {}).forEach(function (id) {
+    ensureMsOptions(id, snapshot.ms[id] || []);
+    setMsValues(id, snapshot.ms[id] || []);
+  });
+  Object.keys(snapshot.dates || {}).forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.value = snapshot.dates[id] || '';
+  });
+}
+
+function ensureMsOptions(id, values) {
+  var dd = document.getElementById(id + '_dd');
+  if (!dd) return;
+  values.forEach(function (value) {
+    var exists = Array.from(dd.querySelectorAll('input[type=checkbox]')).some(function (cb) { return cb.value === value; });
+    if (!value || exists) return;
+    var label = document.createElement('label');
+    var input = document.createElement('input');
+    label.className = 'ms-option';
+    input.type = 'checkbox';
+    input.value = value;
+    input.onchange = function () { renderMsPills(id); applyDashFilters(); };
+    label.appendChild(input);
+    label.appendChild(document.createTextNode(' ' + value));
+    dd.appendChild(label);
+  });
+}
+
+function renderDashboardWidgets() {
+  renderMyIncidents();
+  renderHealthGrid();
+  updateStatusBar();
+  applyDashFilters();
+}
+
+function setDashboardRefreshState(isLoading, errorMessage) {
+  var label = document.getElementById('dashLastUpdated');
+  var btn = document.getElementById('dashRefreshBtn');
+  var icon = document.getElementById('dashRefreshIcon');
+  if (btn) {
+    btn.style.pointerEvents = isLoading ? 'none' : '';
+    btn.style.opacity = isLoading ? '0.65' : '';
+    btn.setAttribute('aria-busy', isLoading ? 'true' : 'false');
+    btn.title = isLoading ? 'Refreshing dashboard...' : 'Refresh';
+  }
+  if (icon) icon.style.transform = isLoading ? 'rotate(360deg)' : 'rotate(0deg)';
+  if (!label) return;
+
+  if (isLoading) {
+    label.textContent = 'Refreshing dashboard...';
+    label.style.color = 'var(--accent)';
+    return;
+  }
+
+  if (errorMessage) {
+    label.textContent = 'Refresh failed';
+    label.style.color = 'var(--danger)';
+    return;
+  }
+
+  var now = new Date();
+  var h = now.getHours();
+  var m = String(now.getMinutes()).padStart(2, '0');
+  var ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  label.textContent = 'Last updated ' + h + ':' + m + ' ' + ampm;
+  label.style.color = 'var(--text-muted)';
+}
+
+function refreshDashboard(event) {
+  if (event && event.preventDefault) event.preventDefault();
+  return refreshDashboardData({ manual: true });
+}
+
+window.refreshDashboard = refreshDashboard;
+
+function refreshDashboardData(options) {
+  options = options || {};
+  if (dashboardRefreshInFlight) return;
+  dashboardRefreshInFlight = true;
+
+  var snapshot = getDashFilterSnapshot();
+  setDashboardRefreshState(true);
+
+  function finish(err) {
+    initDashFilterDropdowns();
+    restoreDashFilterSnapshot(snapshot);
+    renderDashboardWidgets();
+    dashboardRefreshInFlight = false;
+    setDashboardRefreshState(false, err && options.manual ? err.message : '');
+    if (err && options.manual) showToast('Dashboard refresh failed: ' + err.message, 'error');
+    else if (options.manual) showToast('Dashboard refreshed', 'success');
+  }
+
+  if (window.APP_CONFIG && window.APP_CONFIG.ENABLE_BACKEND) {
+    loadIncidentsFromBackend(finish);
+  } else {
+    finish(null);
+  }
+}
 function updateStats() {
   var data = getDashboardFilteredIncidents();
   var open = data.filter(function (i) { return i.status !== 'Closed' && i.status !== 'Resolved'; }).length;
