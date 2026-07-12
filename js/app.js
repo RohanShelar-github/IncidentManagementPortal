@@ -76,11 +76,11 @@ document.addEventListener('keydown', function (e) {
 
 // ─── DATA ─────────────────────────────────────────────────────
 let currentRole = 'admin';
-let currentUserName = 'Admin User';
+let currentUserName = ''; 
 let editingId = null;
 
-let customers = ['demo', 'vbc', 'tilebar', 'BWC', 'christiedigital', 'mayerelectric', 'ramatgancityhall', 'cccu', 'intrado', 'sh', 'prettl', 'smc', 'toridoll', 'mseus', 'cloudndevops', 'miscloud', 'choctawnation', 'gjkg'];
-let areas = ['Infra', 'Application', 'Historian'];
+let customers = [];
+let areas = [];
 
 // ── TIMEZONE SYSTEM ───────────────────────────────────────────
 var TIMEZONES = [
@@ -202,6 +202,50 @@ function normalizeIncidentFromBackend(incident) {
   });
 }
 
+function syncReferenceListsFromIncidents() {
+  customers = Array.from(new Set(incidents.map(function (i) { return i.customer; }).filter(Boolean))).sort();
+  areas = Array.from(new Set(incidents.map(function (i) { return i.area; }).filter(Boolean))).sort();
+  populateCustomerDropdowns();
+  populateAreaDropdowns();
+}
+
+function loadUsersFromBackend(callback) {
+  if (!window.APP_CONFIG || !window.APP_CONFIG.ENABLE_BACKEND) {
+    users = [];
+    if (callback) callback(null);
+    return;
+  }
+  const token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) {
+    if (callback) callback(new Error('Not authenticated. Please login first.'));
+    return;
+  }
+  fetch(window.APP_CONFIG.API_BASE_URL + '/auth/users', {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
+  })
+    .then(r => { if (!r.ok) throw new Error('Users API returned HTTP ' + r.status); return r.json(); })
+    .then(data => {
+      if (data && data.success && Array.isArray(data.data)) {
+        users = data.data.map(function (u) {
+          var name = u.name || u.full_name || u.email;
+          return Object.assign({}, u, {
+            name: name,
+            initials: u.initials || String(name || '').split(/\s+/).map(function (p) { return p[0] || ''; }).join('').substring(0, 2).toUpperCase(),
+            active: u.active !== false
+          });
+        });
+        if (callback) callback(null);
+      } else {
+        if (callback) callback(new Error(data && data.message ? data.message : 'Failed to load users'));
+      }
+    })
+    .catch(err => {
+      console.error('Error loading users from backend:', err);
+      if (callback) callback(err);
+    });
+}
+
 function loadIncidentsFromBackend(callback) {
   if (!window.APP_CONFIG || !window.APP_CONFIG.ENABLE_BACKEND) {
     if (callback) callback(null);
@@ -244,30 +288,8 @@ function loadIncidentsFromBackend(callback) {
     });
 }
 
-let incidents = [
-  { id: 'INC-001', title: 'Database connection timeout during peak hours', customer: 'demo', project: 'Cloud Infrastructure', severity: 'Critical', status: 'New', engineer: 'Babai Chatterjee', date: '2026-02-26', desc: 'Production DB connections spiking to 1500+, causing cascade failures across auth and reporting services.', components: 'Database Cluster, Connection Pool', applications: 'Customer Portal, Admin Panel', slaHours: 1, comments: [], tags: ['database', 'timeout'], area: 'Infra' },
-  { id: 'INC-002', title: 'API rate limiting not enforced correctly', customer: 'vbc', project: 'API Platform', severity: 'High', status: 'In Progress', engineer: 'Rohan Shelar', date: '2026-02-28', desc: 'Third-party API calls bypassing rate limits, causing downstream service degradation.', components: 'API Gateway', applications: 'Mobile App, Partner Portal', slaHours: 4, comments: [], tags: ['api', 'performance'], area: 'Application' },
-  { id: 'INC-003', title: 'S3 bucket publicly accessible — data exposure risk', customer: 'tilebar', project: 'Cloud Security', severity: 'Critical', status: 'In Progress', engineer: 'Babai Chatterjee', date: '2026-03-01', desc: 'Security audit flagged three S3 buckets with public read access containing PII data.', components: 'S3, IAM', applications: 'Data Pipeline', slaHours: 1, comments: [], tags: ['security', 'storage'], area: 'Infra' },
-  { id: 'INC-004', title: 'Deployment pipeline failing on staging environment', customer: 'BWC', project: 'DevOps', severity: 'Medium', status: 'New', engineer: 'Rohan Shelar', date: '2026-03-02', desc: 'CI/CD pipeline errors on Docker build step after base image update.', components: 'Jenkins, Docker', applications: 'Staging Environment', slaHours: 12, comments: [], tags: ['deploy', 'config'], area: 'Application' },
-  { id: 'INC-005', title: 'SSO login broken for enterprise customers', customer: 'christiedigital', project: 'Identity & Access', severity: 'High', status: 'Escalated to R&D', engineer: 'Babai Chatterjee', date: '2026-03-03', desc: 'SAML assertion failing for customers using Azure AD. Affects 200+ enterprise users.', components: 'SSO Module, SAML Parser', applications: 'Enterprise Portal', slaHours: 4, comments: [], tags: ['auth', 'security'], area: 'Application' },
-  { id: 'INC-006', title: 'Network latency spike — EU region', customer: 'mayerelectric', project: 'Network Operations', severity: 'High', status: 'In Progress', engineer: 'Rohan Shelar', date: '2026-03-04', desc: 'Packet loss and latency above 300ms on EU-West-1. Affecting real-time dashboards.', components: 'Load Balancer, CDN', applications: 'Analytics Dashboard', slaHours: 4, comments: [], tags: ['network', 'performance'], area: 'Infra' },
-  { id: 'INC-007', title: 'Memory leak in reporting microservice', customer: 'ramatgancityhall', project: 'Platform Services', severity: 'Medium', status: 'Further Investigation', engineer: 'Babai Chatterjee', date: '2026-03-05', desc: 'Reporting service memory grows unbounded over 24h periods, requiring manual restart.', components: 'Reporting Service', applications: 'Reports Module', slaHours: 12, comments: [], tags: ['performance', 'monitoring'], area: 'Application' },
-  { id: 'INC-008', title: 'Backup job silently failing since migration', customer: 'cccu', project: 'Data Management', severity: 'High', status: 'New', engineer: 'Rohan Shelar', date: '2026-03-06', desc: 'Nightly backup scripts returning exit code 0 but not writing to backup bucket.', components: 'Backup Agent, S3', applications: 'Database Backup System', slaHours: 4, comments: [], tags: ['backup', 'storage'], area: 'Infra' },
-  { id: 'INC-009', title: 'UI rendering broken on Safari 17+', customer: 'intrado', project: 'Frontend', severity: 'Medium', status: 'In Progress', engineer: 'Babai Chatterjee', date: '2026-03-07', desc: 'CSS Grid layout collapses on Safari 17+ due to deprecated flexbox handling.', components: 'Frontend App', applications: 'Customer Dashboard', slaHours: 12, comments: [], tags: ['ui', 'config'], area: 'Application' },
-  { id: 'INC-010', title: 'Third-party payment integration timing out', customer: 'sh', project: 'Payments', severity: 'Critical', status: 'Escalated to 3rd Party', engineer: 'Rohan Shelar', date: '2026-03-08', desc: 'Stripe webhook responses exceeding 30s timeout. 15% of transactions failing silently.', components: 'Payment Gateway', applications: 'Checkout, Billing', slaHours: 1, comments: [], tags: ['integration', 'api'], area: 'Application' },
-  { id: 'INC-011', title: 'DNS resolution failures intermittent', customer: 'prettl', project: 'Network Operations', severity: 'Medium', status: 'New', engineer: 'Babai Chatterjee', date: '2026-03-09', desc: 'Internal DNS resolver dropping queries under load. Affects service discovery.', components: 'DNS Resolver', applications: 'Microservices Mesh', slaHours: 12, comments: [], tags: ['network', 'config'], area: 'Infra' },
-  { id: 'INC-012', title: 'Historian data gap — 6 hours missing', customer: 'smc', project: 'Historian', severity: 'High', status: 'In Progress', engineer: 'Rohan Shelar', date: '2026-03-09', desc: 'Historian failed to record telemetry data between 02:00-08:00 UTC due to buffer overflow.', components: 'Historian Service, Buffer', applications: 'Telemetry Dashboard', slaHours: 4, comments: [], tags: ['monitoring', 'database'], area: 'Historian' },
-  { id: 'INC-013', title: 'CPU usage sustained at 98% on app servers', customer: 'toridoll', project: 'Platform Services', severity: 'Critical', status: 'In Progress', engineer: 'Babai Chatterjee', date: '2026-03-10', desc: 'Runaway process consuming all available CPU. Load balancer failing over constantly.', components: 'App Servers, Load Balancer', applications: 'Main Application', slaHours: 1, comments: [], tags: ['performance', 'monitoring'], area: 'Infra' },
-  { id: 'INC-014', title: 'Data export generating malformed CSV files', customer: 'mseus', project: 'Data Management', severity: 'Low', status: 'New', engineer: 'Rohan Shelar', date: '2026-03-10', desc: 'Export function not escaping commas in text fields, breaking downstream imports.', components: 'Export Service', applications: 'Admin Panel', slaHours: 24, comments: [], tags: ['data-loss', 'api'], area: 'Application' },
-  { id: 'INC-015', title: 'Historian trending analysis returning null values', customer: 'cloudndevops', project: 'Historian', severity: 'Medium', status: 'Closed', engineer: 'Babai Chatterjee', date: '2026-03-05', desc: 'Trending algorithm returns null for datasets with gaps > 2 hours. Root cause identified as missing interpolation logic.', components: 'Historian Analytics', applications: 'Trend Dashboard', slaHours: 12, rca: 'Missing interpolation logic in trend calculator for sparse datasets.', resolution: 'Deployed patch v2.3.1 with gap-fill interpolation. Validated against 30-day historical data.', resolvedBy: 'Babai Chatterjee', sfCase: 'CS-10234', downtimeH: 3, downtimeM: 0, mttrH: 4, mttrM: 30, comments: [], tags: ['monitoring', 'database'], area: 'Historian' },
-  { id: 'INC-016', title: 'User permissions not refreshing after role change', customer: 'miscloud', project: 'Identity & Access', severity: 'Low', status: 'Closed', engineer: 'Rohan Shelar', date: '2026-03-06', desc: 'Users need to log out and back in for new role permissions to take effect.', components: 'Auth Service, Session Manager', applications: 'All Applications', slaHours: 24, rca: 'Session tokens cached old role claims without expiry invalidation.', resolution: 'Added role-change event to force token refresh. Deployed to prod.', resolvedBy: 'Rohan Shelar', sfCase: 'CS-10198', downtimeH: 0, downtimeM: 0, mttrH: 2, mttrM: 0, comments: [], tags: ['auth', 'config'], area: 'Application' },
-  { id: 'INC-017', title: 'Disk space critical on primary database server', customer: 'choctawnation', project: 'Infrastructure', severity: 'Critical', status: 'Resolved', engineer: 'Babai Chatterjee', date: '2026-03-11', desc: 'Primary DB server at 97% disk capacity. Write operations beginning to fail.', components: 'Database Server, Storage', applications: 'All Data Services', slaHours: 1, comments: [], tags: ['storage', 'database'], area: 'Infra' },
-  { id: 'INC-018', title: 'Integration sync lag with Salesforce exceeding 2 hours', customer: 'gjkg', project: 'CRM Integration', severity: 'Medium', status: 'In Progress', engineer: 'Rohan Shelar', date: '2026-03-11', desc: 'Salesforce data sync delayed by 2+ hours due to API throttling from bulk operations.', components: 'Salesforce Connector', applications: 'CRM Dashboard', slaHours: 12, comments: [], tags: ['integration', 'api'], area: 'Application' },
-  { id: 'INC-019', title: 'SSL certificate expiry warning — 14 days remaining', customer: 'demo', project: 'Security', severity: 'Low', status: 'New', engineer: 'Babai Chatterjee', date: '2026-03-12', desc: 'Wildcard SSL certificate for *.magiccloud.io expires in 14 days. Renewal process started.', components: 'SSL Certificate', applications: 'All Public Endpoints', slaHours: 24, comments: [], tags: ['security', 'config'], area: 'Infra' },
-  { id: 'INC-020', title: 'Historian real-time feed dropping packets under load', customer: 'smc', project: 'Historian', severity: 'High', status: 'New', engineer: 'Rohan Shelar', date: '2026-03-12', desc: 'Real-time data feed loses ~5% of packets when ingestion rate exceeds 10k/sec.', components: 'Historian Ingestion', applications: 'Real-time Dashboard', slaHours: 4, comments: [], tags: ['monitoring', 'network'], area: 'Historian' },
-];
-
-let filteredIncidents = [...incidents];
+let incidents = [];
+let filteredIncidents = [];
 let currentPage = 1;
 let perPage = 8;
 let sortCol = 'date';
@@ -298,14 +320,8 @@ function sortIncidents(col) {
   renderIncidentTable();
 }
 
-let users = [
-  { name: 'Admin User', email: 'admin@magiccloud.io', role: 'admin', initials: 'A' },
-  { name: 'Babai Chatterjee', email: 'babai_chatterjee@magicsoftware.com', role: 'admin', initials: 'BC' },
-  { name: 'Rohan Shelar', email: 'rohan_shelar@magicsoftware.com', role: 'admin', initials: 'RS' },
-  { name: 'Neeshu Malik', email: 'neeshu_malik@magicsoftware.com', role: 'pmo', initials: 'NM' },
-  { name: 'CSO User', email: 'cso@magiccloud.io', role: 'cso', initials: 'CU' },
-  { name: 'AOC User', email: 'aoc@magiccloud.io', role: 'aoc', initials: 'AU' },
-];
+let users = [];
+
 
 
 // ── TAGS ─────────────────────────────────────────────────────
@@ -386,37 +402,7 @@ var activityLog = [];
 var incidentComments = {};
 
 // ── Seed demo activity data for existing incidents ────────────
-(function seedActivity() {
-  var now = Date.now();
-  var day = 86400000;
-  var seedMap = {
-    'INC-001': [
-      { type: 'create', author: 'System', action: 'Incident created', detail: 'Severity: Critical · Customer: demo', timestamp: now - 6 * day },
-      { type: 'status', author: 'Babai Chatterjee', action: 'changed status', detail: 'New → In Progress', timestamp: now - 5 * day + 3600000 },
-      { type: 'comment', author: 'Babai Chatterjee', action: 'commented', detail: 'Connection pool at 1500+. Investigating DB locks.', timestamp: now - 5 * day + 7200000 },
-      { type: 'escalate', author: 'Babai Chatterjee', action: 'escalated incident', detail: 'Escalated to R&D — root cause unclear', timestamp: now - 4 * day },
-      { type: 'comment', author: 'Admin User', action: 'commented', detail: 'R&D team engaged. ETA 2h.', timestamp: now - 3 * day },
-    ],
-    'INC-002': [
-      { type: 'create', author: 'System', action: 'Incident created', detail: 'Severity: High · Customer: vbc', timestamp: now - 4 * day },
-      { type: 'comment', author: 'Rohan Shelar', action: 'commented', detail: 'Rate limiter config missing in prod.', timestamp: now - 3 * day + 3600000 },
-      { type: 'status', author: 'Rohan Shelar', action: 'changed status', detail: 'New → In Progress', timestamp: now - 2 * day },
-    ],
-    'INC-010': [
-      { type: 'create', author: 'System', action: 'Incident created', detail: 'Severity: Critical · Customer: sh', timestamp: now - 2 * day },
-      { type: 'comment', author: 'Babai Chatterjee', action: 'commented', detail: 'Payment gateway timeout. Notified vendor.', timestamp: now - 1 * day },
-    ],
-  };
-  Object.keys(seedMap).forEach(function (incId) {
-    incidentComments[incId] = seedMap[incId].map(function (e) {
-      return Object.assign({}, e, {
-        msg: e.author + ' ' + e.action + ' — ' + (e.detail || ''),
-        time: new Date(e.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + ' · ' + new Date(e.timestamp).toLocaleDateString('en-GB'),
-        incId: incId
-      });
-    });
-  });
-})();
+
 
 
 var currentIncidentView = 'table'; // 'table' | 'kanban'
@@ -1795,22 +1781,7 @@ function hasPermission(perm) {
 var notifications = [];
 
 // Seed demo notifications (after array is declared)
-(function seedNotifs() {
-  var now = Date.now();
-  var items = [
-    { type: 'warning', text: '<strong>SLA Alert:</strong> INC-001 (Critical) approaching breach', time: '2h ago', incId: 'INC-001' },
-    { type: 'success', text: '<strong>INC-002</strong> changed to In Progress by Rohan Shelar', time: '3h ago', incId: 'INC-002' },
-    { type: 'error', text: '<strong>SLA Breached:</strong> INC-010 exceeded Critical SLA', time: '5h ago', incId: 'INC-010' },
-    { type: 'info', text: '<strong>INC-003</strong> assigned to Babai Chatterjee', time: '1d ago', incId: 'INC-003' },
-    { type: 'success', text: 'Welcome to Magic Cloud Incident Portal', time: '1d ago', incId: null },
-  ];
-  items.forEach(function (n, i) {
-    notifications.push({
-      id: now - i * 1000, type: n.type, text: n.text,
-      incId: n.incId, time: n.time, unread: i < 3
-    });
-  });
-})();
+
 
 function addNotification(type, text, incId) {
   var n = {
@@ -2514,8 +2485,10 @@ function doLogin() {
         }
 
         // Apply role-based refresh and data reload
-        loadIncidentsFromBackend(function () {
-          refreshDashboardData();
+        loadUsersFromBackend(function () {
+          loadIncidentsFromBackend(function () {
+            refreshDashboardData();
+          });
         });
 
         if (errEl) errEl.style.display = 'none';
@@ -6773,26 +6746,26 @@ function verifySessionAndInit() {
         switchRole(user.role);
         showToast(`Welcome back, ${user.name}! 👋`, 'success');
 
-        loadIncidentsFromBackend(function () {
-          populateCustomerDropdowns();
-          populateAreaDropdowns();
-          populateAssigneeFilter();
-          updateTagFilter();
+        loadUsersFromBackend(function () {
+          loadIncidentsFromBackend(function () {
+            populateAssigneeFilter();
+            updateTagFilter();
 
-          const portal = document.getElementById('portalApp');
-          if (portal) {
-            portal.style.display = 'block';
-          }
+            const portal = document.getElementById('portalApp');
+            if (portal) {
+              portal.style.display = 'block';
+            }
 
-          var hash = (window.location.hash || '').replace('#', '');
-          var validPages = ['home', 'dashboard', 'incidents', 'reports', 'users', 'roles', 'customer360', 'datamanagement'];
-          if (hash && validPages.indexOf(hash) >= 0) {
-            var navId = PAGE_NAV_MAP[hash];
-            var navEl = navId ? document.getElementById(navId) : (hash === 'home' ? document.getElementById('homeNav') : null);
-            navigate(hash, navEl);
-          } else {
-            navigate('home', document.getElementById('homeNav'));
-          }
+            var hash = (window.location.hash || '').replace('#', '');
+            var validPages = ['home', 'dashboard', 'incidents', 'reports', 'users', 'roles', 'customer360', 'datamanagement'];
+            if (hash && validPages.indexOf(hash) >= 0) {
+              var navId = PAGE_NAV_MAP[hash];
+              var navEl = navId ? document.getElementById(navId) : (hash === 'home' ? document.getElementById('homeNav') : null);
+              navigate(hash, navEl);
+            } else {
+              navigate('home', document.getElementById('homeNav'));
+            }
+          });
         });
       } else {
         throw new Error('Invalid user response');

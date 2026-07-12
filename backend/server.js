@@ -6,6 +6,7 @@ require('dotenv').config();
 const authRoutes = require('./routes/authRoutes');
 const incidentRoutes = require('./routes/incidentRoutes');
 const { startUiServer } = require('../server-ui');
+const pool = require('./config/database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -30,12 +31,25 @@ app.use('/api/auth', authRoutes);
 app.use('/api/incidents', incidentRoutes);
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'OK',
-    timestamp: new Date().toISOString(),
-    message: 'Incident Management Backend is running'
-  });
+app.get('/api/health', async (req, res) => {
+  try {
+    const [db] = await pool.query('SELECT DATABASE() AS database_name, NOW() AS database_time');
+    res.json({
+      status: 'OK',
+      database: 'connected',
+      databaseName: db[0].database_name,
+      databaseTime: db[0].database_time,
+      timestamp: new Date().toISOString(),
+      message: 'Incident Management Backend is running'
+    });
+  } catch (error) {
+    console.error('Health check database error:', error);
+    res.status(500).json({
+      status: 'ERROR',
+      database: 'disconnected',
+      message: error.message
+    });
+  }
 });
 
 // 404 handler
