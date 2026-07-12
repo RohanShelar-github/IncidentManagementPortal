@@ -139,7 +139,9 @@ CALL add_column_if_missing('incidents', 'date_time_opened', 'DATETIME NULL AFTER
 CALL add_column_if_missing('incidents', 'date_time_closed', 'DATETIME NULL AFTER end_dt');
 CALL add_column_if_missing('incidents', 'closed_date', 'DATE NULL AFTER date_time_closed');
 CALL add_column_if_missing('incidents', 'incident_report_status', 'VARCHAR(30) NULL AFTER sf_case_no');
+CALL add_column_if_missing('incidents', 'timezone', 'VARCHAR(10) NOT NULL DEFAULT ''IST'' AFTER closed_date');
 CALL add_column_if_missing('incidents', 'downtime_mins', 'INT NOT NULL DEFAULT 0 AFTER downtime_minutes');
+CALL add_column_if_missing('incidents', 'mttd_str', 'VARCHAR(20) NULL AFTER downtime_mins');
 CALL add_column_if_missing('incidents', 'mttd_minutes', 'INT NULL AFTER mttd_str');
 CALL add_column_if_missing('incidents', 'legacy_month', 'VARCHAR(20) NULL AFTER mttd_minutes');
 CALL add_column_if_missing('incidents', 'account_name', 'VARCHAR(255) NULL AFTER legacy_month');

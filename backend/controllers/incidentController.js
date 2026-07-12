@@ -29,6 +29,20 @@ const normalizeSeverity = (value) => SEVERITY_TO_DB[value] || SEVERITY_TO_DB[Str
 const displayStatus = (value) => STATUS_FROM_DB[value] || value || 'New';
 const displaySeverity = (value) => SEVERITY_FROM_DB[value] || value || 'Medium';
 const toDateOnly = (value) => value ? String(value).substring(0, 10) : '';
+const minutesToHM = (mins) => {
+  const n = Number(mins);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  const h = Math.floor(n / 60);
+  const m = Math.round(n % 60);
+  return h > 0 ? (m > 0 ? h + 'h ' + m + 'm' : h + 'h') : m + 'm';
+};
+const resolveMttdMinutes = (body) => {
+  if (body.mttd_minutes !== undefined && body.mttd_minutes !== null && body.mttd_minutes !== '') return Number(body.mttd_minutes);
+  const h = Number(body.mttdH ?? body.mttd_h ?? 0) || 0;
+  const m = Number(body.mttdM ?? body.mttd_m ?? 0) || 0;
+  const total = h * 60 + m;
+  return total > 0 ? total : null;
+};
 
 const generateIncidentRef = async () => {
   const [result] = await pool.query("SELECT MAX(CAST(SUBSTRING_INDEX(incident_ref, '-', -1) AS UNSIGNED)) AS max_num FROM incidents WHERE incident_ref LIKE 'INC-%'");
@@ -83,6 +97,9 @@ function mapIncident(row) {
   const ref = row.incident_ref || ('INC-' + String(row.id).padStart(3, '0'));
   const downtimeH = Number(row.downtime_hours || 0);
   const downtimeM = Number(row.downtime_minutes || 0);
+  const mttdMinutes = row.mttd_minutes === null || row.mttd_minutes === undefined ? null : Number(row.mttd_minutes);
+  const mttdH = Number.isFinite(mttdMinutes) && mttdMinutes > 0 ? Math.floor(mttdMinutes / 60) : 0;
+  const mttdM = Number.isFinite(mttdMinutes) && mttdMinutes > 0 ? Math.round(mttdMinutes % 60) : 0;
   return {
     db_id: row.id,
     id: ref,
@@ -105,7 +122,7 @@ function mapIncident(row) {
     date_time_opened: row.date_time_opened || '',
     date_time_closed: row.date_time_closed || '',
     closed_date: row.closed_date || '',
-    timezone: row.timezone || 'IST',
+    timezone: row.timezone || '',
     description: row.description || '',
     desc: row.description || '',
     components: row.components || '',
@@ -128,8 +145,10 @@ function mapIncident(row) {
     downtimeM,
     downtime_mins: row.downtime_mins,
     downtimeStr: row.downtime_str || (downtimeH ? downtimeH + 'h' + (downtimeM ? ' ' + downtimeM + 'm' : '') : (downtimeM ? downtimeM + 'm' : '')),
-    mttdStr: row.mttd_str || (row.mttd_minutes != null ? String(row.mttd_minutes) : ''),
-    mttd_minutes: row.mttd_minutes,
+    mttdStr: row.mttd_str || minutesToHM(mttdMinutes),
+    mttd_minutes: mttdMinutes,
+    mttdH,
+    mttdM,
     mttrStr: row.mttr_str || '',
     account_name: row.account_name || '',
     internal_status: row.internal_status || '',
@@ -150,6 +169,7 @@ const createIncident = async (req, res) => {
     const resolvedCustomer = await resolveCustomer(b.customer_id || b.customer);
     const resolvedArea = await resolveArea(b.area_id || b.area);
     const start = b.startDT || b.date_created || b.date || new Date().toISOString().substring(0, 16);
+    const mttdMinutes = resolveMttdMinutes(b);
 
     await pool.query(
       `INSERT INTO incidents
@@ -188,7 +208,7 @@ const createIncident = async (req, res) => {
         b.sf_case || b.sfCase || b.legacy_case_number || null,
         b.incident_report_status || null,
         b.downtime_mins || 0,
-        b.mttd_minutes ?? null,
+        mttdMinutes,
         b.account_name || null,
         b.internal_status || null,
         b.rd_tickets || null
@@ -298,7 +318,7 @@ const updateIncident = async (req, res) => {
     if (b.downtime_mins !== undefined) add('downtime_mins', b.downtime_mins ?? 0);
     if (b.downtimeStr !== undefined) add('downtime_str', b.downtimeStr || null);
     if (b.mttdStr !== undefined) add('mttd_str', b.mttdStr || null);
-    if (b.mttd_minutes !== undefined) add('mttd_minutes', b.mttd_minutes ?? null);
+    if (b.mttd_minutes !== undefined || b.mttdH !== undefined || b.mttdM !== undefined || b.mttd_h !== undefined || b.mttd_m !== undefined) add('mttd_minutes', resolveMttdMinutes(b));
     if (b.mttrStr !== undefined) add('mttr_str', b.mttrStr || null);
     if (b.account_name !== undefined) add('account_name', b.account_name || null);
     if (b.internal_status !== undefined) add('internal_status', b.internal_status || null);

@@ -186,11 +186,18 @@ function normalizeIncidentFromBackend(incident) {
   const downtimeM = Number(incident.downtime_m ?? incident.downtimeM ?? 0) || 0;
   const mttrH = Number(incident.mttr_h ?? incident.mttrH ?? 0) || 0;
   const mttrM = Number(incident.mttr_m ?? incident.mttrM ?? 0) || 0;
+  const rawMttdMinutes = incident.mttd_minutes ?? incident.mttdMinutes ?? null;
+  const mttdMinutes = rawMttdMinutes === null || rawMttdMinutes === '' ? null : Number(rawMttdMinutes);
+  const mttdH = Number.isFinite(mttdMinutes) && mttdMinutes > 0 ? Math.floor(mttdMinutes / 60) : 0;
+  const mttdM = Number.isFinite(mttdMinutes) && mttdMinutes > 0 ? Math.round(mttdMinutes % 60) : 0;
+  const dbMttdStr = incident.mttdStr ?? incident.mttd_str ?? '';
 
   return Object.assign({}, incident, {
     date: startDT ? startDT.substring(0, 10) : (incident.date || ''),
     startDT,
+    timezone: incident.timezone || '',
     desc: incident.description ?? incident.desc ?? '',
+    product_line: incident.product_line ?? incident.productLine ?? '',
     slaHours: incident.sla_hours ?? incident.slaHours ?? null,
     downtimeH,
     downtimeM,
@@ -198,6 +205,10 @@ function normalizeIncidentFromBackend(incident) {
     mttrH,
     mttrM,
     mttrStr: mttrH > 0 ? (mttrM > 0 ? mttrH + 'h ' + mttrM + 'm' : mttrH + 'h') : (mttrM > 0 ? mttrM + 'm' : ''),
+    mttd_minutes: Number.isFinite(mttdMinutes) ? mttdMinutes : null,
+    mttdH,
+    mttdM,
+    mttdStr: dbMttdStr || (Number.isFinite(mttdMinutes) && mttdMinutes > 0 ? minutesToHM(mttdMinutes) : ''),
     resolvedBy: incident.resolved_by ?? incident.resolvedBy ?? '',
     sfCase: incident.sf_case ?? incident.sfCase ?? '',
     tags: Array.isArray(incident.tags) ? incident.tags : []
@@ -238,6 +249,7 @@ function loadMasterData(callback) {
         populateAreaDropdowns();
         renderDataManagement();
         updateDmCounts();
+        populateEngineerDropdowns();
         if (callback) callback(null);
       } else {
         if (callback) callback(new Error(data && data.message ? data.message : 'Failed to load master data'));
@@ -274,6 +286,7 @@ function loadUsersFromBackend(callback) {
             active: u.active !== false
           });
         });
+        populateEngineerDropdowns();
         if (callback) callback(null);
       } else {
         if (callback) callback(new Error(data && data.message ? data.message : 'Failed to load users'));
@@ -314,6 +327,7 @@ function loadIncidentsFromBackend(callback) {
         incidents = data.data.map(normalizeIncidentFromBackend);
         filteredIncidents = [...incidents];
         console.log('Loaded ' + incidents.length + ' incidents from backend');
+        populateEngineerDropdowns();
         if (callback) callback(null);
       } else {
         var msg = data && data.message ? data.message : 'Failed to load incidents from backend';
@@ -2637,10 +2651,11 @@ function openModal(id) {
     var _imt = document.getElementById('incidentModalTitle'); if (_imt) _imt.textContent = 'Create New Incident';
     createModalTags = []; renderCreateTagChips();
     var _sib = document.getElementById('saveIncidentBtn'); if (_sib) _sib.textContent = 'Create Incident';
-    ['f_title', 'f_customer', 'f_project', 'f_severity', 'f_status', 'f_engineer', 'f_desc', 'f_components', 'f_applications', 'f_area'].forEach(f => {
+    ['f_title', 'f_customer', 'f_project', 'f_product_line', 'f_severity', 'f_status', 'f_engineer', 'f_desc', 'f_components', 'f_applications', 'f_area'].forEach(f => {
       const el = document.getElementById(f);
       if (el) el.value = f === 'f_status' ? 'New' : '';
     });
+    var fplNew = document.getElementById('f_product_line'); if (fplNew && !fplNew.value) fplNew.value = 'Application';
     // Init timezone selector (reset to IST on fresh open)
     selectedTZ = 'IST';
     renderTZSelector('createTZSelector', 'IST', 'changeCreateTZ(this.value)');
@@ -2664,6 +2679,7 @@ function editIncident(id) {
   document.getElementById('f_title').value = inc.title;
   document.getElementById('f_customer').value = inc.customer;
   document.getElementById('f_project').value = inc.project;
+  var fpl = document.getElementById('f_product_line'); if (fpl) fpl.value = inc.product_line || '';
   document.getElementById('f_severity').value = inc.severity;
   document.getElementById('f_status').value = inc.status;
   document.getElementById('f_engineer').value = inc.engineer;
@@ -3040,6 +3056,7 @@ function saveIncident() {
   const title = document.getElementById('f_title').value.trim();
   const customer = document.getElementById('f_customer').value;
   const project = document.getElementById('f_project').value;
+  const productLine = document.getElementById('f_product_line')?.value || '';
   const severity = document.getElementById('f_severity').value;
   const status = document.getElementById('f_status').value;
   const engineer = document.getElementById('f_engineer').value;
@@ -3052,7 +3069,8 @@ function saveIncident() {
   const desc = document.getElementById('f_desc').value.trim();
   const mttdH = parseInt(document.getElementById('f_mttd_h')?.value) || 0;
   const mttdM = parseInt(document.getElementById('f_mttd_m')?.value) || 0;
-  const mttdStr = mttdH > 0 ? (mttdM > 0 ? mttdH + 'h ' + mttdM + 'm' : mttdH + 'h') : mttdM > 0 ? mttdM + 'm' : '';
+  const mttdMinutes = (mttdH * 60) + mttdM;
+  const mttdStr = mttdMinutes > 0 ? minutesToHM(mttdMinutes) : '';
 
   if (!title || !customer || !severity || !engineer) {
     showToast('Please fill in all required fields', 'error');
@@ -3078,10 +3096,15 @@ function saveIncident() {
         title,
         customer,
         project,
+        product_line: productLine,
         severity,
         status,
         engineer,
         date_created: toMysqlDatetime(startDT || date),
+        startDT: toMysqlDatetime(startDT || date),
+        timezone: selectedTZ,
+        mttd_minutes: mttdMinutes > 0 ? mttdMinutes : null,
+        mttdStr,
         description: desc,
         components,
         applications,
@@ -3119,7 +3142,7 @@ function saveIncident() {
     } else {
       const inc = incidents.find(i => i.id === editingId);
       if (inc) {
-        Object.assign(inc, { title, customer, project, severity, status, engineer, date, startDT, timezone: selectedTZ, desc, components, applications, area, tags: createModalTags.slice() });
+        Object.assign(inc, { title, customer, project, product_line: productLine, severity, status, engineer, date, startDT, timezone: selectedTZ, desc, components, applications, area, tags: createModalTags.slice() });
       }
       showToast(`${editingId} updated successfully`, 'success');
       closeModal('incidentModal');
@@ -3138,9 +3161,15 @@ function saveIncident() {
         title,
         customer,
         project,
+        product_line: productLine,
         severity,
         status,
         engineer,
+        date_created: toMysqlDatetime(startDT || date),
+        startDT: toMysqlDatetime(startDT || date),
+        timezone: selectedTZ,
+        mttd_minutes: mttdMinutes > 0 ? mttdMinutes : null,
+        mttdStr,
         description: desc,
         components,
         applications,
@@ -3175,7 +3204,7 @@ function saveIncident() {
         });
     } else {
       const newId = 'INC-' + String(incidents.length + 1).padStart(3, '0');
-      incidents.unshift({ id: newId, title, customer, project, severity, status, engineer, date, startDT, timezone: selectedTZ, desc, components, applications, area, resolvedBy, sfCase, mttdH, mttdM, mttdStr, tags: createModalTags.slice() });
+      incidents.unshift({ id: newId, title, customer, project, product_line: productLine, severity, status, engineer, date, startDT, timezone: selectedTZ, desc, components, applications, area, resolvedBy, sfCase, mttdH, mttdM, mttd_minutes: mttdMinutes > 0 ? mttdMinutes : null, mttdStr, tags: createModalTags.slice() });
       addFeedEntry(newId, 'create', 'Incident created', `Severity: ${severity} · Customer: ${customer}`);
       showToast(`${newId} created successfully`, 'success');
       closeModal('incidentModal');
@@ -3834,6 +3863,18 @@ function populateAreaDropdowns() {
   });
 }
 
+function populateEngineerDropdowns() {
+  var engineerUsers = users.filter(function (u) { return u && u.name; });
+  engineerUsers.sort(function (a, b) { return String(a.name || '').localeCompare(String(b.name || '')); });
+  ['f_engineer', 'dp_f_engineer'].forEach(function (id) {
+    var sel = document.getElementById(id);
+    if (!sel) return;
+    var cur = sel.value;
+    sel.innerHTML = '<option value="">Select assignee</option>'
+      + engineerUsers.map(function (u) { return '<option value="' + u.name + '">' + u.name + '</option>'; }).join('');
+    if (cur && engineerUsers.some(function (u) { return u.name === cur; })) sel.value = cur;
+  });
+}
 function populateAssigneeFilter() {
   // Build unique sorted list of engineers from all incidents
   var engineers = [];
@@ -5547,6 +5588,7 @@ function viewIncidentReport(id) {
   _q('ir_desc', inc.desc || 'No description provided.');
   _q('ir_customer', inc.customer);
   _q('ir_project', inc.project);
+  _q('ir_product_line', inc.product_line || '�');
   _q('ir_engineer', inc.engineer);
   const irAreaEl = document.getElementById('ir_area'); if (irAreaEl) irAreaEl.textContent = inc.area || '—';
   const irMttdEl = document.getElementById('ir_mttd'); if (irMttdEl) irMttdEl.textContent = inc.mttdStr || (inc.mttdH > 0 ? inc.mttdH + 'h' + (inc.mttdM > 0 ? ' ' + inc.mttdM + 'm' : '') : inc.mttdM > 0 ? inc.mttdM + 'm' : '—');
@@ -5880,6 +5922,8 @@ function openDetailPanel(id, editMode = false) {
 
   const dpAreaEl = document.getElementById('dp_area');
   if (dpAreaEl) dpAreaEl.textContent = inc.area || '—';
+  const dpProductLineEl = document.getElementById('dp_product_line');
+  if (dpProductLineEl) dpProductLineEl.textContent = inc.product_line || '�';
 
   // Tags — view mode
   var dpTagsView = document.getElementById('dp_tags_view');
@@ -6029,6 +6073,7 @@ function populateEditForm(inc) {
   document.getElementById('dp_f_title').value = inc.title;
   document.getElementById('dp_f_customer').value = inc.customer;
   document.getElementById('dp_f_project').value = inc.project;
+  var dpPl = document.getElementById('dp_f_product_line'); if (dpPl) dpPl.value = inc.product_line || '';
   document.getElementById('dp_f_severity').value = inc.severity;
   document.getElementById('dp_f_status').value = inc.status;
   document.getElementById('dp_f_engineer').value = inc.engineer;
@@ -6105,6 +6150,7 @@ function saveDetailEdit() {
   const title = document.getElementById('dp_f_title').value.trim();
   const customer = document.getElementById('dp_f_customer').value;
   const project = document.getElementById('dp_f_project').value;
+  const productLine = document.getElementById('dp_f_product_line')?.value || '';
   const severity = document.getElementById('dp_f_severity').value;
   const status = document.getElementById('dp_f_status').value;
   const engineer = document.getElementById('dp_f_engineer').value;
@@ -6127,7 +6173,7 @@ function saveDetailEdit() {
     addFeedEntry(inc.id, 'system', 'reassigned incident', `Assigned to ${engineer}`);
   }
 
-  Object.assign(inc, { title, customer, project, severity, status, engineer, date, desc, timezone: selectedTZ });
+  Object.assign(inc, { title, customer, project, product_line: productLine, severity, status, engineer, date, desc, timezone: selectedTZ });
 
   // Always save start/end datetime
   const getVal = id => { const el = document.getElementById(id); return el ? el.value : ''; };
@@ -6168,6 +6214,7 @@ function saveDetailEdit() {
       title,
       customer,
       project,
+      product_line: productLine,
       severity,
       status,
       engineer,
@@ -7161,3 +7208,4 @@ saveIncident = function () {
     }
   }, 600);
 };
+

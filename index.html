@@ -776,7 +776,7 @@
 <div class="filter-bar" style="margin-bottom:20px">
 <div class="filter-group">
 <div class="filter-label">Filter by Customer</div>
-<select id="reportCustomerFilter" onchange="updateReportPreview()">`r`n<option value="">All Customers</option>`r`n</select>
+<select id="reportCustomerFilter" onchange="updateReportPreview()"><option value="">All Customers</option></select>
 </div>
 <div class="filter-group">
 <div class="filter-label">Filter by Severity</div>
@@ -805,7 +805,7 @@
 </div>
 <div class="filter-group">
 <div class="filter-label">Filter by Area</div>
-<select id="reportAreaFilter" onchange="updateReportPreview()">`r`n<option value="">All Areas</option>`r`n</select>
+<select id="reportAreaFilter" onchange="updateReportPreview()"><option value="">All Areas</option></select>
 </div>
 <div class="filter-group">
 <div class="filter-label">From Date</div>
@@ -1235,11 +1235,17 @@
 </div>
 <div class="form-group">
 <label class="form-label required">Customer</label>
-<select id="f_customer">`r`n<option value="">Select customer</option>`r`n</select>
+<select id="f_customer"><option value="">Select customer</option></select>
 </div>
 <div class="form-group">
 <label class="form-label required">Project / Service</label>
 <input id="f_project" placeholder="e.g. NGC MDE, MGC MES, AgileD365…" type="text"/>
+</div><div class="form-group">
+<label class="form-label">Product Line</label>
+<select id="f_product_line"><option value="Application">Application</option>
+<option value="Integration">Integration</option>
+<option value="FactoryEye">FactoryEye</option>
+</select>
 </div>
 <div class="form-group">
 <label class="form-label required">Severity</label>
@@ -1267,13 +1273,7 @@
 </div>
 <div class="form-group">
 <label class="form-label required">Assigned Engineer</label>
-<select id="f_engineer">
-<option value="">Select assignee</option>
-<option>Babai Chatterjee</option>
-<option>Rohan Shelar</option>
-<option>Neeshu Malik</option>
-<option>Admin User</option>
-</select>
+<select id="f_engineer"><option value="">Select assignee</option></select>
 </div>
 <div class="form-group">
 <label class="form-label">Salesforce Case No.</label>
@@ -1313,7 +1313,7 @@
 </div>
 <div>
 <label class="form-label">Area <span style="color:var(--danger)">*</span></label>
-<select id="f_area" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer">`r`n<option value="">Select Area</option>`r`n</select>
+<select id="f_area" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer"><option value="">Select Area</option></select>
 </div>
 </div>
 </div>
@@ -1407,6 +1407,7 @@
 <div class="ir-grid">
 <div class="ir-field"><div class="ir-field-label">Customer</div><div class="ir-field-value" id="ir_customer">—</div></div>
 <div class="ir-field"><div class="ir-field-label">Project / Service</div><div class="ir-field-value" id="ir_project">—</div></div>
+<div class="ir-field"><div class="ir-field-label">Product Line</div><div class="ir-field-value" id="ir_product_line">�</div></div>
 <div class="ir-field"><div class="ir-field-label">Severity</div><div class="ir-field-value" id="ir_severity">—</div></div>
 <div class="ir-field"><div class="ir-field-label">Status</div><div class="ir-field-value" id="ir_status">—</div></div>
 <div class="ir-field"><div class="ir-field-label">Reporter / Assigned To</div><div class="ir-field-value" id="ir_engineer">—</div></div>
@@ -1613,6 +1614,9 @@
 <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
 <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px">Area</div>
 <div id="dp_area" style="font-size:14px;font-weight:600;color:var(--text)">—</div>
+</div><div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px">Product Line</div>
+<div id="dp_product_line" style="font-size:14px;font-weight:600;color:var(--text)">�</div>
 </div>
 <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;grid-column:1/-1">
 <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">Tags</div>
@@ -1732,7 +1736,7 @@
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
 <div>
 <label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Customer <span style="color:var(--danger)">*</span></label>
-<select id="dp_f_customer" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer">`r`n<option value="">Select customer</option>`r`n</select>
+<select id="dp_f_customer" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer"><option value="">Select customer</option></select>
 </div>
 <div>
 <label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Project <span style="color:var(--danger)">*</span></label>
@@ -1762,6 +1766,10 @@
 </select>
 </div>
 <div>
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Product Line</label>
+<select id="dp_f_product_line" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer"><option value="Application">Application</option><option value="Integration">Integration</option><option value="FactoryEye">FactoryEye</option></select>
+</div>
+<div>
 <label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Severity <span style="color:var(--danger)">*</span></label>
 <select id="dp_f_severity" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer"><option value="Critical">🔴 Critical</option><option value="High">🟠 High</option><option value="Medium">🟡 Medium</option><option value="Low">🟢 Low</option></select>
 </div>
@@ -1779,11 +1787,7 @@
 </div>
 <div>
 <label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Assigned To <span style="color:var(--danger)">*</span></label>
-<select id="dp_f_engineer" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer"><option>Admin User</option>
-<option>Babai Chatterjee</option>
-<option>Neeshu Malik</option>
-<option>Rohan Shelar</option>
-</select>
+<select id="dp_f_engineer" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer"><option value="">Select assignee</option></select>
 </div>
 <div>
 <label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Incident Date <span style="color:var(--danger)">*</span></label>
@@ -1796,7 +1800,7 @@
 </div>
 <div style="margin-bottom:16px">
 <label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Area</label>
-<select id="dp_f_area" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s;cursor:pointer">`r`n<option value="">Select Area</option>`r`n</select>
+<select id="dp_f_area" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s;cursor:pointer"><option value="">Select Area</option></select>
 </div>
 <!-- ── REPORT FIELDS (shown only for Closed incidents) ── -->
 <div id="dp_report_fields" style="display:none;margin-top:4px">
