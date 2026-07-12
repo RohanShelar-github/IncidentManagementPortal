@@ -175,6 +175,16 @@ function toDatetimeLocal(value) {
     + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
 }
 
+function formatStoredIncidentDateTime(value) {
+  const localValue = toDatetimeLocal(value);
+  if (!localValue) return 'N/A';
+  const parts = localValue.split('T');
+  if (parts.length !== 2) return localValue;
+  const dateParts = parts[0].split('-');
+  if (dateParts.length !== 3) return localValue;
+  return `${dateParts[2]}-${dateParts[1]}-${dateParts[0]} ${parts[1]}`;
+}
+
 function toMysqlDatetime(value) {
   if (!value) return null;
   return String(value).replace('T', ' ').substring(0, 19);
@@ -211,6 +221,8 @@ function normalizeIncidentFromBackend(incident) {
     mttdStr: dbMttdStr || (Number.isFinite(mttdMinutes) && mttdMinutes > 0 ? minutesToHM(mttdMinutes) : ''),
     resolvedBy: incident.resolved_by ?? incident.resolvedBy ?? '',
     sfCase: incident.sf_case ?? incident.sfCase ?? '',
+    rd_tickets: incident.rd_tickets ?? incident.rdTickets ?? '',
+    rdTickets: incident.rd_tickets ?? incident.rdTickets ?? '',
     tags: Array.isArray(incident.tags) ? incident.tags : []
   });
 }
@@ -2651,7 +2663,7 @@ function openModal(id) {
     var _imt = document.getElementById('incidentModalTitle'); if (_imt) _imt.textContent = 'Create New Incident';
     createModalTags = []; renderCreateTagChips();
     var _sib = document.getElementById('saveIncidentBtn'); if (_sib) _sib.textContent = 'Create Incident';
-    ['f_title', 'f_customer', 'f_project', 'f_product_line', 'f_severity', 'f_status', 'f_engineer', 'f_desc', 'f_components', 'f_applications', 'f_area'].forEach(f => {
+    ['f_title', 'f_customer', 'f_project', 'f_product_line', 'f_severity', 'f_status', 'f_engineer', 'f_sf_case', 'f_rd_tickets', 'f_desc', 'f_components', 'f_applications', 'f_area'].forEach(f => {
       const el = document.getElementById(f);
       if (el) el.value = f === 'f_status' ? 'New' : '';
     });
@@ -2680,6 +2692,8 @@ function editIncident(id) {
   document.getElementById('f_customer').value = inc.customer;
   document.getElementById('f_project').value = inc.project;
   var fpl = document.getElementById('f_product_line'); if (fpl) fpl.value = inc.product_line || '';
+  var frd = document.getElementById('f_rd_tickets'); if (frd) frd.value = inc.rd_tickets || inc.rdTickets || '';
+  var fsf = document.getElementById('f_sf_case'); if (fsf) fsf.value = inc.sfCase || inc.sf_case || '';
   document.getElementById('f_severity').value = inc.severity;
   document.getElementById('f_status').value = inc.status;
   document.getElementById('f_engineer').value = inc.engineer;
@@ -2927,17 +2941,11 @@ function openDowntimeModal(id) {
   selectedTZ = dtmTZ;
   renderTZSelector('closeTZSelector', dtmTZ, 'changeCloseTZ(this.value)');
 
-  // Pre-fill end time: convert stored value to display TZ
+  // Pre-fill end time from stored incident fields without reinterpreting timezone.
   var endEl = document.getElementById('dtm_end_time');
-  if (endEl && inc.downtimeEnd) {
-    // Stored as ISO (UTC) — convert to display TZ for datetime-local input
-    var storedDate = new Date(inc.downtimeEnd);
-    var off = getTZOffset(dtmTZ);
-    var tzMs = storedDate.getTime() + off * 3600000;
-    var tzD = new Date(tzMs);
-    var pad2 = n => String(n).padStart(2, '0');
-    endEl.value = tzD.getUTCFullYear() + '-' + pad2(tzD.getUTCMonth() + 1) + '-' + pad2(tzD.getUTCDate())
-      + 'T' + pad2(tzD.getUTCHours()) + ':' + pad2(tzD.getUTCMinutes());
+  var storedEnd = inc.date_time_closed || inc.endDT || inc.downtimeEnd;
+  if (endEl && storedEnd) {
+    endEl.value = toDatetimeLocal(storedEnd);
   } else if (endEl) {
     // Default to current time in display TZ
     var now = new Date();
@@ -2976,17 +2984,16 @@ function confirmCloseIncident() {
   if (h === 0 && m === 0) { showToast('Please enter the downtime before closing', 'error'); return; }
   if (!rca) { showToast('Please enter the Root Cause Analysis', 'error'); return; }
 
-  // Convert entered time from display TZ to UTC for storage
-  const closeTZ = selectedTZ || 'IST';
-  const tzOffset = getTZOffset(closeTZ);
-  const localMs = new Date(endTimeRaw + ':00Z').getTime(); // treat string as UTC
-  const utcMs = localMs - tzOffset * 3600000;            // remove TZ offset → true UTC
+  const closeTZ = selectedTZ || inc.timezone || 'IST';
+  const closedAt = toMysqlDatetime(endTimeRaw);
 
   inc.downtimeH = h;
   inc.downtimeM = m;
   inc.downtimeStr = h > 0 ? (m > 0 ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
-  inc.downtimeEnd = new Date(utcMs).toISOString();
-  inc.timezone = closeTZ;   // save the TZ used when closing
+  inc.endDT = closedAt;
+  inc.date_time_closed = closedAt;
+  inc.downtimeEnd = closedAt;
+  inc.timezone = closeTZ;
   inc.rca = rca;
   inc.resolution = res;
   const oldStatus = inc.status;
@@ -3009,13 +3016,17 @@ function confirmCloseIncident() {
         rca,
         resolution: res,
         downtime_h: h,
-        downtime_m: m
+        downtime_m: m,
+        timezone: closeTZ,
+        endDT: closedAt,
+        date_time_closed: closedAt,
+        closed_date: closedAt ? closedAt.substring(0, 10) : null
       })
     })
       .then(r => r.json())
       .then(data => {
         if (data && data.success) {
-          addFeedEntry(id, 'close', 'changed status', `${oldStatus} â†’ Closed`);
+          addFeedEntry(id, 'close', 'changed status', `${oldStatus} → Closed`);
           addFeedEntry(id, 'system', 'recorded downtime', inc.downtimeStr);
           document.getElementById('downtimeModal').style.display = 'none';
           loadIncidentsFromBackend(() => {
@@ -3023,7 +3034,7 @@ function confirmCloseIncident() {
             refreshDashboardData();
             if (typeof renderKanban === 'function' && currentIncidentView === 'kanban') renderKanban();
             if (detailCurrentId === id) openDetailPanel(id, false);
-            showToast(`${id} closed â€” downtime recorded: ${inc.downtimeStr}`, 'success');
+            showToast(`${id} closed — downtime recorded: ${inc.downtimeStr}`, 'success');
           });
         } else {
           showToast(data.message || 'Failed to close incident', 'error');
@@ -3061,11 +3072,9 @@ function saveIncident() {
   const status = document.getElementById('f_status').value;
   const engineer = document.getElementById('f_engineer').value;
   const dateRaw = document.getElementById('f_date').value;
-  const dateRawIST = (dateRaw && selectedTZ !== 'IST')
-    ? convertDatetimeLocalTZ(dateRaw, selectedTZ, 'IST')
-    : dateRaw;
-  const date = dateRawIST ? dateRawIST.substring(0, 10) : '';
-  const startDT = dateRawIST || '';
+  const date = dateRaw ? dateRaw.substring(0, 10) : '';
+  const startDT = dateRaw || '';
+  const openedAt = toMysqlDatetime(startDT || date);
   const desc = document.getElementById('f_desc').value.trim();
   const mttdH = parseInt(document.getElementById('f_mttd_h')?.value) || 0;
   const mttdM = parseInt(document.getElementById('f_mttd_m')?.value) || 0;
@@ -3082,6 +3091,7 @@ function saveIncident() {
   const area = document.getElementById('f_area')?.value || '';
   const resolvedBy = document.getElementById('f_resolved_by')?.value || '';
   const sfCase = (document.getElementById('f_sf_case')?.value || '').trim();
+  const rdTickets = (document.getElementById('f_rd_tickets')?.value || '').trim();
 
   if (editingId) {
     const incidentId = editingId;
@@ -3100,11 +3110,14 @@ function saveIncident() {
         severity,
         status,
         engineer,
-        date_created: toMysqlDatetime(startDT || date),
-        startDT: toMysqlDatetime(startDT || date),
+        date_created: openedAt,
+        startDT: openedAt,
+        date_time_opened: openedAt,
         timezone: selectedTZ,
         mttd_minutes: mttdMinutes > 0 ? mttdMinutes : null,
         mttdStr,
+        sf_case: sfCase,
+        rd_tickets: rdTickets,
         description: desc,
         components,
         applications,
@@ -3142,7 +3155,7 @@ function saveIncident() {
     } else {
       const inc = incidents.find(i => i.id === editingId);
       if (inc) {
-        Object.assign(inc, { title, customer, project, product_line: productLine, severity, status, engineer, date, startDT, timezone: selectedTZ, desc, components, applications, area, tags: createModalTags.slice() });
+        Object.assign(inc, { title, customer, project, product_line: productLine, rd_tickets: rdTickets, rdTickets, sfCase, severity, status, engineer, date, startDT, timezone: selectedTZ, desc, components, applications, area, tags: createModalTags.slice() });
       }
       showToast(`${editingId} updated successfully`, 'success');
       closeModal('incidentModal');
@@ -3165,11 +3178,14 @@ function saveIncident() {
         severity,
         status,
         engineer,
-        date_created: toMysqlDatetime(startDT || date),
-        startDT: toMysqlDatetime(startDT || date),
+        date_created: openedAt,
+        startDT: openedAt,
+        date_time_opened: openedAt,
         timezone: selectedTZ,
         mttd_minutes: mttdMinutes > 0 ? mttdMinutes : null,
         mttdStr,
+        sf_case: sfCase,
+        rd_tickets: rdTickets,
         description: desc,
         components,
         applications,
@@ -3204,7 +3220,7 @@ function saveIncident() {
         });
     } else {
       const newId = 'INC-' + String(incidents.length + 1).padStart(3, '0');
-      incidents.unshift({ id: newId, title, customer, project, product_line: productLine, severity, status, engineer, date, startDT, timezone: selectedTZ, desc, components, applications, area, resolvedBy, sfCase, mttdH, mttdM, mttd_minutes: mttdMinutes > 0 ? mttdMinutes : null, mttdStr, tags: createModalTags.slice() });
+      incidents.unshift({ id: newId, title, customer, project, product_line: productLine, rd_tickets: rdTickets, rdTickets, severity, status, engineer, date, startDT, timezone: selectedTZ, desc, components, applications, area, resolvedBy, sfCase, mttdH, mttdM, mttd_minutes: mttdMinutes > 0 ? mttdMinutes : null, mttdStr, tags: createModalTags.slice() });
       addFeedEntry(newId, 'create', 'Incident created', `Severity: ${severity} · Customer: ${customer}`);
       showToast(`${newId} created successfully`, 'success');
       closeModal('incidentModal');
@@ -5588,7 +5604,8 @@ function viewIncidentReport(id) {
   _q('ir_desc', inc.desc || 'No description provided.');
   _q('ir_customer', inc.customer);
   _q('ir_project', inc.project);
-  _q('ir_product_line', inc.product_line || '�');
+  _q('ir_product_line', inc.product_line || '—');
+  _q('ir_rd_tickets', inc.rd_tickets || inc.rdTickets || '—');
   _q('ir_engineer', inc.engineer);
   const irAreaEl = document.getElementById('ir_area'); if (irAreaEl) irAreaEl.textContent = inc.area || '—';
   const irMttdEl = document.getElementById('ir_mttd'); if (irMttdEl) irMttdEl.textContent = inc.mttdStr || (inc.mttdH > 0 ? inc.mttdH + 'h' + (inc.mttdM > 0 ? ' ' + inc.mttdM + 'm' : '') : inc.mttdM > 0 ? inc.mttdM + 'm' : '—');
@@ -5885,6 +5902,7 @@ function openDetailPanel(id, editMode = false) {
   const inc = incidents.find(i => i.id === id);
   if (!inc) return;
   detailCurrentId = id;
+  selectedTZ = inc.timezone || selectedTZ || 'IST';
 
   const panel = document.getElementById('detailPanel');
   const overlay = document.getElementById('detailOverlay');
@@ -5896,34 +5914,25 @@ function openDetailPanel(id, editMode = false) {
   _s('dp_customer', inc.customer);
   _s('dp_project', inc.project);
   _s('dp_engineer', inc.engineer);
-  // Show start datetime if available, else fall back to date
-  // Use incident's saved timezone (or IST default) for view display
-  const viewTZ = inc.timezone || 'IST';
-
+  // Incident datetimes are persisted in the incident's selected timezone; display stored values directly.
   const dpDateEl = document.getElementById('dp_date');
   if (dpDateEl) {
-    const startRaw = inc.startDT || (inc.date + 'T09:00');
-    // Parse as stored IST, display in incident's saved timezone
-    const startMs = new Date(startRaw).getTime();
-    dpDateEl.textContent = fmtInTZ(new Date(startMs), viewTZ);
+    dpDateEl.textContent = formatStoredIncidentDateTime(inc.date_time_opened || inc.startDT || (inc.date ? inc.date + 'T09:00' : ''));
   }
 
-  // End Date & Time — show in view mode
   const dpEndDateEl = document.getElementById('dp_end_date');
   if (dpEndDateEl) {
-    if (inc.downtimeEnd) {
-      dpEndDateEl.textContent = fmtInTZ(new Date(inc.downtimeEnd), viewTZ);
-    } else if (inc.endDT) {
-      dpEndDateEl.textContent = fmtInTZ(new Date(inc.endDT), viewTZ);
-    } else {
-      dpEndDateEl.textContent = '—';
-    }
+    dpEndDateEl.textContent = formatStoredIncidentDateTime(inc.date_time_closed || inc.endDT || inc.downtimeEnd);
   }
 
   const dpAreaEl = document.getElementById('dp_area');
   if (dpAreaEl) dpAreaEl.textContent = inc.area || '—';
   const dpProductLineEl = document.getElementById('dp_product_line');
-  if (dpProductLineEl) dpProductLineEl.textContent = inc.product_line || '�';
+  if (dpProductLineEl) dpProductLineEl.textContent = inc.product_line || '—';
+  const dpRdTicketsEl = document.getElementById('dp_rd_tickets');
+  if (dpRdTicketsEl) dpRdTicketsEl.textContent = inc.rd_tickets || inc.rdTickets || '—';
+  const dpRdTicketsReportEl = document.getElementById('dp_rd_tickets_report');
+  if (dpRdTicketsReportEl) dpRdTicketsReportEl.textContent = inc.rd_tickets || inc.rdTickets || '—';
 
   // Tags — view mode
   var dpTagsView = document.getElementById('dp_tags_view');
@@ -6085,13 +6094,10 @@ function populateEditForm(inc) {
   const rf = document.getElementById('dp_report_fields');
   if (rf) rf.style.display = 'block'; // always show — start/end/MTTD editable for all
 
-  // Always populate start/end datetime (editable even for closed incidents)
+  // Always populate start/end datetime from stored incident fields without timezone reinterpretation.
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
-  const pad = n => String(n).padStart(2, '0');
-  const toLocal = iso => { if (!iso) return ''; const d = new Date(iso); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()); };
-  // Start datetime: use stored startDT or fall back to date+'T09:00'
-  set('dp_f_start_dt', inc.startDT ? (inc.startDT.length > 10 ? inc.startDT.substring(0, 16) : inc.startDT + 'T09:00') : (inc.date ? inc.date + 'T09:00' : ''));
-  set('dp_f_end_dt', inc.downtimeEnd ? toLocal(inc.downtimeEnd) : '');
+  set('dp_f_start_dt', toDatetimeLocal(inc.date_time_opened || inc.startDT || (inc.date ? inc.date + 'T09:00' : '')));
+  set('dp_f_end_dt', toDatetimeLocal(inc.date_time_closed || inc.endDT || inc.downtimeEnd || ''));
 
   // Always populate report fields regardless of status
   set('dp_f_dtH', inc.downtimeH || 0);
@@ -6103,16 +6109,10 @@ function populateEditForm(inc) {
   set('dp_f_components', inc.components || '');
   set('dp_f_applications', inc.applications || '');
   set('dp_f_resolved_by', inc.resolvedBy || '');
-  set('dp_f_sf_case', inc.sfCase || '');
+  set('dp_f_sf_case', inc.sfCase || inc.sf_case || '');
+  set('dp_f_rd_tickets', inc.rd_tickets || inc.rdTickets || '');
 
   // If user has selected a non-IST timezone, convert the displayed datetimes
-  if (selectedTZ !== 'IST') {
-    ['dp_f_start_dt', 'dp_f_end_dt'].forEach(function (fid) {
-      var el = document.getElementById(fid);
-      if (el && el.value) el.value = convertDatetimeLocalTZ(el.value, 'IST', selectedTZ);
-    });
-  }
-
   updateDetailFooter(true);
 }
 
@@ -6151,6 +6151,7 @@ function saveDetailEdit() {
   const customer = document.getElementById('dp_f_customer').value;
   const project = document.getElementById('dp_f_project').value;
   const productLine = document.getElementById('dp_f_product_line')?.value || '';
+  const rdTickets = (document.getElementById('dp_f_rd_tickets')?.value || '').trim();
   const severity = document.getElementById('dp_f_severity').value;
   const status = document.getElementById('dp_f_status').value;
   const engineer = document.getElementById('dp_f_engineer').value;
@@ -6174,18 +6175,24 @@ function saveDetailEdit() {
   }
 
   Object.assign(inc, { title, customer, project, product_line: productLine, severity, status, engineer, date, desc, timezone: selectedTZ });
+  if (rdTickets) { inc.rd_tickets = rdTickets; inc.rdTickets = rdTickets; }
 
-  // Always save start/end datetime
+  // Always save start/end datetime exactly as entered for the selected incident timezone.
   const getVal = id => { const el = document.getElementById(id); return el ? el.value : ''; };
   var startDTval = getVal('dp_f_start_dt');
   var endDTval = getVal('dp_f_end_dt');
-  // Convert from display timezone back to IST for storage
-  if (selectedTZ !== 'IST') {
-    if (startDTval) startDTval = convertDatetimeLocalTZ(startDTval, selectedTZ, 'IST');
-    if (endDTval) endDTval = convertDatetimeLocalTZ(endDTval, selectedTZ, 'IST');
+  const startDb = toMysqlDatetime(startDTval || date);
+  const endDb = endDTval ? toMysqlDatetime(endDTval) : '';
+  if (startDb) {
+    inc.startDT = startDb;
+    inc.date_time_opened = startDb;
+    inc.date = startDb.substring(0, 10);
   }
-  if (startDTval) { inc.startDT = startDTval; inc.date = startDTval.substring(0, 10); }
-  if (endDTval) inc.downtimeEnd = new Date(endDTval).toISOString();
+  if (endDb) {
+    inc.endDT = endDb;
+    inc.date_time_closed = endDb;
+    inc.downtimeEnd = endDb;
+  }
 
   // Always save report fields — visible in view for any status
   const h = parseInt(getVal('dp_f_dtH')) || 0;
@@ -6201,7 +6208,9 @@ function saveDetailEdit() {
   inc.components = getVal('dp_f_components');
   inc.applications = getVal('dp_f_applications');
   inc.resolvedBy = getVal('dp_f_resolved_by');
-  inc.sfCase = getVal('dp_f_sf_case');
+  const sfCaseValue = getVal('dp_f_sf_case').trim();
+  if (sfCaseValue) inc.sfCase = sfCaseValue;
+  if (rdTickets) { inc.rd_tickets = rdTickets; inc.rdTickets = rdTickets; }
 
   if (window.APP_CONFIG && window.APP_CONFIG.ENABLE_BACKEND) {
     const token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
@@ -6218,7 +6227,13 @@ function saveDetailEdit() {
       severity,
       status,
       engineer,
-      date_created: toMysqlDatetime(inc.startDT || date),
+      date_created: startDb,
+      startDT: startDb,
+      date_time_opened: startDb,
+      endDT: endDb || undefined,
+      date_time_closed: endDb || undefined,
+      closed_date: endDb ? endDb.substring(0, 10) : undefined,
+      timezone: selectedTZ,
       description: desc,
       components: inc.components,
       applications: inc.applications,
@@ -6227,6 +6242,7 @@ function saveDetailEdit() {
       resolution: inc.resolution,
       resolved_by: inc.resolvedBy,
       sf_case: inc.sfCase,
+      rd_tickets: inc.rd_tickets || inc.rdTickets || undefined,
       downtime_h: inc.downtimeH,
       downtime_m: inc.downtimeM,
       mttr_h: inc.mttrH,
@@ -6245,7 +6261,7 @@ function saveDetailEdit() {
       .then(r => r.json())
       .then(data => {
         if (data && data.success) {
-          addAudit('âœ', 'Incident Updated', `${inc.id} â€” ${title}`);
+          addAudit('✏', 'Incident Updated', `${inc.id} — ${title}`);
           if (severity === 'Critical' && status !== 'Closed') addNotification('critical', `<strong>${inc.id}</strong> updated to Critical severity`, inc.id);
           loadIncidentsFromBackend(() => {
             openDetailPanel(detailCurrentId, false);
@@ -6254,7 +6270,7 @@ function saveDetailEdit() {
             renderMyIncidents();
             renderCustomerHealth();
             refreshDashboardData();
-            showToast(`${inc.id} updated successfully âœ“`, 'success');
+            showToast(`${inc.id} updated successfully ✓`, 'success');
           });
         } else {
           showToast(data.message || 'Failed to update incident', 'error');

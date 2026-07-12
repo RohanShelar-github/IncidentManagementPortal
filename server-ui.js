@@ -26,7 +26,10 @@ const MIME_TYPES = {
 
 function sendFile(res, filePath) {
   const ext = path.extname(filePath).toLowerCase();
-  const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+  let contentType = MIME_TYPES[ext] || 'application/octet-stream';
+  if (/^(text\/|application\/json|image\/svg\+xml)/.test(contentType)) {
+    contentType += '; charset=utf-8';
+  }
 
   fs.readFile(filePath, (error, content) => {
     if (error) {

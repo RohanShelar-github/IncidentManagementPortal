@@ -28,7 +28,16 @@ const normalizeStatus = (value) => STATUS_TO_DB[value] || STATUS_TO_DB[String(va
 const normalizeSeverity = (value) => SEVERITY_TO_DB[value] || SEVERITY_TO_DB[String(value || '').trim()] || String(value || 'Medium').toLowerCase();
 const displayStatus = (value) => STATUS_FROM_DB[value] || value || 'New';
 const displaySeverity = (value) => SEVERITY_FROM_DB[value] || value || 'Medium';
-const toDateOnly = (value) => value ? String(value).substring(0, 10) : '';
+const toDateTimeValue = (value) => {
+  if (!value) return '';
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const pad = (n) => String(n).padStart(2, '0');
+    return value.getFullYear() + '-' + pad(value.getMonth() + 1) + '-' + pad(value.getDate())
+      + ' ' + pad(value.getHours()) + ':' + pad(value.getMinutes()) + ':' + pad(value.getSeconds());
+  }
+  return String(value).replace('T', ' ').substring(0, 19);
+};
+const toDateOnly = (value) => toDateTimeValue(value).substring(0, 10);
 const minutesToHM = (mins) => {
   const n = Number(mins);
   if (!Number.isFinite(n) || n <= 0) return '';
@@ -100,6 +109,10 @@ function mapIncident(row) {
   const mttdMinutes = row.mttd_minutes === null || row.mttd_minutes === undefined ? null : Number(row.mttd_minutes);
   const mttdH = Number.isFinite(mttdMinutes) && mttdMinutes > 0 ? Math.floor(mttdMinutes / 60) : 0;
   const mttdM = Number.isFinite(mttdMinutes) && mttdMinutes > 0 ? Math.round(mttdMinutes % 60) : 0;
+  const openedAt = toDateTimeValue(row.date_time_opened || row.start_dt || row.created_at);
+  const startDT = toDateTimeValue(row.start_dt || row.date_time_opened);
+  const endDT = toDateTimeValue(row.end_dt || row.date_time_closed);
+  const closedAt = toDateTimeValue(row.date_time_closed);
   return {
     db_id: row.id,
     id: ref,
@@ -115,12 +128,12 @@ function mapIncident(row) {
     engineer: row.engineer_name || row.case_owner || row.resolved_by || '',
     assigned_to: row.assigned_to,
     case_owner: row.case_owner || '',
-    date_created: row.date_time_opened || row.start_dt || row.created_at,
-    date: toDateOnly(row.date_time_opened || row.start_dt || row.created_at),
-    startDT: row.start_dt || row.date_time_opened || '',
-    endDT: row.end_dt || row.date_time_closed || '',
-    date_time_opened: row.date_time_opened || '',
-    date_time_closed: row.date_time_closed || '',
+    date_created: openedAt,
+    date: toDateOnly(openedAt),
+    startDT,
+    endDT,
+    date_time_opened: toDateTimeValue(row.date_time_opened),
+    date_time_closed: closedAt,
     closed_date: row.closed_date || '',
     timezone: row.timezone || '',
     description: row.description || '',
@@ -153,6 +166,7 @@ function mapIncident(row) {
     account_name: row.account_name || '',
     internal_status: row.internal_status || '',
     rd_tickets: row.rd_tickets || '',
+    rdTickets: row.rd_tickets || '',
     tags: parseTags(row.tags),
     created_at: row.created_at,
     updated_at: row.updated_at
@@ -211,7 +225,7 @@ const createIncident = async (req, res) => {
         mttdMinutes,
         b.account_name || null,
         b.internal_status || null,
-        b.rd_tickets || null
+        b.rd_tickets || b.rdTickets || null
       ]
     );
 
@@ -284,7 +298,7 @@ const updateIncident = async (req, res) => {
       add('customer_id', resolvedCustomer.id);
       add('customer', resolvedCustomer.name || b.customer || null);
     }
-    if (b.project !== undefined) add('project', b.project || null);
+    if (b.project !== undefined && String(b.project || '').trim() !== '') add('project', String(b.project).trim());
     if (b.project_area !== undefined) add('project_area', b.project_area || null);
     if (b.severity !== undefined) add('severity', normalizeSeverity(b.severity));
     if (b.status !== undefined) add('status', normalizeStatus(b.status));
@@ -311,7 +325,7 @@ const updateIncident = async (req, res) => {
     if (b.rca !== undefined) add('rca', b.rca || null);
     if (b.resolution !== undefined) add('resolution', b.resolution || null);
     if (b.resolved_by !== undefined) add('resolved_by', b.resolved_by || null);
-    if (b.sf_case !== undefined || b.sfCase !== undefined) add('sf_case_no', b.sf_case || b.sfCase || null);
+    if ((b.sf_case !== undefined || b.sfCase !== undefined) && String(b.sf_case || b.sfCase || '').trim() !== '') add('sf_case_no', String(b.sf_case || b.sfCase).trim());
     if (b.incident_report_status !== undefined) add('incident_report_status', b.incident_report_status || null);
     if (b.downtime_h !== undefined || b.downtimeH !== undefined) add('downtime_hours', b.downtime_h ?? b.downtimeH ?? 0);
     if (b.downtime_m !== undefined || b.downtimeM !== undefined) add('downtime_minutes', b.downtime_m ?? b.downtimeM ?? 0);
@@ -322,7 +336,7 @@ const updateIncident = async (req, res) => {
     if (b.mttrStr !== undefined) add('mttr_str', b.mttrStr || null);
     if (b.account_name !== undefined) add('account_name', b.account_name || null);
     if (b.internal_status !== undefined) add('internal_status', b.internal_status || null);
-    if (b.rd_tickets !== undefined) add('rd_tickets', b.rd_tickets || null);
+    if ((b.rd_tickets !== undefined || b.rdTickets !== undefined) && String(b.rd_tickets || b.rdTickets || '').trim() !== '') add('rd_tickets', String(b.rd_tickets || b.rdTickets).trim());
     if (b.tags !== undefined) add('tags', JSON.stringify(Array.isArray(b.tags) ? b.tags : []));
     if (updates.length) {
       values.push(dbId);

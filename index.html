@@ -1240,12 +1240,6 @@
 <div class="form-group">
 <label class="form-label required">Project / Service</label>
 <input id="f_project" placeholder="e.g. NGC MDE, MGC MES, AgileD365…" type="text"/>
-</div><div class="form-group">
-<label class="form-label">Product Line</label>
-<select id="f_product_line"><option value="Application">Application</option>
-<option value="Integration">Integration</option>
-<option value="FactoryEye">FactoryEye</option>
-</select>
 </div>
 <div class="form-group">
 <label class="form-label required">Severity</label>
@@ -1278,6 +1272,10 @@
 <div class="form-group">
 <label class="form-label">Salesforce Case No.</label>
 <input id="f_sf_case" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="e.g. 00123456" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s" type="text"/>
+</div>
+<div class="form-group">
+<label class="form-label">R&amp;D Ticket</label>
+<input id="f_rd_tickets" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="e.g. FNP-1125" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s" type="text"/>
 </div>
 <div class="form-group">
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -1314,6 +1312,13 @@
 <div>
 <label class="form-label">Area <span style="color:var(--danger)">*</span></label>
 <select id="f_area" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer"><option value="">Select Area</option></select>
+</div>
+<div class="form-group">
+<label class="form-label">Product Line</label>
+<select id="f_product_line"><option value="Application">Application</option>
+<option value="Integration">Integration</option>
+<option value="FactoryEye">FactoryEye</option>
+</select>
 </div>
 </div>
 </div>
@@ -1407,7 +1412,8 @@
 <div class="ir-grid">
 <div class="ir-field"><div class="ir-field-label">Customer</div><div class="ir-field-value" id="ir_customer">—</div></div>
 <div class="ir-field"><div class="ir-field-label">Project / Service</div><div class="ir-field-value" id="ir_project">—</div></div>
-<div class="ir-field"><div class="ir-field-label">Product Line</div><div class="ir-field-value" id="ir_product_line">�</div></div>
+<div class="ir-field"><div class="ir-field-label">Product Line</div><div class="ir-field-value" id="ir_product_line">ï¿½</div></div>
+<div class="ir-field"><div class="ir-field-label">R&amp;D Ticket</div><div class="ir-field-value" id="ir_rd_tickets" style="color:#4f8ef7;font-weight:700;font-family:var(--font-mono)">—</div></div>
 <div class="ir-field"><div class="ir-field-label">Severity</div><div class="ir-field-value" id="ir_severity">—</div></div>
 <div class="ir-field"><div class="ir-field-label">Status</div><div class="ir-field-value" id="ir_status">—</div></div>
 <div class="ir-field"><div class="ir-field-label">Reporter / Assigned To</div><div class="ir-field-value" id="ir_engineer">—</div></div>
@@ -1616,7 +1622,10 @@
 <div id="dp_area" style="font-size:14px;font-weight:600;color:var(--text)">—</div>
 </div><div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
 <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px">Product Line</div>
-<div id="dp_product_line" style="font-size:14px;font-weight:600;color:var(--text)">�</div>
+<div id="dp_product_line" style="font-size:14px;font-weight:600;color:var(--text)">ï¿½</div>
+</div><div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px">R&amp;D Ticket</div>
+<div id="dp_rd_tickets" style="font-size:14px;font-weight:700;color:#4f8ef7;font-family:var(--font-mono)">—</div>
 </div>
 <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;grid-column:1/-1">
 <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">Tags</div>
@@ -1701,6 +1710,10 @@
 <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Salesforce Case No.</div>
 <div id="dp_sf_case" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px;color:#4f8ef7;font-weight:700;font-family:var(--font-mono)">—</div>
 </div>
+<div>
+<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">R&amp;D Ticket</div>
+<div id="dp_rd_tickets_report" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px;color:#4f8ef7;font-weight:700;font-family:var(--font-mono)">—</div>
+</div>
 </div>
 </div>
 <!-- ACTIVITY & COMMENTS section -->
@@ -1740,30 +1753,7 @@
 </div>
 <div>
 <label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Project <span style="color:var(--danger)">*</span></label>
-<select id="dp_f_project" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer"><option>API Platform</option>
-<option>AgileD365</option>
-<option>Analytics Platform</option>
-<option>Cloud Infrastructure</option>
-<option>Cloud Migration</option>
-<option>CloudOps</option>
-<option>Data Pipeline</option>
-<option>DataSync</option>
-<option>Database Optimization</option>
-<option>Identity Platform</option>
-<option>Infrastructure Ops</option>
-<option>MGC MES</option>
-<option>Mobile Platform</option>
-<option>MobileFirst</option>
-<option>NGC AIML</option>
-<option>NGC MDE</option>
-<option>Notification Service</option>
-<option>Reporting Engine</option>
-<option>SF_Magento</option>
-<option>SecureNet</option>
-<option>Security Audit</option>
-<option>Security Operations</option>
-<option>ShopifyToSyspro</option>
-</select>
+<input id="dp_f_project" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="e.g. NGC MDE, P21_Sugar" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s" type="text"/>
 </div>
 <div>
 <label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Product Line</label>
@@ -1879,6 +1869,10 @@
 <div>
 <label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Salesforce Case No.</label>
 <input id="dp_f_sf_case" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="e.g. 00123456" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s"/>
+</div>
+<div>
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">R&amp;D Ticket</label>
+<input id="dp_f_rd_tickets" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="e.g. FNP-1125" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s" type="text"/>
 </div>
 </div>
 <!-- Components + Applications -->
