@@ -244,7 +244,7 @@ const createIncident = async (req, res) => {
 
 const getIncidents = async (req, res) => {
   try {
-    const { customer, area, severity, status, search, limit = 50, offset = 0 } = req.query;
+    const { customer, area, severity, status, search, limit, offset = 0 } = req.query;
     let query = incidentSelect + ' WHERE 1=1';
     const params = [];
     if (customer) { query += ' AND (i.customer = ? OR customer_master.customer_name = ? OR i.customer_id = ?)'; params.push(customer, customer, Number(customer) || 0); }
@@ -255,8 +255,13 @@ const getIncidents = async (req, res) => {
       query += ' AND (i.incident_ref LIKE ? OR i.legacy_case_number LIKE ? OR i.title LIKE ? OR i.description LIKE ? OR i.customer LIKE ? OR customer_master.customer_name LIKE ?)';
       params.push('%' + search + '%', '%' + search + '%', '%' + search + '%', '%' + search + '%', '%' + search + '%', '%' + search + '%');
     }
-    query += ' ORDER BY i.created_at DESC LIMIT ? OFFSET ?';
-    params.push(parseInt(limit, 10), parseInt(offset, 10));
+    query += ' ORDER BY i.created_at DESC';
+    const parsedLimit = Number.parseInt(limit, 10);
+    const parsedOffset = Number.parseInt(offset, 10);
+    if (Number.isFinite(parsedLimit) && parsedLimit > 0) {
+      query += ' LIMIT ? OFFSET ?';
+      params.push(parsedLimit, Number.isFinite(parsedOffset) && parsedOffset > 0 ? parsedOffset : 0);
+    }
     const [rows] = await pool.query(query, params);
     return res.status(200).json({ success: true, data: rows.map(mapIncident) });
   } catch (error) {

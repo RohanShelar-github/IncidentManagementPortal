@@ -1,0 +1,452 @@
+{
+  "sourceFile": "Cloud Incidents from Jan'26 to May'26.xlsx",
+  "sourceSheets": {
+    "Cloud Incidents": 202,
+    "Sheet2": 337
+  },
+  "selectedSource": "Sheet2 plus unique rows from Cloud Incidents",
+  "totalProcessed": 337,
+  "inserted": 337,
+  "skippedDuplicates": [],
+  "sourceDuplicates": [],
+  "manual": [
+    {
+      "type": "case_owner",
+      "caseNumber": "00116197",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116208",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116214",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116216",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116223",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116221",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116215",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116284",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116282",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116315",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116427",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116453",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116459",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116457",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116468",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116488",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116332",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116485",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116455",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116477",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116489",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116584",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116597",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116619",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116465",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00116458",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "status",
+      "value": "Escalated to Tier 3 QA",
+      "action": "Mapped to escalated_to_3rd_party"
+    },
+    {
+      "type": "severity",
+      "value": "",
+      "action": "Defaulted to medium"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00134766",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00134767",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00134788",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00134790",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00134806",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00134811",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00134812",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00134813",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "status",
+      "value": "Escalated to Tier 3 QA",
+      "action": "Mapped to escalated_to_3rd_party"
+    },
+    {
+      "type": "severity",
+      "value": "",
+      "action": "Defaulted to medium"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00134837",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00134915",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00134825",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00135007",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00135008",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "status",
+      "value": "Escalated to Tier 3 QA",
+      "action": "Mapped to escalated_to_3rd_party"
+    },
+    {
+      "type": "severity",
+      "value": "",
+      "action": "Defaulted to medium"
+    },
+    {
+      "type": "case_owner",
+      "caseNumber": "00135119",
+      "value": "Anuja Sasane",
+      "action": "Preserved in case_owner; assigned_to left null because no unambiguous user match exists"
+    },
+    {
+      "type": "status",
+      "value": "Escalated to Tier 3 QA",
+      "action": "Mapped to escalated_to_3rd_party"
+    },
+    {
+      "type": "severity",
+      "value": "",
+      "action": "Defaulted to medium"
+    }
+  ],
+  "createdCustomers": [
+    "Choctaw Nation",
+    "MSE US",
+    "VBC"
+  ],
+  "createdAreas": [
+    "AIML",
+    "CD",
+    "Historian",
+    "Integration",
+    "MDE",
+    "MES",
+    "NGC",
+    "Redis",
+    "SF_Magento_V4",
+    "XPA",
+    "XPI"
+  ],
+  "transformations": {
+    "normalSeverityToMedium": 276,
+    "tier3QaToThirdParty": 4,
+    "ownerAliases": [
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      },
+      {
+        "source": "Sushant Tadke",
+        "mappedTo": "Shushant Tadke"
+      }
+    ]
+  },
+  "mapping": {
+    "Case Number": "legacy_case_number, sf_case_no",
+    "Customer": "customer, customer_id",
+    "Project Area/Project": "project, project_area",
+    "Area": "area, area_id",
+    "Product Line": "product_line",
+    "Date/Time Closed": "date_time_closed, end_dt",
+    "Case Owner": "case_owner, assigned_to when exact/alias user match exists",
+    "Closed Date": "closed_date",
+    "Severity": "severity",
+    "Subject": "title, description",
+    "Incident Report status": "incident_report_status",
+    "Downtime(Mins)": "downtime_mins, downtime_hours, downtime_minutes, downtime_str",
+    "Mean Time to Detect (MTTD)": "mttd_minutes, mttd_str",
+    "Resolution": "resolution",
+    "Date/Time Opened": "date_time_opened, start_dt",
+    "Month": "legacy_month",
+    "Account Name": "account_name",
+    "Internal Status": "internal_status, status",
+    "R&D Tickets": "rd_tickets",
+    "Full source row": "legacy_raw"
+  }
+}
