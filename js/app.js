@@ -190,6 +190,17 @@ function toMysqlDatetime(value) {
   return String(value).replace('T', ' ').substring(0, 19);
 }
 
+function hasIncidentReportStatus(value) {
+  return ['Yes', 'No'].indexOf(String(value || '').trim()) >= 0;
+}
+
+function requireIncidentReportStatus(inc) {
+  if (hasIncidentReportStatus(inc && inc.incident_report_status)) return true;
+  showToast('Please set Incident Report Status to Yes or No before closing the incident.', 'error');
+  if (inc && inc.id) openDetailPanel(inc.id, true);
+  return false;
+}
+
 function normalizeIncidentFromBackend(incident) {
   const startDT = toDatetimeLocal(incident.date_created || incident.startDT || incident.date);
   const downtimeH = Number(incident.downtime_h ?? incident.downtimeH ?? 0) || 0;
@@ -223,6 +234,8 @@ function normalizeIncidentFromBackend(incident) {
     sfCase: incident.sf_case ?? incident.sfCase ?? '',
     rd_tickets: incident.rd_tickets ?? incident.rdTickets ?? '',
     rdTickets: incident.rd_tickets ?? incident.rdTickets ?? '',
+    incident_report_status: incident.incident_report_status ?? incident.incidentReportStatus ?? '',
+    incidentReportStatus: incident.incident_report_status ?? incident.incidentReportStatus ?? '',
     tags: Array.isArray(incident.tags) ? incident.tags : []
   });
 }
@@ -2652,6 +2665,7 @@ function openModal(id) {
     showToast('Access denied: you cannot view reports', 'error'); return;
   }
   document.getElementById(id).classList.add('open');
+  if (id === 'incidentModal') ensureEngineerDropdownsLoaded();
   // Set today's date for new incident
   if (id === 'incidentModal' && !editingId) {
     // default to current local datetime in IST format (datetime-local)
@@ -2697,6 +2711,7 @@ function editIncident(id) {
   document.getElementById('f_severity').value = inc.severity;
   document.getElementById('f_status').value = inc.status;
   document.getElementById('f_engineer').value = inc.engineer;
+  ensureEngineerDropdownsLoaded(function () { var fe = document.getElementById('f_engineer'); if (fe) fe.value = inc.engineer || ''; });
   document.getElementById('f_date').value = inc.date;
   document.getElementById('f_desc').value = inc.desc;
   openModal('incidentModal');
@@ -2706,6 +2721,7 @@ function closeIncident(id) {
   if (!hasPermission('close_incidents')) { showToast('Access denied: you cannot close incidents', 'error'); return; }
   const inc = incidents.find(i => i.id === id);
   if (!inc) return;
+  if (!requireIncidentReportStatus(inc)) return;
 
   const hasDetails = (inc.downtimeH > 0 || inc.downtimeM > 0) && inc.rca && inc.resolution && inc.downtimeEnd;
 
@@ -2754,6 +2770,7 @@ function _showCloseConfirm(inc) {
 function _forceCloseIncident(id) {
   const inc = incidents.find(i => i.id === id);
   if (!inc) return;
+  if (!requireIncidentReportStatus(inc)) return;
 
   if (window.APP_CONFIG && window.APP_CONFIG.ENABLE_BACKEND) {
     const token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
@@ -2973,6 +2990,7 @@ function confirmCloseIncident() {
   const id = document.getElementById('dtm_inc_ref').value;
   const inc = incidents.find(i => i.id === id);
   if (!inc) return;
+  if (!requireIncidentReportStatus(inc)) return;
 
   const h = parseInt(document.getElementById('dtm_hours').value) || 0;
   const m = parseInt(document.getElementById('dtm_mins').value) || 0;
@@ -3889,6 +3907,22 @@ function populateEngineerDropdowns() {
     sel.innerHTML = '<option value="">Select assignee</option>'
       + engineerUsers.map(function (u) { return '<option value="' + u.name + '">' + u.name + '</option>'; }).join('');
     if (cur && engineerUsers.some(function (u) { return u.name === cur; })) sel.value = cur;
+  });
+}
+
+function ensureEngineerDropdownsLoaded(callback) {
+  populateEngineerDropdowns();
+  if (Array.isArray(users) && users.some(function (u) { return u && u.name; })) {
+    if (callback) callback();
+    return;
+  }
+  if (!window.APP_CONFIG || !window.APP_CONFIG.ENABLE_BACKEND) {
+    if (callback) callback();
+    return;
+  }
+  loadUsersFromBackend(function () {
+    populateEngineerDropdowns();
+    if (callback) callback();
   });
 }
 function populateAssigneeFilter() {
@@ -6086,6 +6120,7 @@ function populateEditForm(inc) {
   document.getElementById('dp_f_severity').value = inc.severity;
   document.getElementById('dp_f_status').value = inc.status;
   document.getElementById('dp_f_engineer').value = inc.engineer;
+  ensureEngineerDropdownsLoaded(function () { var de = document.getElementById('dp_f_engineer'); if (de) de.value = inc.engineer || ''; });
   document.getElementById('dp_f_date').value = inc.date;
   document.getElementById('dp_f_desc').value = inc.desc || '';
   var areaEl = document.getElementById('dp_f_area'); if (areaEl) areaEl.value = inc.area || '';
@@ -6152,6 +6187,7 @@ function saveDetailEdit() {
   const project = document.getElementById('dp_f_project').value;
   const productLine = document.getElementById('dp_f_product_line')?.value || '';
   const rdTickets = (document.getElementById('dp_f_rd_tickets')?.value || '').trim();
+  const incidentReportStatus = (document.getElementById('dp_f_incident_report_status')?.value || '').trim();
   const severity = document.getElementById('dp_f_severity').value;
   const status = document.getElementById('dp_f_status').value;
   const engineer = document.getElementById('dp_f_engineer').value;
@@ -6160,6 +6196,10 @@ function saveDetailEdit() {
 
   if (!title || !customer || !severity || !engineer) {
     showToast('Please fill in all required fields', 'error');
+    return;
+  }
+  if (status === 'Closed' && !hasIncidentReportStatus(incidentReportStatus)) {
+    showToast('Incident Report Status is required before closing. Select Yes or No.', 'error');
     return;
   }
 
@@ -6174,7 +6214,7 @@ function saveDetailEdit() {
     addFeedEntry(inc.id, 'system', 'reassigned incident', `Assigned to ${engineer}`);
   }
 
-  Object.assign(inc, { title, customer, project, product_line: productLine, severity, status, engineer, date, desc, timezone: selectedTZ });
+  Object.assign(inc, { title, customer, project, product_line: productLine, severity, status, engineer, date, desc, timezone: selectedTZ, incident_report_status: incidentReportStatus, incidentReportStatus });
   if (rdTickets) { inc.rd_tickets = rdTickets; inc.rdTickets = rdTickets; }
 
   // Always save start/end datetime exactly as entered for the selected incident timezone.
@@ -6243,6 +6283,7 @@ function saveDetailEdit() {
       resolved_by: inc.resolvedBy,
       sf_case: inc.sfCase,
       rd_tickets: inc.rd_tickets || inc.rdTickets || undefined,
+      incident_report_status: incidentReportStatus,
       downtime_h: inc.downtimeH,
       downtime_m: inc.downtimeM,
       mttr_h: inc.mttrH,

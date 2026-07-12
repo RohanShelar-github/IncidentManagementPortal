@@ -1412,7 +1412,7 @@
 <div class="ir-grid">
 <div class="ir-field"><div class="ir-field-label">Customer</div><div class="ir-field-value" id="ir_customer">—</div></div>
 <div class="ir-field"><div class="ir-field-label">Project / Service</div><div class="ir-field-value" id="ir_project">—</div></div>
-<div class="ir-field"><div class="ir-field-label">Product Line</div><div class="ir-field-value" id="ir_product_line">ï¿½</div></div>
+<div class="ir-field"><div class="ir-field-label">Product Line</div><div class="ir-field-value" id="ir_product_line">N/A</div></div>
 <div class="ir-field"><div class="ir-field-label">R&amp;D Ticket</div><div class="ir-field-value" id="ir_rd_tickets" style="color:#4f8ef7;font-weight:700;font-family:var(--font-mono)">—</div></div>
 <div class="ir-field"><div class="ir-field-label">Severity</div><div class="ir-field-value" id="ir_severity">—</div></div>
 <div class="ir-field"><div class="ir-field-label">Status</div><div class="ir-field-value" id="ir_status">—</div></div>
@@ -1622,10 +1622,14 @@
 <div id="dp_area" style="font-size:14px;font-weight:600;color:var(--text)">—</div>
 </div><div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
 <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px">Product Line</div>
-<div id="dp_product_line" style="font-size:14px;font-weight:600;color:var(--text)">ï¿½</div>
+<div id="dp_product_line" style="font-size:14px;font-weight:600;color:var(--text)">N/A</div>
 </div><div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
 <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px">R&amp;D Ticket</div>
 <div id="dp_rd_tickets" style="font-size:14px;font-weight:700;color:#4f8ef7;font-family:var(--font-mono)">—</div>
+</div>
+<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px">Incident Report Status</div>
+<div id="dp_incident_report_status" style="font-size:14px;font-weight:700;color:var(--text)">N/A</div>
 </div>
 <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;grid-column:1/-1">
 <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">Tags</div>
@@ -1873,6 +1877,14 @@
 <div>
 <label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">R&amp;D Ticket</label>
 <input id="dp_f_rd_tickets" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="e.g. FNP-1125" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s" type="text"/>
+</div>
+<div>
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Incident Report Status <span style="color:var(--danger)">*</span></label>
+<select id="dp_f_incident_report_status" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer">
+<option value="">Select status</option>
+<option value="Yes">Yes</option>
+<option value="No">No</option>
+</select>
 </div>
 </div>
 <!-- Components + Applications -->

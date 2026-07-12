@@ -28,6 +28,7 @@ const normalizeStatus = (value) => STATUS_TO_DB[value] || STATUS_TO_DB[String(va
 const normalizeSeverity = (value) => SEVERITY_TO_DB[value] || SEVERITY_TO_DB[String(value || '').trim()] || String(value || 'Medium').toLowerCase();
 const displayStatus = (value) => STATUS_FROM_DB[value] || value || 'New';
 const displaySeverity = (value) => SEVERITY_FROM_DB[value] || value || 'Medium';
+const isIncidentReportStatusValid = (value) => ['Yes', 'No'].includes(String(value || '').trim());
 const toDateTimeValue = (value) => {
   if (!value) return '';
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
@@ -301,7 +302,17 @@ const updateIncident = async (req, res) => {
     if (b.project !== undefined && String(b.project || '').trim() !== '') add('project', String(b.project).trim());
     if (b.project_area !== undefined) add('project_area', b.project_area || null);
     if (b.severity !== undefined) add('severity', normalizeSeverity(b.severity));
-    if (b.status !== undefined) add('status', normalizeStatus(b.status));
+    const normalizedStatus = b.status !== undefined ? normalizeStatus(b.status) : undefined;
+    if (normalizedStatus === 'closed') {
+      const incomingReportStatus = String(b.incident_report_status || '').trim();
+      if (!isIncidentReportStatusValid(incomingReportStatus)) {
+        const [existingRows] = await pool.query('SELECT incident_report_status FROM incidents WHERE id = ? LIMIT 1', [dbId]);
+        if (!isIncidentReportStatusValid(existingRows[0]?.incident_report_status)) {
+          return res.status(400).json({ success: false, message: 'Incident Report Status must be Yes or No before closing the incident' });
+        }
+      }
+    }
+    if (b.status !== undefined) add('status', normalizedStatus);
     if (b.engineer !== undefined) add('assigned_to', await resolveUserId(b.engineer));
     if (b.case_owner !== undefined) add('case_owner', b.case_owner || null);
     if (b.description !== undefined) add('description', b.description || null);
@@ -326,7 +337,11 @@ const updateIncident = async (req, res) => {
     if (b.resolution !== undefined) add('resolution', b.resolution || null);
     if (b.resolved_by !== undefined) add('resolved_by', b.resolved_by || null);
     if ((b.sf_case !== undefined || b.sfCase !== undefined) && String(b.sf_case || b.sfCase || '').trim() !== '') add('sf_case_no', String(b.sf_case || b.sfCase).trim());
-    if (b.incident_report_status !== undefined) add('incident_report_status', b.incident_report_status || null);
+    if (b.incident_report_status !== undefined) {
+      const reportStatus = String(b.incident_report_status || '').trim();
+      if (reportStatus && !isIncidentReportStatusValid(reportStatus)) return res.status(400).json({ success: false, message: 'Incident Report Status must be Yes or No' });
+      add('incident_report_status', reportStatus || null);
+    }
     if (b.downtime_h !== undefined || b.downtimeH !== undefined) add('downtime_hours', b.downtime_h ?? b.downtimeH ?? 0);
     if (b.downtime_m !== undefined || b.downtimeM !== undefined) add('downtime_minutes', b.downtime_m ?? b.downtimeM ?? 0);
     if (b.downtime_mins !== undefined) add('downtime_mins', b.downtime_mins ?? 0);
