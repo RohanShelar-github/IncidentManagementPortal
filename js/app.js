@@ -81,6 +81,8 @@ let editingId = null;
 
 let customers = [];
 let areas = [];
+let customerRecords = [];
+let areaRecords = [];
 
 // ── TIMEZONE SYSTEM ───────────────────────────────────────────
 var TIMEZONES = [
@@ -203,12 +205,49 @@ function normalizeIncidentFromBackend(incident) {
 }
 
 function syncReferenceListsFromIncidents() {
-  customers = Array.from(new Set(incidents.map(function (i) { return i.customer; }).filter(Boolean))).sort();
-  areas = Array.from(new Set(incidents.map(function (i) { return i.area; }).filter(Boolean))).sort();
   populateCustomerDropdowns();
   populateAreaDropdowns();
 }
 
+function loadMasterData(callback) {
+  if (!window.APP_CONFIG || !window.APP_CONFIG.ENABLE_BACKEND) {
+    customers = [];
+    areas = [];
+    customerRecords = [];
+    areaRecords = [];
+    if (callback) callback(null);
+    return;
+  }
+  const token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) {
+    if (callback) callback(new Error('Not authenticated. Please login first.'));
+    return;
+  }
+  fetch(window.APP_CONFIG.API_BASE_URL + '/master-data', {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
+  })
+    .then(r => { if (!r.ok) throw new Error('Master data API returned HTTP ' + r.status); return r.json(); })
+    .then(data => {
+      if (data && data.success && data.data) {
+        customerRecords = Array.isArray(data.data.customers) ? data.data.customers : [];
+        areaRecords = Array.isArray(data.data.areas) ? data.data.areas : [];
+        customers = customerRecords.map(function (c) { return c.customer_name; }).filter(Boolean).sort();
+        areas = areaRecords.map(function (a) { return a.area_name; }).filter(Boolean).sort();
+        populateCustomerDropdowns();
+        populateAreaDropdowns();
+        renderDataManagement();
+        updateDmCounts();
+        if (callback) callback(null);
+      } else {
+        if (callback) callback(new Error(data && data.message ? data.message : 'Failed to load master data'));
+      }
+    })
+    .catch(err => {
+      console.error('Error loading master data:', err);
+      if (callback) callback(err);
+    });
+}
 function loadUsersFromBackend(callback) {
   if (!window.APP_CONFIG || !window.APP_CONFIG.ENABLE_BACKEND) {
     users = [];
@@ -401,7 +440,7 @@ var auditLog = [];
 var activityLog = [];
 var incidentComments = {};
 
-// ── Seed demo activity data for existing incidents ────────────
+// Activity data is loaded from database-backed incident actions
 
 
 
@@ -1043,37 +1082,80 @@ function renderMyIncidents() {
 }
 
 // ─── DATA MANAGEMENT ──────────────────────────────────────
+function requireAdminMasterData() {
+  if ((currentRole || '').toLowerCase() !== 'admin') {
+    showToast('Admin access required', 'error');
+    return false;
+  }
+  return true;
+}
+
+function masterDataRequest(path, method, body, callback) {
+  const token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) { showToast('Not authenticated. Please login first.', 'error'); return; }
+  fetch(window.APP_CONFIG.API_BASE_URL + path, {
+    method: method,
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: body ? JSON.stringify(body) : undefined
+  })
+    .then(r => r.json().then(data => ({ ok: r.ok, data: data })))
+    .then(result => {
+      if (!result.ok || !result.data.success) throw new Error(result.data.message || 'Master data update failed');
+      loadMasterData(function () { if (callback) callback(result.data); });
+    })
+    .catch(err => {
+      console.error('Master data update error:', err);
+      showToast(err.message || 'Master data update failed', 'error');
+    });
+}
+
 function addCustomer() {
+  if (!requireAdminMasterData()) return;
   var inp = document.getElementById('dmNewCustomer');
   if (!inp) return;
-  var name = inp.value.trim().toLowerCase();
+  var name = inp.value.trim();
   if (!name) { showToast('Enter a customer name', 'error'); return; }
   if (customers.indexOf(name) >= 0) { showToast('Customer already exists', 'error'); return; }
-  customers.push(name);
-  inp.value = '';
-  populateCustomerDropdowns();
-  renderDataManagement();
-  updateDmCounts();
-  addAudit('🏢', 'Added Customer', name);
-  showToast('Customer "' + name + '" added', 'success');
+  masterDataRequest('/master-data/customers', 'POST', { customer_name: name }, function () {
+    inp.value = '';
+    addAudit('??', 'Added Customer', name);
+    showToast('Customer "' + name + '" added', 'success');
+  });
+}
+
+function removeCustomer(name) {
+  if (!requireAdminMasterData()) return;
+  var rec = customerRecords.find(function (c) { return c.customer_name === name; });
+  if (!rec) { showToast('Customer not found', 'error'); return; }
+  masterDataRequest('/master-data/customers/' + rec.id, 'DELETE', null, function () {
+    addAudit('??', 'Deactivated Customer', name);
+    showToast('Customer "' + name + '" deactivated', 'success');
+  });
 }
 
 function addArea() {
+  if (!requireAdminMasterData()) return;
   var inp = document.getElementById('dmNewArea');
   if (!inp) return;
   var name = inp.value.trim();
   if (!name) { showToast('Enter an area name', 'error'); return; }
   if (areas.indexOf(name) >= 0) { showToast('Area already exists', 'error'); return; }
-  areas.push(name);
-  inp.value = '';
-  populateAreaDropdowns();
-  renderDataManagement();
-  updateDmCounts();
-  addAudit('🗂', 'Added Area', name);
-  showToast('Area "' + name + '" added', 'success');
+  masterDataRequest('/master-data/areas', 'POST', { area_name: name }, function () {
+    inp.value = '';
+    addAudit('??', 'Added Area', name);
+    showToast('Area "' + name + '" added', 'success');
+  });
 }
 
-// ─── DASHBOARD FILTERS ────────────────────────────────────
+function removeArea(name) {
+  if (!requireAdminMasterData()) return;
+  var rec = areaRecords.find(function (a) { return a.area_name === name; });
+  if (!rec) { showToast('Area not found', 'error'); return; }
+  masterDataRequest('/master-data/areas/' + rec.id, 'DELETE', null, function () {
+    addAudit('??', 'Deactivated Area', name);
+    showToast('Area "' + name + '" deactivated', 'success');
+  });
+}
 function applyDashFilters() {
   updateStats();
   renderRecentTable();
@@ -1780,7 +1862,7 @@ function hasPermission(perm) {
 // ── NOTIFICATIONS ─────────────────────────────────────────
 var notifications = [];
 
-// Seed demo notifications (after array is declared)
+// Notifications are populated from live application events
 
 
 function addNotification(type, text, incId) {
@@ -2485,9 +2567,11 @@ function doLogin() {
         }
 
         // Apply role-based refresh and data reload
-        loadUsersFromBackend(function () {
-          loadIncidentsFromBackend(function () {
-            refreshDashboardData();
+        loadMasterData(function () {
+          loadUsersFromBackend(function () {
+            loadIncidentsFromBackend(function () {
+              refreshDashboardData();
+            });
           });
         });
 
@@ -3586,7 +3670,7 @@ function refreshDashboardData(options) {
   }
 
   if (window.APP_CONFIG && window.APP_CONFIG.ENABLE_BACKEND) {
-    loadIncidentsFromBackend(finish);
+    loadMasterData(function (masterErr) { if (masterErr) return finish(masterErr); loadIncidentsFromBackend(finish); });
   } else {
     finish(null);
   }
@@ -5071,8 +5155,8 @@ function generatePDFReport() {
 
     const areaGroups = {};
     data.forEach(i => { const a = i.area || 'Unspecified'; areaGroups[a] = (areaGroups[a] || 0) + 1; });
-    const areaColors = { 'Infra': '#3498db', 'Application': '#e67e22', 'Historian': '#2ecc71', 'Unspecified': '#95a5a6' };
-    const areaBars = Object.entries(areaGroups).map(([k, v]) => ({ label: k, value: v, color: areaColors[k] || '#9b59b6' }));
+    const areaPalette = ['#3498db', '#e67e22', '#2ecc71', '#95a5a6', '#9b59b6', '#1abc9c'];
+    const areaBars = Object.entries(areaGroups).map(([k, v], idx) => ({ label: k, value: v, color: areaPalette[idx % areaPalette.length] }));
 
     // Top 8 customers by incident count
     const custGroups = {};
@@ -6746,9 +6830,10 @@ function verifySessionAndInit() {
         switchRole(user.role);
         showToast(`Welcome back, ${user.name}! 👋`, 'success');
 
-        loadUsersFromBackend(function () {
-          loadIncidentsFromBackend(function () {
-            populateAssigneeFilter();
+        loadMasterData(function () {
+          loadUsersFromBackend(function () {
+            loadIncidentsFromBackend(function () {
+              populateAssigneeFilter();
             updateTagFilter();
 
             const portal = document.getElementById('portalApp');
@@ -6767,6 +6852,7 @@ function verifySessionAndInit() {
             }
           });
         });
+      });
       } else {
         throw new Error('Invalid user response');
       }

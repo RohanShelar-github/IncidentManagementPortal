@@ -5,6 +5,7 @@ require('dotenv').config();
 
 const authRoutes = require('./routes/authRoutes');
 const incidentRoutes = require('./routes/incidentRoutes');
+const masterDataRoutes = require('./routes/masterDataRoutes');
 const { startUiServer } = require('../server-ui');
 const pool = require('./config/database');
 
@@ -29,6 +30,7 @@ app.use((req, res, next) => {
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/incidents', incidentRoutes);
+app.use('/api/master-data', masterDataRoutes);
 
 // Health check endpoint
 app.get('/api/health', async (req, res) => {

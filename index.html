@@ -527,7 +527,7 @@
 <div class="chart-header">
 <div>
 <div class="chart-title">Downtime by Area</div>
-<div class="chart-sub">Infra / Application / Historian</div>
+<div class="chart-sub">Open vs closed by area</div>
 </div>
 </div>
 <div id="downtimeAreaList" style="padding:4px 0;overflow-y:auto;max-height:220px"></div>
@@ -776,27 +776,7 @@
 <div class="filter-bar" style="margin-bottom:20px">
 <div class="filter-group">
 <div class="filter-label">Filter by Customer</div>
-<select id="reportCustomerFilter" onchange="updateReportPreview()">
-<option value="">All Customers</option>
-<option>demo</option>
-<option>vbc</option>
-<option>tilebar</option>
-<option>BWC</option>
-<option>christiedigital</option>
-<option>mayerelectric</option>
-<option>ramatgancityhall</option>
-<option>cccu</option>
-<option>intrado</option>
-<option>sh</option>
-<option>prettl</option>
-<option>smc</option>
-<option>toridoll</option>
-<option>mseus</option>
-<option>cloudndevops</option>
-<option>miscloud</option>
-<option>choctawnation</option>
-<option>gjkg</option>
-</select>
+<select id="reportCustomerFilter" onchange="updateReportPreview()">`r`n<option value="">All Customers</option>`r`n</select>
 </div>
 <div class="filter-group">
 <div class="filter-label">Filter by Severity</div>
@@ -825,9 +805,7 @@
 </div>
 <div class="filter-group">
 <div class="filter-label">Filter by Area</div>
-<select id="reportAreaFilter" onchange="updateReportPreview()">
-<option value="">All Areas</option>
-</select>
+<select id="reportAreaFilter" onchange="updateReportPreview()">`r`n<option value="">All Areas</option>`r`n</select>
 </div>
 <div class="filter-group">
 <div class="filter-label">From Date</div>
@@ -1257,27 +1235,7 @@
 </div>
 <div class="form-group">
 <label class="form-label required">Customer</label>
-<select id="f_customer">
-<option value="">Select customer</option>
-<option>demo</option>
-<option>vbc</option>
-<option>tilebar</option>
-<option>BWC</option>
-<option>christiedigital</option>
-<option>mayerelectric</option>
-<option>ramatgancityhall</option>
-<option>cccu</option>
-<option>intrado</option>
-<option>sh</option>
-<option>prettl</option>
-<option>smc</option>
-<option>toridoll</option>
-<option>mseus</option>
-<option>cloudndevops</option>
-<option>miscloud</option>
-<option>choctawnation</option>
-<option>gjkg</option>
-</select>
+<select id="f_customer">`r`n<option value="">Select customer</option>`r`n</select>
 </div>
 <div class="form-group">
 <label class="form-label required">Project / Service</label>
@@ -1355,9 +1313,7 @@
 </div>
 <div>
 <label class="form-label">Area <span style="color:var(--danger)">*</span></label>
-<select id="f_area" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer">
-<option value="">Select Area</option>
-</select>
+<select id="f_area" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer">`r`n<option value="">Select Area</option>`r`n</select>
 </div>
 </div>
 </div>
@@ -1776,22 +1732,7 @@
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
 <div>
 <label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Customer <span style="color:var(--danger)">*</span></label>
-<select id="dp_f_customer" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer"><option>BWC</option>
-<option>cccu</option>
-<option>christiedigital</option>
-<option>cloudndevops</option>
-<option>demo</option>
-<option>intrado</option>
-<option>mayerelectric</option>
-<option>mseus</option>
-<option>prettl</option>
-<option>ramatgancityhall</option>
-<option>sh</option>
-<option>smc</option>
-<option>tilebar</option>
-<option>toridoll</option>
-<option>vbc</option>
-</select>
+<select id="dp_f_customer" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer">`r`n<option value="">Select customer</option>`r`n</select>
 </div>
 <div>
 <label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Project <span style="color:var(--danger)">*</span></label>
@@ -1855,9 +1796,7 @@
 </div>
 <div style="margin-bottom:16px">
 <label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Area</label>
-<select id="dp_f_area" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s;cursor:pointer">
-<option value="">Select Area</option>
-</select>
+<select id="dp_f_area" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s;cursor:pointer">`r`n<option value="">Select Area</option>`r`n</select>
 </div>
 <!-- ── REPORT FIELDS (shown only for Closed incidents) ── -->
 <div id="dp_report_fields" style="display:none;margin-top:4px">
