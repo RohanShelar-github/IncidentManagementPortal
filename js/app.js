@@ -3495,6 +3495,98 @@ function setDashboardRefreshState(isLoading, errorMessage) {
   label.style.color = 'var(--text-muted)';
 }
 
+var pageRefreshInFlight = {};
+
+function setPageRefreshState(page, isLoading, errorMessage) {
+  var label = document.getElementById(page + 'LastUpdated');
+  var btn = document.getElementById(page + 'RefreshBtn');
+  var icon = document.getElementById(page + 'RefreshIcon');
+  if (btn) {
+    btn.style.pointerEvents = isLoading ? 'none' : '';
+    btn.style.opacity = isLoading ? '0.65' : '';
+    btn.setAttribute('aria-busy', isLoading ? 'true' : 'false');
+    btn.title = isLoading ? 'Refreshing...' : 'Refresh';
+  }
+  if (icon) icon.style.transform = isLoading ? 'rotate(360deg)' : 'rotate(0deg)';
+  if (!label) return;
+  if (isLoading) {
+    label.textContent = 'Refreshing...';
+    label.style.color = 'var(--accent)';
+    return;
+  }
+  if (errorMessage) {
+    label.textContent = 'Refresh failed';
+    label.style.color = 'var(--danger)';
+    return;
+  }
+  var now = new Date();
+  var h = now.getHours();
+  var m = String(now.getMinutes()).padStart(2, '0');
+  var ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  label.textContent = 'Last updated ' + h + ':' + m + ' ' + ampm;
+  label.style.color = 'var(--text-muted)';
+}
+
+function renderPageAfterRefresh(page) {
+  if (page === 'incidents') {
+    if (typeof applyFilters === 'function') applyFilters();
+    else renderIncidentTable();
+    if (currentIncidentView === 'kanban' && typeof renderKanban === 'function') renderKanban();
+    populateAssigneeFilter();
+    updateTagFilter();
+    return;
+  }
+  if (page === 'reports') { renderAuditLog(); return; }
+  if (page === 'users') { renderUsersTable(); return; }
+  if (page === 'roles') { renderRolesGrid(); return; }
+  if (page === 'datamanagement') { renderDataManagement(); updateDmCounts(); return; }
+  if (page === 'customer360') {
+    var name = document.getElementById('c360CustName')?.textContent || '';
+    if (name && name !== '?') renderC360Full(name);
+    else _showC360Picker();
+    return;
+  }
+}
+
+function refreshPageContent(event, page) {
+  if (event && event.preventDefault) event.preventDefault();
+  page = page || (location.hash || '').replace('#', '') || 'dashboard';
+  if (page === 'dashboard') return refreshDashboard(event);
+  if (pageRefreshInFlight[page]) return;
+  pageRefreshInFlight[page] = true;
+  setPageRefreshState(page, true);
+
+  function finish(err) {
+    if (!err) renderPageAfterRefresh(page);
+    pageRefreshInFlight[page] = false;
+    setPageRefreshState(page, false, err ? err.message || 'Refresh failed' : '');
+    showToast(err ? ('Refresh failed: ' + (err.message || err)) : 'Page refreshed', err ? 'error' : 'success');
+  }
+
+  if (window.APP_CONFIG && window.APP_CONFIG.ENABLE_BACKEND) {
+    var reloadIncidents = function () {
+      if (typeof loadIncidentsFromBackend === 'function') {
+        loadIncidentsFromBackend(finish);
+      } else {
+        finish(null);
+      }
+    };
+    if (typeof loadMasterData === 'function') {
+      loadMasterData(function (masterErr) {
+        if (masterErr) return finish(masterErr);
+        reloadIncidents();
+      });
+    } else {
+      reloadIncidents();
+    }
+    return;
+  }
+  setTimeout(function () { finish(null); }, 120);
+}
+
+window.refreshPageContent = refreshPageContent;
+
 function refreshDashboard(event) {
   if (event && event.preventDefault) event.preventDefault();
   return refreshDashboardData({ manual: true });
