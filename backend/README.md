@@ -239,7 +239,7 @@ Authorization: Bearer {token}
 **Query Parameters:**
 - `customer` - Filter by customer name
 - `area` - Filter by area (Infra, Application, Historian)
-- `severity` - Filter by severity (Critical, High, Medium, Low)
+- `severity` - Filter by severity (Critical, High, Medium, Normal)
 - `status` - Filter by status
 - `tags` - Filter by tags
 - `search` - Search in title and description
@@ -411,7 +411,7 @@ CREATE TABLE incidents (
   title VARCHAR(500) NOT NULL,
   customer VARCHAR(255),
   project VARCHAR(255),
-  severity ENUM('Critical', 'High', 'Medium', 'Low'),
+  severity ENUM('Critical', 'High', 'Medium', 'Normal'),
   status VARCHAR(100) NOT NULL,
   engineer VARCHAR(255),
   date_created DATETIME DEFAULT CURRENT_TIMESTAMP,

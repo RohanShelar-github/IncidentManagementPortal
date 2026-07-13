@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS incidents (
   title VARCHAR(500) NOT NULL,
   customer VARCHAR(255),
   project VARCHAR(255),
-  severity ENUM('Critical', 'High', 'Medium', 'Low') NOT NULL,
+  severity ENUM('Critical', 'High', 'Medium', 'Normal') NOT NULL,
   status VARCHAR(100) NOT NULL,
   engineer VARCHAR(255),
   date_created DATETIME DEFAULT CURRENT_TIMESTAMP,

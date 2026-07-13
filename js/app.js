@@ -866,7 +866,7 @@ function renderC360Full(custName) {
   var closed = custIncs.filter(function (i) { return i.status === 'Closed' || i.status === 'Resolved'; }).length;
   var critical = custIncs.filter(function (i) { return i.severity === 'Critical'; }).length;
   var totalDT = custIncs.reduce(function (acc, i) { return acc + getIncDowntimeMinutes(i); }, 0);
-  var SLA_H = { Critical: 1, High: 4, Medium: 12, Low: 24 };
+  var SLA_H = { Critical: 1, High: 4, Medium: 12, Normal: 24 };
   var breached = custIncs.filter(function (i) {
     if (i.status === 'Closed' || i.status === 'Resolved') return false;
     return (Date.now() - new Date(i.startDT || (i.date + 'T09:00')).getTime()) > (SLA_H[i.severity] || 24) * 3600000;
@@ -1021,7 +1021,7 @@ function renderC360Full(custName) {
   // ── Severity bars ──
   var sevEl = document.getElementById('c360SevBars');
   if (sevEl) {
-    var sevs = [{ k: 'Critical', c: '#f75c7c' }, { k: 'High', c: '#f7b94f' }, { k: 'Medium', c: '#4f8ef7' }, { k: 'Low', c: '#2dd4a0' }];
+    var sevs = [{ k: 'Critical', c: '#f75c7c' }, { k: 'High', c: '#f7b94f' }, { k: 'Medium', c: '#4f8ef7' }, { k: 'Normal', c: '#2dd4a0' }];
     var maxSev = Math.max.apply(null, sevs.map(function (s) { return custIncs.filter(function (i) { return i.severity === s.k; }).length; })) || 1;
     sevEl.innerHTML = sevs.map(function (s) {
       var cnt = custIncs.filter(function (i) { return i.severity === s.k; }).length;
@@ -1049,7 +1049,7 @@ function renderC360Full(custName) {
       recurEl.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:12px">No recurring incidents</div>';
     } else {
       recurEl.innerHTML = recurring.map(function (r) {
-        var col = { Critical: '#f75c7c', High: '#f7b94f', Medium: '#4f8ef7', Low: '#2dd4a0' }[r.sev] || '#6c7a8d';
+        var col = { Critical: '#f75c7c', High: '#f7b94f', Medium: '#4f8ef7', Normal: '#2dd4a0' }[r.sev] || '#6c7a8d';
         return '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">'
           + '<span style="background:' + col + '20;color:' + col + ';border:1px solid ' + col + '40;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;flex-shrink:0">' + r.count + '×</span>'
           + '<span style="font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + r.title + '</span></div>';
@@ -2230,7 +2230,7 @@ function clearFilters() {
 }
 
 // ── SLA HELPERS ────────────────────────────────────────────────
-const SLA_HOURS = { Critical: 1, High: 4, Medium: 12, Low: 24 };
+const SLA_HOURS = { Critical: 1, High: 4, Medium: 12, Normal: 24 };
 
 function getSLAInfo(inc) {
   if (['Resolved', 'Closed'].includes(inc.status)) return { cls: 'sla-na', label: '—', title: 'Resolved' };
@@ -3437,7 +3437,7 @@ function renderRecurringList() {
 function renderSlaCountdown() {
   var el = document.getElementById('slaCountdownList');
   if (!el) return;
-  var SLA_H = { Critical: 1, High: 4, Medium: 12, Low: 24 };
+  var SLA_H = { Critical: 1, High: 4, Medium: 12, Normal: 24 };
   var now = Date.now();
   var open = getDashboardFilteredIncidents().filter(function (i) { return i.status !== 'Closed'; });
   var badge = document.getElementById('slaCountBadge');
@@ -3509,7 +3509,7 @@ function renderHealthGrid() {
 
 function initDashFilterDropdowns() {
   // Severity options (static)
-  populateMsDropdown('df_severity', ['Critical', 'High', 'Medium', 'Low'], 'All Severities');
+  populateMsDropdown('df_severity', ['Critical', 'High', 'Medium', 'Normal'], 'All Severities');
   // Customer and area options (dynamic)
   populateMsDropdown('df_customer', customers, 'All Customers');
   populateMsDropdown('df_area', areas, 'All Areas');
@@ -3768,7 +3768,7 @@ function updateStats() {
     : 'no resolution time recorded';
 
   // SLA Breach count
-  var SLA_H = { Critical: 1, High: 4, Medium: 12, Low: 24 };
+  var SLA_H = { Critical: 1, High: 4, Medium: 12, Normal: 24 };
   var breachCount = data.filter(function (i) {
     if (i.status === 'Closed' || i.status === 'Resolved') return false;
     var slaH = SLA_H[i.severity] || 24;
@@ -3998,7 +3998,7 @@ function renderHomePage() {
       { label: 'Critical', key: 'Critical', color: '#f75c7c', bg: 'rgba(247,92,124,0.08)' },
       { label: 'High', key: 'High', color: '#f7b94f', bg: 'rgba(247,185,79,0.08)' },
       { label: 'Medium', key: 'Medium', color: '#4f8ef7', bg: 'rgba(79,142,247,0.08)' },
-      { label: 'Low', key: 'Low', color: '#2dd4a0', bg: 'rgba(45,212,160,0.08)' },
+      { label: 'Normal', key: 'Normal', color: '#2dd4a0', bg: 'rgba(45,212,160,0.08)' },
     ];
     var maxSev = Math.max.apply(null, sevs.map(function (s) {
       return incidents.filter(function (i) { return i.severity === s.key; }).length;
@@ -4253,12 +4253,12 @@ function _drawSLABreach(gridC, textC, textC2, data) {
   var ctx = r.ctx, W = r.W, H = r.H;
   ctx.clearRect(0, 0, W, H);
 
-  var sevs = ['Critical', 'High', 'Medium', 'Low'];
-  var SLA_H = { Critical: 1, High: 4, Medium: 12, Low: 24 };
-  var colors = { Critical: '#f75c7c', High: '#f7b94f', Medium: '#4f8ef7', Low: '#2dd4a0' };
+  var sevs = ['Critical', 'High', 'Medium', 'Normal'];
+  var SLA_H = { Critical: 1, High: 4, Medium: 12, Normal: 24 };
+  var colors = { Critical: '#f75c7c', High: '#f7b94f', Medium: '#4f8ef7', Normal: '#2dd4a0' };
 
-  var onTime = { Critical: 0, High: 0, Medium: 0, Low: 0 };
-  var breached = { Critical: 0, High: 0, Medium: 0, Low: 0 };
+  var onTime = { Critical: 0, High: 0, Medium: 0, Normal: 0 };
+  var breached = { Critical: 0, High: 0, Medium: 0, Normal: 0 };
 
   data.forEach(function (i) {
     var slaH = SLA_H[i.severity] || 24;
@@ -4763,7 +4763,7 @@ function _drawDonut(textC, data) {
   var ctx = r.ctx, W = r.W, H = r.H;
   ctx.clearRect(0, 0, W, H);
 
-  var sevs = ['Critical', 'High', 'Medium', 'Low'];
+  var sevs = ['Critical', 'High', 'Medium', 'Normal'];
   var colors = ['#f75c7c', '#f7b94f', '#4f8ef7', '#2dd4a0'];
   var vals = sevs.map(function (s) { return data.filter(function (i) { return i.severity === s; }).length; });
   var _rawTotal = vals.reduce(function (a, b) { return a + b; }, 0);
@@ -4861,12 +4861,12 @@ function _drawCustomer(gridC, textC, textC2, data) {
   var ctx = r.ctx, W = r.W, H = r.H;
   ctx.clearRect(0, 0, W, H);
 
-  var sevColors = { 'Critical': '#f75c7c', 'High': '#f7b94f', 'Medium': '#4f8ef7', 'Low': '#2dd4a0' };
-  var sevOrder = ['Critical', 'High', 'Medium', 'Low'];
+  var sevColors = { 'Critical': '#f75c7c', 'High': '#f7b94f', 'Medium': '#4f8ef7', 'Normal': '#2dd4a0' };
+  var sevOrder = ['Critical', 'High', 'Medium', 'Normal'];
 
   var cc = {};
   data.forEach(function (i) {
-    if (!cc[i.customer]) cc[i.customer] = { total: 0, Critical: 0, High: 0, Medium: 0, Low: 0 };
+    if (!cc[i.customer]) cc[i.customer] = { total: 0, Critical: 0, High: 0, Medium: 0, Normal: 0 };
     cc[i.customer][i.severity] = (cc[i.customer][i.severity] || 0) + 1;
     cc[i.customer].total++;
   });
@@ -4960,7 +4960,7 @@ function _drawCustomer(gridC, textC, textC2, data) {
   });
 
   // Legend — horizontally centered at bottom
-  var legendItems = [['Critical', '#f75c7c'], ['High', '#f7b94f'], ['Medium', '#4f8ef7'], ['Low', '#2dd4a0']];
+  var legendItems = [['Critical', '#f75c7c'], ['High', '#f7b94f'], ['Medium', '#4f8ef7'], ['Normal', '#2dd4a0']];
   ctx.font = '10px sans-serif';
   var totalW = legendItems.reduce(function (s, l) { return s + ctx.measureText(l[0]).width + 24; }, 0);
   var lx = (W - totalW) / 2, ly = H - 5;
@@ -5036,7 +5036,7 @@ function _drawResolution(gridC, textC, textC2, data) {
     return;
   }
   if (!data.length) { ctx.fillStyle = textC; ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('No data for selected filters', W / 2, H / 2); return; }
-  var sevs = ['Critical', 'High', 'Medium', 'Low'];
+  var sevs = ['Critical', 'High', 'Medium', 'Normal'];
   var colors = ['#f75c7c', '#f7b94f', '#4f8ef7', '#2dd4a0'];
   // Avg resolution hours per severity (from closed incidents)
   var avgHrs = sevs.map(function (s) {
@@ -5174,7 +5174,7 @@ function generatePDFReport() {
     const closedInc = data.filter(i => i.status === 'Closed' || i.status === 'Resolved').length;
     const critInc = data.filter(i => i.severity === 'Critical').length;
 
-    const sevColor = s => ({ Critical: '#e74c3c', High: '#e67e22', Medium: '#3498db', Low: '#2ecc71' }[s] || '#888');
+    const sevColor = s => ({ Critical: '#e74c3c', High: '#e67e22', Medium: '#3498db', Normal: '#2ecc71' }[s] || '#888');
     const stStyle = s => s === 'Closed' ? 'background:#e8f8f5;color:#1a7a5e'
       : s === 'New' ? 'background:#fef0f0;color:#c0392b'
         : 'background:#fef9e7;color:#7d6608';
@@ -5236,7 +5236,7 @@ function generatePDFReport() {
       { label: 'Critical', value: data.filter(i => i.severity === 'Critical').length, color: '#e74c3c' },
       { label: 'High', value: data.filter(i => i.severity === 'High').length, color: '#e67e22' },
       { label: 'Medium', value: data.filter(i => i.severity === 'Medium').length, color: '#3498db' },
-      { label: 'Low', value: data.filter(i => i.severity === 'Low').length, color: '#2ecc71' },
+      { label: 'Normal', value: data.filter(i => i.severity === 'Normal').length, color: '#2ecc71' },
     ].filter(s => s.value > 0);
 
     const statusGroups = {};
@@ -5382,7 +5382,7 @@ function generateExcelReport() {
   showToast('📊 Generating Excel file\u2026', 'success');
   setTimeout(() => {
     const summary = {
-      severities: ['Critical', 'High', 'Medium', 'Low'].map(s => ({ label: s, value: data.filter(i => i.severity === s).length })),
+      severities: ['Critical', 'High', 'Medium', 'Normal'].map(s => ({ label: s, value: data.filter(i => i.severity === s).length })),
       statuses: [...new Set(data.map(i => i.status))].map(s => ({ label: s, value: data.filter(i => i.status === s).length })),
       areas: [...new Set(data.map(i => i.area || 'Unspecified'))].map(a => ({ label: a, value: data.filter(i => (i.area || 'Unspecified') === a).length })),
       customers: Object.entries(data.reduce((m, i) => { m[i.customer] = (m[i.customer] || 0) + 1; return m; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([l, v]) => ({ label: l, value: v })),
@@ -5422,7 +5422,7 @@ function _buildXLSX(data, filename) {
   // Pre-compute derived fields for each row
   data = data.map(function (inc) {
     const xlTZ = inc.timezone || 'IST';
-    const slaH = { Critical: 1, High: 4, Medium: 12, Low: 24 }[inc.severity] || 6;
+    const slaH = { Critical: 1, High: 4, Medium: 12, Normal: 24 }[inc.severity] || 6;
     const dtStr = inc.downtimeStr ||
       (inc.downtimeH > 0
         ? inc.downtimeH + 'h' + (inc.downtimeM > 0 ? ' ' + inc.downtimeM + 'm' : '')
@@ -5464,8 +5464,8 @@ function _buildXLSX(data, filename) {
 
   // Style IDs:
   // 0=normal  1=header(yellow+bold)  2=ID(white)  3=ID(gray)
-  // 4=white   5=gray   6=Critical   7=High   8=Medium   9=Low
-  const sevStyle = { Critical: 6, High: 7, Medium: 8, Low: 9 };
+  // 4=white   5=gray   6=Critical   7=High   8=Medium   9=Normal
+  const sevStyle = { Critical: 6, High: 7, Medium: 8, Normal: 9 };
 
   // Sheet rows
   let rows = '';
@@ -5535,7 +5535,7 @@ function _buildXLSX(data, filename) {
     + '<xf numFmtId="0" fontId="0" fillId="6"  borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>'                    // 6 Critical
     + '<xf numFmtId="0" fontId="0" fillId="7"  borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>'                    // 7 High
     + '<xf numFmtId="0" fontId="0" fillId="8"  borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>'                    // 8 Medium
-    + '<xf numFmtId="0" fontId="0" fillId="9"  borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>'                    // 9 Low
+    + '<xf numFmtId="0" fontId="0" fillId="9"  borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>'                    // 9 Normal
     + '</cellXfs>'
     + '</styleSheet>';
 
@@ -5619,10 +5619,10 @@ function showToast(msg, type = 'success') {
 
 
 // ─── INCIDENT REPORT VIEW ─────────────────────────────────────
-const SLA_TARGETS = { Critical: 2, High: 6, Medium: 24, Low: 72 }; // hours
+const SLA_TARGETS = { Critical: 2, High: 6, Medium: 24, Normal: 72 }; // hours
 
 function getResolutionHours(inc) {
-  const base = { Critical: 1.5, High: 4.2, Medium: 8.7, Low: 24.3 };
+  const base = { Critical: 1.5, High: 4.2, Medium: 8.7, Normal: 24.3 };
   const jitter = (Math.random() * 0.6) - 0.3;
   return inc.status === 'Closed' ? (base[inc.severity] + jitter).toFixed(1) : null;
 }
@@ -5647,7 +5647,7 @@ function viewIncidentReport(id) {
   document.getElementById('ir_date').textContent = new Date(inc.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
   document.getElementById('ir_severity').innerHTML = `<span class="badge badge-${inc.severity.toLowerCase()}">${inc.severity}</span>`;
   document.getElementById('ir_status').innerHTML = `<span class="badge">${inc.status}</span>`;
-  const slaHours = { Critical: 1, High: 4, Medium: 12, Low: 24 }[inc.severity] || 6;
+  const slaHours = { Critical: 1, High: 4, Medium: 12, Normal: 24 }[inc.severity] || 6;
   const baseDate = new Date(inc.date + 'T09:00:00');
   const actualHours = (inc.downtimeH || 0) + (inc.downtimeM || 0) / 60 || slaHours;
   const endDate = new Date(baseDate.getTime() + actualHours * 3600000);
@@ -5661,13 +5661,13 @@ function viewIncidentReport(id) {
     Critical: 'Critical system failure due to infrastructure misconfiguration or security breach. Full forensic analysis conducted.',
     High: 'Service degradation caused by application-level error or upstream dependency failure. Identified during incident triage.',
     Medium: 'Functional issue traced to configuration drift or software defect. Isolated to specific service component.',
-    Low: 'Minor operational issue with limited user impact. Resolved through standard change management procedures.',
+    Normal: 'Minor operational issue with limited user impact. Resolved through standard change management procedures.',
   };
   const resMap = {
     Critical: 'Emergency rollback applied. Hotfix deployed to production. Infrastructure hardened. Post-incident review scheduled.',
     High: 'Service restored by restarting affected components and applying configuration fix. Monitoring enhanced.',
     Medium: 'Configuration corrected and deployment pushed. Verified stable across all environments.',
-    Low: 'Issue resolved via standard support procedure. Documentation updated.',
+    Normal: 'Issue resolved via standard support procedure. Documentation updated.',
   };
   _q('ir_rca', inc.rca || rcaMap[inc.severity] || 'Root cause analysis pending.');
   _q('ir_resolution', inc.resolution || resMap[inc.severity] || 'Resolution steps applied.');
@@ -5721,7 +5721,7 @@ function exportIncidentPDF() {
 
   // Timeline — use inc.timezone (set during create/edit) for all time display
   const pdfTZ = inc.timezone || 'IST';
-  const slaHours = { Critical: 1, High: 4, Medium: 12, Low: 24 }[severity] || 6;
+  const slaHours = { Critical: 1, High: 4, Medium: 12, Normal: 24 }[severity] || 6;
   const istOff = getTZOffset('IST');
   const rawStart = inc.startDT || (inc.date + 'T09:00');
   const startUTC = new Date(rawStart).getTime() - istOff * 3600000;
@@ -5736,18 +5736,18 @@ function exportIncidentPDF() {
     Critical: 'Critical system failure due to infrastructure misconfiguration or security breach.',
     High: 'Service degradation caused by application-level error or upstream dependency failure.',
     Medium: 'Functional issue traced to configuration drift or software defect.',
-    Low: 'Minor operational issue with limited user impact.',
+    Normal: 'Minor operational issue with limited user impact.',
   };
   const resMap = {
     Critical: 'Emergency rollback applied. Hotfix deployed to production. Post-incident review scheduled.',
     High: 'Service restored by restarting affected components and applying configuration fix.',
     Medium: 'Configuration corrected and deployment pushed. Verified stable across all environments.',
-    Low: 'Issue resolved via standard support procedure. Documentation updated.',
+    Normal: 'Issue resolved via standard support procedure. Documentation updated.',
   };
   const rca = inc.rca || rcaMap[severity] || 'Root cause analysis pending.';
   const resolution = inc.resolution || resMap[severity] || 'Resolution steps applied.';
 
-  const sevColors = { Critical: '#dc2626', High: '#ea580c', Medium: '#ca8a04', Low: '#16a34a' };
+  const sevColors = { Critical: '#dc2626', High: '#ea580c', Medium: '#ca8a04', Normal: '#16a34a' };
   const sc = sevColors[severity] || '#3b4abf';
 
 
@@ -5929,7 +5929,7 @@ function clearReportFilters() {
 
 // ─── INCIDENT DETAIL PANEL ────────────────────────────────────
 
-// SLA_MAP removed — use SLA_HOURS = {Critical:1,High:4,Medium:12,Low:24}
+// SLA_MAP removed — use SLA_HOURS = {Critical:1,High:4,Medium:12,Normal:24}
 
 function openDetailPanel(id, editMode = false) {
   if (!hasPermission('view_incidents')) { showToast('Access denied: you cannot view incidents', 'error'); return; }
@@ -6026,7 +6026,7 @@ function openDetailPanel(id, editMode = false) {
   }
   // Fallback for incidents with no comments: use realistic estimate based on severity
   if (responseTime === null) {
-    const respMap = { Critical: 0.25, High: 0.75, Medium: 1.5, Low: 3 }; // hours
+    const respMap = { Critical: 0.25, High: 0.75, Medium: 1.5, Normal: 3 }; // hours
     const base = respMap[inc.severity] || 1;
     // Use incident id number as seed for deterministic (not random) variation
     const seed = parseInt((inc.id || 'INC-001').replace(/\D/g, '')) || 1;
@@ -6793,7 +6793,7 @@ function showNotificationPreview(inc) {
   const modal = document.getElementById('notifSimModal');
   const content = document.getElementById('notifSimContent');
   if (!modal || !content) return;
-  const sc = { Critical: '#f75c7c', High: '#f7b94f', Medium: '#4f8ef7', Low: '#2dd4a0' }[inc.severity] || '#4f8ef7';
+  const sc = { Critical: '#f75c7c', High: '#f7b94f', Medium: '#4f8ef7', Normal: '#2dd4a0' }[inc.severity] || '#4f8ef7';
   // Look up assignee email from current user list by matching name
   const assigneeUser = users.find(u => u.name === inc.engineer) || {};
   const assigneeEmail = assigneeUser.email || (inc.engineer ? inc.engineer.toLowerCase().replace(/\s+/g, '.') + '@magiccloud.io' : 'team' + '@' + 'magiccloud.io');
@@ -7203,7 +7203,7 @@ function updateReportTimestamps(incId, tzKey) {
   }
 
   // ── Start & End times ────────────────────────────────────
-  var slaHours = { Critical: 1, High: 4, Medium: 12, Low: 24 }[inc.severity] || 6;
+  var slaHours = { Critical: 1, High: 4, Medium: 12, Normal: 24 }[inc.severity] || 6;
   // Build the "raw" start time — stored as IST datetime-local string
   var rawStart = inc.startDT || (inc.date + 'T09:00');
   // Parse as IST: treat string as local IST, convert to UTC for Date object

@@ -655,7 +655,7 @@
 <span class="ms-placeholder" id="severityFilter_ph">All Severities</span>
 </div>
 <div class="ms-dropdown" id="severityFilter_dd">
-<label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Critical"/> Critical</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="High"/> High</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Medium"/> Medium</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Low"/> Low</label>
+<label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Critical"/> Critical</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="High"/> High</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Medium"/> Medium</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Normal"/> Normal</label>
 </div>
 </div>
 </div>
@@ -785,7 +785,7 @@
 <option value="Critical">Critical</option>
 <option value="High">High</option>
 <option value="Medium">Medium</option>
-<option value="Low">Low</option>
+<option value="Normal">Normal</option>
 </select>
 </div>
 <div class="filter-group">
@@ -1203,7 +1203,7 @@
 <div style="display:flex;gap:8px;align-items:center">
 <select id="c360FilterSev" onchange="renderC360Table()" style="font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);outline:none">
 <option value="">All Severities</option>
-<option>Critical</option><option>High</option><option>Medium</option><option>Low</option>
+<option>Critical</option><option>High</option><option>Medium</option><option>Normal</option>
 </select>
 <select id="c360FilterStatus" onchange="renderC360Table()" style="font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);outline:none">
 <option value="">All Statuses</option>
@@ -1248,7 +1248,7 @@
 <option value="Critical">🔴 Critical</option>
 <option value="High">🟠 High</option>
 <option value="Medium">🟡 Medium</option>
-<option value="Low">🟢 Low</option>
+<option value="Normal">🟢 Normal</option>
 </select>
 </div>
 <div class="form-group">
@@ -1765,7 +1765,7 @@
 </div>
 <div>
 <label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Severity <span style="color:var(--danger)">*</span></label>
-<select id="dp_f_severity" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer"><option value="Critical">🔴 Critical</option><option value="High">🟠 High</option><option value="Medium">🟡 Medium</option><option value="Low">🟢 Low</option></select>
+<select id="dp_f_severity" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer"><option value="Critical">🔴 Critical</option><option value="High">🟠 High</option><option value="Medium">🟡 Medium</option><option value="Normal">🟢 Normal</option></select>
 </div>
 <div>
 <label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Status <span style="color:var(--danger)">*</span></label>
@@ -2108,7 +2108,7 @@
 <div onclick="executeBulkAction('severity','Critical')" onmouseout="this.style.background=''" onmouseover="this.style.background='rgba(247,92,124,0.1)'" style="padding:7px 12px;border-radius:7px;cursor:pointer;font-size:12px;color:#f75c7c;font-weight:600;display:flex;align-items:center;gap:8px">🔴 Critical</div>
 <div onclick="executeBulkAction('severity','High')" onmouseout="this.style.background=''" onmouseover="this.style.background='rgba(247,185,79,0.1)'" style="padding:7px 12px;border-radius:7px;cursor:pointer;font-size:12px;color:#f7b94f;font-weight:600;display:flex;align-items:center;gap:8px">🟠 High</div>
 <div onclick="executeBulkAction('severity','Medium')" onmouseout="this.style.background=''" onmouseover="this.style.background='rgba(79,142,247,0.1)'" style="padding:7px 12px;border-radius:7px;cursor:pointer;font-size:12px;color:#4f8ef7;font-weight:600;display:flex;align-items:center;gap:8px">🟡 Medium</div>
-<div onclick="executeBulkAction('severity','Low')" onmouseout="this.style.background=''" onmouseover="this.style.background='rgba(45,212,160,0.1)'" style="padding:7px 12px;border-radius:7px;cursor:pointer;font-size:12px;color:#2dd4a0;font-weight:600;display:flex;align-items:center;gap:8px">🟢 Low</div>
+<div onclick="executeBulkAction('severity','Normal')" onmouseout="this.style.background=''" onmouseover="this.style.background='rgba(45,212,160,0.1)'" style="padding:7px 12px;border-radius:7px;cursor:pointer;font-size:12px;color:#2dd4a0;font-weight:600;display:flex;align-items:center;gap:8px">🟢 Normal</div>
 </div>
 </div>
 <!-- Change Status -->

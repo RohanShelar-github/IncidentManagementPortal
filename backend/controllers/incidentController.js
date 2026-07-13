@@ -21,13 +21,13 @@ const STATUS_FROM_DB = {
   closed: 'Closed'
 };
 
-const SEVERITY_TO_DB = { Critical: 'critical', High: 'high', Medium: 'medium', Normal: 'medium', Low: 'low' };
-const SEVERITY_FROM_DB = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' };
+const SEVERITY_TO_DB = { Critical: 'critical', High: 'high', Medium: 'medium', Normal: 'normal' };
+const SEVERITY_FROM_DB = { critical: 'Critical', high: 'High', medium: 'Medium', normal: 'Normal', low: 'Normal' };
 
 const normalizeStatus = (value) => STATUS_TO_DB[value] || STATUS_TO_DB[String(value || '').trim()] || String(value || 'New').toLowerCase();
 const normalizeSeverity = (value) => SEVERITY_TO_DB[value] || SEVERITY_TO_DB[String(value || '').trim()] || String(value || 'Medium').toLowerCase();
 const displayStatus = (value) => STATUS_FROM_DB[value] || value || 'New';
-const displaySeverity = (value) => SEVERITY_FROM_DB[value] || value || 'Medium';
+const displaySeverity = (value) => SEVERITY_FROM_DB[String(value || '').toLowerCase()] || value || 'Medium';
 const isIncidentReportStatusValid = (value) => ['Yes', 'No'].includes(String(value || '').trim());
 const toDateTimeValue = (value) => {
   if (!value) return '';
@@ -391,7 +391,7 @@ const getDashboardStats = async (req, res) => {
     const [statusBreakdown] = await pool.query('SELECT status, COUNT(*) as count FROM incidents GROUP BY status');
     const [severityBreakdown] = await pool.query('SELECT severity, COUNT(*) as count FROM incidents GROUP BY severity');
     const [areaBreakdown] = await pool.query('SELECT COALESCE(area.area_name, incidents.area) AS area, COUNT(*) as count FROM incidents LEFT JOIN area ON area.id = incidents.area_id GROUP BY COALESCE(area.area_name, incidents.area)');
-    return res.status(200).json({ success: true, data: { total: totalResult[0].count, open: openResult[0].count, critical: criticalResult[0].count, statusBreakdown, severityBreakdown, areaBreakdown } });
+    return res.status(200).json({ success: true, data: { total: totalResult[0].count, open: openResult[0].count, critical: criticalResult[0].count, statusBreakdown, severityBreakdown: severityBreakdown.map((item) => ({ ...item, severity: displaySeverity(item.severity) })), areaBreakdown } });
   } catch (error) {
     console.error('Dashboard stats error:', error);
     return res.status(500).json({ success: false, message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });

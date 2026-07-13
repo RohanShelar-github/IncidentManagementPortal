@@ -159,7 +159,7 @@ Authorization: Bearer {your_token_here}
 **Query Parameters:**
 - `customer` - Filter by customer name
 - `area` - Filter by area (Infra, Application, Historian)
-- `severity` - Filter by severity (Critical, High, Medium, Low)
+- `severity` - Filter by severity (Critical, High, Medium, Normal)
 - `status` - Filter by status
 - `tags` - Filter by tags (comma-separated)
 - `search` - Search in title and description
@@ -352,7 +352,7 @@ Authorization: Bearer {your_token_here}
         "count": 6
       },
       {
-        "severity": "Low",
+        "severity": "Normal",
         "count": 3
       }
     ],

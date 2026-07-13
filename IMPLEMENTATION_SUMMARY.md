@@ -166,7 +166,7 @@ Password: admin123
 ### ✅ Dashboard & Filtering
 - [x] Dashboard statistics (total, open, critical)
 - [x] Filter by customer
-- [x] Filter by severity (Critical, High, Medium, Low)
+- [x] Filter by severity (Critical, High, Medium, Normal)
 - [x] Filter by status
 - [x] Filter by area (Infra, Application, Historian)
 - [x] Filter by tags

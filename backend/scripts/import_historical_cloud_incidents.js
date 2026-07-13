@@ -51,11 +51,11 @@ function normalizeSeverity(value, review) {
   if (k === 'critical') return 'critical';
   if (k === 'high') return 'high';
   if (k === 'medium') return 'medium';
-  if (k === 'low') return 'low';
-  if (k === 'normal') {
-    review.transformations.normalSeverityToMedium += 1;
-    return 'medium';
+  if (k === 'low') {
+    review.transformations.lowSeverityToNormal += 1;
+    return 'normal';
   }
+  if (k === 'normal') return 'normal';
   review.manual.push({ type: 'severity', value: v, action: 'Defaulted to medium' });
   return 'medium';
 }
@@ -185,7 +185,7 @@ async function main() {
     manual: [],
     createdCustomers: [],
     createdAreas: [],
-    transformations: { normalSeverityToMedium: 0, tier3QaToThirdParty: 0, ownerAliases: [] },
+    transformations: { lowSeverityToNormal: 0, tier3QaToThirdParty: 0, ownerAliases: [] },
     mapping: {
       'Case Number': 'legacy_case_number, sf_case_no',
       Customer: 'customer, customer_id',
@@ -300,7 +300,7 @@ async function main() {
     `- Manual review items: ${report.manual.length}`,
     '',
     '## Transformations',
-    `- Normal severity mapped to Medium: ${report.transformations.normalSeverityToMedium}`,
+    `- Low severity mapped to Normal: ${report.transformations.lowSeverityToNormal}`,
     `- Escalated to Tier 3 QA mapped to Escalated to 3rd Party: ${report.transformations.tier3QaToThirdParty}`,
     `- Owner aliases applied: ${report.transformations.ownerAliases.length}`,
     '',

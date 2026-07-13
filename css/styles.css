@@ -1059,7 +1059,7 @@
   .badge-critical { background: rgba(247,92,124,0.15); color: var(--danger); border: 1px solid rgba(247,92,124,0.25); }
   .badge-high { background: rgba(247,185,79,0.15); color: var(--warning); border: 1px solid rgba(247,185,79,0.25); }
   .badge-medium { background: rgba(79,142,247,0.15); color: var(--accent); border: 1px solid rgba(79,142,247,0.25); }
-  .badge-low { background: rgba(45,212,160,0.15); color: var(--success); border: 1px solid rgba(45,212,160,0.25); }
+  .badge-low, .badge-normal { background: rgba(45,212,160,0.15); color: var(--success); border: 1px solid rgba(45,212,160,0.25); }
 
   .badge-new              { background:rgba(247,92,124,.15);   color:#f75c7c;        border:1px solid rgba(247,92,124,.3); }
   .badge-closed           { background:rgba(45,212,160,.15);  color:var(--success); border:1px solid rgba(45,212,160,.25); }
