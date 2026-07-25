@@ -508,6 +508,164 @@ function getIncResolutionMinutes(inc) {
   return mttr > 0 ? mttr : getIncDowntimeMinutes(inc);
 }
 
+function getIncidentSlaHours(inc) {
+  var incidentTarget = Number(inc && (inc.sla_hours ?? inc.slaHours));
+  if (Number.isFinite(incidentTarget) && incidentTarget > 0) return incidentTarget;
+  return { Critical: 1, High: 4, Medium: 12, Normal: 24 }[inc && inc.severity] || 24;
+}
+
+function getIncidentTimestamp(inc, fields) {
+  for (var index = 0; index < fields.length; index++) {
+    var value = inc && inc[fields[index]];
+    if (!value) continue;
+    var timestamp = new Date(value).getTime();
+    if (Number.isFinite(timestamp)) return timestamp;
+  }
+  return NaN;
+}
+
+// A Missed MTTR is a completed incident whose actual resolution duration
+// strictly exceeds its applicable SLA resolution target.
+function isMissedMttr(inc) {
+  var status = String((inc && inc.status) || '').toLowerCase();
+  if (status !== 'closed' && status !== 'resolved') return false;
+
+  var createdMs = getIncidentTimestamp(inc, ['date_time_opened', 'startDT', 'date_created']);
+  if (!Number.isFinite(createdMs) && inc && inc.date) {
+    createdMs = new Date(inc.date + 'T09:00:00').getTime();
+  }
+  var resolvedMs = getIncidentTimestamp(inc, ['date_time_closed', 'endDT', 'downtimeEnd']);
+  if (!Number.isFinite(createdMs) || !Number.isFinite(resolvedMs) || resolvedMs < createdMs) return false;
+
+  return (resolvedMs - createdMs) > getIncidentSlaHours(inc) * 3600000;
+}
+
+function countMissedMttr(incidentList) {
+  return (incidentList || []).filter(isMissedMttr).length;
+}
+
+const MTTD_SLA_MINUTES = 15;
+
+function getIncidentMttdMinutes(inc) {
+  var storedMinutes = inc && (inc.mttd_minutes ?? inc.mttdMinutes);
+  if (storedMinutes !== null && storedMinutes !== undefined && storedMinutes !== '') {
+    var numericMinutes = Number(storedMinutes);
+    if (Number.isFinite(numericMinutes) && numericMinutes >= 0) return numericMinutes;
+  }
+  var hours = Number(inc && (inc.mttdH ?? inc.mttd_h)) || 0;
+  var minutes = Number(inc && (inc.mttdM ?? inc.mttd_m)) || 0;
+  return Math.max(0, hours * 60 + minutes);
+}
+
+function isMissedMttd(inc) {
+  return getIncidentMttdMinutes(inc) > MTTD_SLA_MINUTES;
+}
+
+function countMissedMttd(incidentList) {
+  return (incidentList || []).filter(isMissedMttd).length;
+}
+
+function getActualMttrMinutes(inc) {
+  var createdMs = getIncidentTimestamp(inc, ['date_time_opened', 'startDT', 'date_created']);
+  if (!Number.isFinite(createdMs) && inc && inc.date) createdMs = new Date(inc.date + 'T09:00:00').getTime();
+  var resolvedMs = getIncidentTimestamp(inc, ['date_time_closed', 'endDT', 'downtimeEnd']);
+  if (!Number.isFinite(createdMs) || !Number.isFinite(resolvedMs) || resolvedMs < createdMs) return NaN;
+  return (resolvedMs - createdMs) / 60000;
+}
+
+function formatMetricDuration(minutes) {
+  if (!Number.isFinite(minutes) || minutes < 0) return '—';
+  var totalSeconds = Math.round(minutes * 60);
+  var hours = Math.floor(totalSeconds / 3600);
+  var mins = Math.floor((totalSeconds % 3600) / 60);
+  var seconds = totalSeconds % 60;
+  var parts = [];
+  if (hours) parts.push(hours + 'h');
+  if (mins || (!hours && !seconds)) parts.push(mins + 'm');
+  if (seconds) parts.push(seconds + 's');
+  return parts.join(' ');
+}
+
+function escapeMetricHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, function (character) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character];
+  });
+}
+
+function openMetricDrillDown(metric, customerName) {
+  if (!hasPermission('view_incidents')) {
+    showToast('Access denied: you cannot view incidents', 'error');
+    return;
+  }
+  if (metric !== 'mttr' && metric !== 'mttd') return;
+  var predicate = metric === 'mttr' ? isMissedMttr : isMissedMttd;
+  var metricIncidents = incidents.filter(function (inc) {
+    return (!customerName || inc.customer === customerName) && predicate(inc);
+  });
+  metricIncidents.sort(function (a, b) {
+    return getIncidentTimestamp(b, ['date_time_opened', 'startDT', 'date_created'])
+      - getIncidentTimestamp(a, ['date_time_opened', 'startDT', 'date_created']);
+  });
+
+  var title = document.getElementById('metricDrilldownTitle');
+  var sub = document.getElementById('metricDrilldownSub');
+  var actualHeader = document.getElementById('metricActualHeader');
+  var body = document.getElementById('metricDrilldownBody');
+  var overlay = document.getElementById('metricDrilldownOverlay');
+  if (!title || !sub || !actualHeader || !body || !overlay) return;
+  title.textContent = 'Missed ' + metric.toUpperCase() + ' Incidents';
+  sub.textContent = metricIncidents.length + ' contributing incident' + (metricIncidents.length === 1 ? '' : 's')
+    + ' · ' + (customerName || 'All customers') + ' · Select a row to view details';
+  actualHeader.textContent = 'Actual ' + metric.toUpperCase();
+
+  if (!metricIncidents.length) {
+    body.innerHTML = '<tr><td class="metric-drilldown-empty" colspan="11">No contributing incidents found.</td></tr>';
+  } else {
+    body.innerHTML = metricIncidents.map(function (inc) {
+      var actualMinutes = metric === 'mttr' ? getActualMttrMinutes(inc) : getIncidentMttdMinutes(inc);
+      var targetMinutes = metric === 'mttr' ? getIncidentSlaHours(inc) * 60 : MTTD_SLA_MINUTES;
+      var created = formatStoredIncidentDateTime(inc.date_time_opened || inc.startDT || inc.date_created || inc.date);
+      var resolved = formatStoredIncidentDateTime(inc.date_time_closed || inc.endDT || inc.downtimeEnd);
+      var severity = String(inc.severity || 'Normal');
+      var status = String(inc.status || '');
+      return '<tr data-incident-id="' + escapeMetricHtml(inc.id) + '">'
+        + '<td class="id-cell">' + escapeMetricHtml(inc.id) + '</td>'
+        + '<td class="title-cell">' + escapeMetricHtml(inc.title || inc.summary || '—') + '</td>'
+        + '<td>' + escapeMetricHtml(inc.customer || '—') + '</td>'
+        + '<td>' + escapeMetricHtml(inc.priority || severity) + '</td>'
+        + '<td><span class="badge badge-' + escapeMetricHtml(severity.toLowerCase()) + '">' + escapeMetricHtml(severity) + '</span></td>'
+        + '<td><span class="badge badge-' + escapeMetricHtml(status.toLowerCase().replace(/ /g, '-').replace(/&/g, '')) + '">' + escapeMetricHtml(status) + '</span></td>'
+        + '<td class="metric-date-cell">' + escapeMetricHtml(created) + '</td>'
+        + '<td class="metric-date-cell">' + escapeMetricHtml(resolved) + '</td>'
+        + '<td>' + formatMetricDuration(targetMinutes) + '</td>'
+        + '<td>' + formatMetricDuration(actualMinutes) + '</td>'
+        + '<td class="metric-breach-cell">+' + formatMetricDuration(actualMinutes - targetMinutes) + '</td>'
+        + '</tr>';
+    }).join('');
+    body.querySelectorAll('tr[data-incident-id]').forEach(function (row) {
+      row.addEventListener('click', function () { openMetricIncidentDetail(row.getAttribute('data-incident-id')); });
+    });
+  }
+  overlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function openMetricIncidentDetail(id) {
+  openDetailPanel(id);
+  var detailOverlay = document.getElementById('detailOverlay');
+  var metricOverlay = document.getElementById('metricDrilldownOverlay');
+  if (detailOverlay && metricOverlay && metricOverlay.classList.contains('open')) {
+    detailOverlay.classList.add('metric-drilldown-detail');
+  }
+}
+
+function closeMetricDrillDown() {
+  var panel = document.getElementById('detailPanel');
+  if (panel && panel.classList.contains('open')) closeDetailPanel();
+  var overlay = document.getElementById('metricDrilldownOverlay');
+  if (overlay) overlay.classList.remove('open');
+  document.body.style.overflow = '';
+}
 // ─── AUDIT LOG ─────────────────────────────────────────────────────────────
 function addAudit(icon, action, detail) {
   auditLog.unshift({
@@ -871,6 +1029,8 @@ function renderC360Full(custName) {
     if (i.status === 'Closed' || i.status === 'Resolved') return false;
     return (Date.now() - new Date(i.startDT || (i.date + 'T09:00')).getTime()) > (SLA_H[i.severity] || 24) * 3600000;
   }).length;
+  var missedMttr = countMissedMttr(custIncs);
+  var missedMttd = countMissedMttd(custIncs);
 
   // ── Customer stats subtitle ──
   var statsEl = document.getElementById('c360CustStats');
@@ -912,10 +1072,15 @@ function renderC360Full(custName) {
       { label: 'Open', value: open, color: 'var(--warning)' },
       { label: 'Closed', value: closed, color: 'var(--success)' },
       { label: 'SLA Breaches', value: breached, color: breached > 0 ? 'var(--danger)' : 'var(--success)' },
+      { id: 'c360MissedMttr', metric: 'mttr', label: 'Missed MTTR Count', value: missedMttr, color: missedMttr > 0 ? 'var(--danger)' : 'var(--success)' },
+      { id: 'c360MissedMttd', metric: 'mttd', label: 'Missed MTTD Count', value: missedMttd, color: missedMttd > 0 ? 'var(--danger)' : 'var(--success)' },
     ];
     statsRow.innerHTML = stats.map(function (s) {
-      return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px 18px">'
-        + '<div style="font-size:24px;font-weight:800;color:' + s.color + '">' + s.value + '</div>'
+      var drillDown = s.metric
+        ? ' class="metric-kpi-card" role="button" tabindex="0" title="View contributing incidents" onclick="openMetricDrillDown(\'' + s.metric + '\',document.getElementById(\'c360CustName\').textContent)" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();this.click()}"'
+        : '';
+      return '<div' + drillDown + ' style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px 18px">'
+        + '<div' + (s.id ? ' id="' + s.id + '"' : '') + ' style="font-size:24px;font-weight:800;color:' + s.color + '">' + s.value + '</div>'
         + '<div style="font-size:12px;color:var(--text-muted);margin-top:4px">' + s.label + '</div></div>';
     }).join('');
   }
@@ -2928,7 +3093,7 @@ function confirmDeleteIncident(id) {
     if (activityLog.length > 50) activityLog.pop();
 
     if (detailCurrentId === id) {
-      document.getElementById('detailOverlay').classList.remove('open');
+      document.getElementById('detailOverlay').classList.remove('open', 'metric-drilldown-detail');
       document.getElementById('detailPanel').classList.remove('open');
       document.body.style.overflow = '';
       detailCurrentId = null;
@@ -3779,6 +3944,23 @@ function updateStats() {
   var slSub = document.getElementById('statSLABreachSub');
   if (slEl) slEl.textContent = breachCount;
   if (slSub) slSub.textContent = breachCount > 0 ? 'open incidents breached' : 'all within SLA';
+
+  // Aggregate all completed incidents across every customer using the shared predicate.
+  var missedMttrCount = countMissedMttr(incidents);
+  var missedMttrEl = document.getElementById('statMissedMttr');
+  var missedMttrSub = document.getElementById('statMissedMttrSub');
+  if (missedMttrEl) missedMttrEl.textContent = missedMttrCount;
+  if (missedMttrSub) missedMttrSub.textContent = missedMttrCount === 1
+    ? 'resolved incident exceeded target'
+    : 'resolved incidents exceeded target';
+
+  var missedMttdCount = countMissedMttd(incidents);
+  var missedMttdEl = document.getElementById('statMissedMttd');
+  var missedMttdSub = document.getElementById('statMissedMttdSub');
+  if (missedMttdEl) missedMttdEl.textContent = missedMttdCount;
+  if (missedMttdSub) missedMttdSub.textContent = missedMttdCount === 1
+    ? 'incident exceeded the 15m target'
+    : 'incidents exceeded the 15m target';
 
   // Avg MTTR (for closed incidents with downtime)
   var withDT = closedIncs.filter(function (i) { return getIncDowntimeMinutes(i) > 0; });
@@ -6343,8 +6525,9 @@ function closeDetailFromIncidentClose(id) {
 
 function closeDetailPanel() {
   document.getElementById('detailPanel').classList.remove('open', 'editing');
-  document.getElementById('detailOverlay').classList.remove('open');
-  document.body.style.overflow = '';
+  document.getElementById('detailOverlay').classList.remove('open', 'metric-drilldown-detail');
+  var metricOverlay = document.getElementById('metricDrilldownOverlay');
+  document.body.style.overflow = metricOverlay && metricOverlay.classList.contains('open') ? 'hidden' : '';
   detailCurrentId = null;
 }
 

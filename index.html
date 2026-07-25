@@ -384,6 +384,16 @@
 <div class="stat-value" id="statSLABreach" style="color:var(--danger)">—</div>
 <div class="stat-delta" id="statSLABreachSub">of incidents breached SLA</div>
 </div>
+<div class="stat-card metric-kpi-card" onclick="openMetricDrillDown('mttr')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View contributing incidents" style="border-color:rgba(247,92,124,0.3);background:linear-gradient(135deg,rgba(247,92,124,0.08),rgba(247,92,124,0.02))">
+<div class="stat-label" style="color:var(--danger)">Missed MTTR Count</div>
+<div class="stat-value" id="statMissedMttr" style="color:var(--danger)">—</div>
+<div class="stat-delta" id="statMissedMttrSub">resolved incidents exceeded target</div>
+</div>
+<div class="stat-card metric-kpi-card" onclick="openMetricDrillDown('mttd')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View contributing incidents" style="border-color:rgba(247,92,124,0.3);background:linear-gradient(135deg,rgba(247,92,124,0.08),rgba(247,92,124,0.02))">
+<div class="stat-label" style="color:var(--danger)">Missed MTTD Count</div>
+<div class="stat-value" id="statMissedMttd" style="color:var(--danger)">—</div>
+<div class="stat-delta" id="statMissedMttdSub">incidents exceeded the 15m target</div>
+</div>
 <div class="stat-card" style="border-color:rgba(79,142,247,0.3);background:linear-gradient(135deg,rgba(79,142,247,0.08),rgba(79,142,247,0.02))">
 <div class="stat-label" style="color:var(--accent)">Avg MTTR</div>
 <div class="stat-value" id="statAvgMTTR" style="color:var(--accent)">—</div>
@@ -1165,7 +1175,7 @@
 </div>
 </div>
 <!-- Stats row -->
-<div id="c360StatsRow" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px"></div>
+<div id="c360StatsRow" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:20px"></div>
 <!-- Operational metrics row -->
 <div id="c360MetricsRow" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px"></div>
 <!-- Charts row: monthly trend + area breakdown -->
@@ -1570,6 +1580,29 @@
 </div>
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
+<!-- ─── MTTR / MTTD METRIC DRILL-DOWN ───────────────────────── -->
+<div class="metric-drilldown-overlay" id="metricDrilldownOverlay" onclick="if(event.target===this)closeMetricDrillDown()">
+<div class="metric-drilldown-dialog" role="dialog" aria-modal="true" aria-labelledby="metricDrilldownTitle">
+<div class="metric-drilldown-header">
+<div>
+<div class="chart-title" id="metricDrilldownTitle">Breached Incidents</div>
+<div class="chart-sub" id="metricDrilldownSub">Select an incident to view details</div>
+</div>
+<button class="btn btn-secondary btn-sm" onclick="closeMetricDrillDown()" aria-label="Close drill-down">✕ Close</button>
+</div>
+<div class="metric-drilldown-table-wrap">
+<table class="metric-drilldown-table">
+<thead>
+<tr>
+<th>Incident ID</th><th>Title / Summary</th><th>Customer</th><th>Priority</th><th>Severity</th><th>Status</th>
+<th>Created Date/Time</th><th>Resolved Date/Time</th><th>SLA Target</th><th id="metricActualHeader">Actual Value</th><th>Breach Duration</th>
+</tr>
+</thead>
+<tbody id="metricDrilldownBody"></tbody>
+</table>
+</div>
+</div>
+</div>
 <!-- ─── INCIDENT DETAIL OVERLAY ──────────────────────────────── -->
 <div class="detail-overlay" id="detailOverlay" onclick="closeDetailPanel()"></div>
 <!-- ─── INCIDENT DETAIL PANEL ─────────────────────────────────── -->

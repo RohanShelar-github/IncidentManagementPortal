@@ -814,6 +814,59 @@
   .stat-card.green::after { background: linear-gradient(90deg, var(--success), transparent); }
   .stat-card.red::after { background: linear-gradient(90deg, var(--danger), transparent); }
 
+  .metric-kpi-card { cursor: pointer; }
+  .metric-kpi-card:hover {
+    border-color: var(--danger) !important;
+    transform: translateY(-1px);
+  }
+  .metric-kpi-card:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .metric-drilldown-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 450;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(0,0,0,.62);
+    backdrop-filter: blur(3px);
+  }
+  .metric-drilldown-overlay.open { display: flex; }
+  .detail-overlay.metric-drilldown-detail { pointer-events: none; background: transparent; backdrop-filter: none; }
+  .metric-drilldown-dialog {
+    width: min(1500px, 96vw);
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 14px;
+    box-shadow: 0 24px 80px rgba(0,0,0,.45);
+  }
+  .metric-drilldown-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .metric-drilldown-table-wrap { overflow: auto; }
+  .metric-drilldown-table { min-width: 1400px; }
+  .metric-drilldown-table tbody tr { cursor: pointer; }
+  .metric-drilldown-table tbody tr:hover td { background: rgba(79,142,247,.07); }
+  .metric-drilldown-empty {
+    padding: 36px !important;
+    text-align: center;
+    color: var(--text-muted);
+  }
+  .metric-date-cell { white-space: nowrap; font-family: var(--font-mono); font-size: 11px; }
+  .metric-breach-cell { color: var(--danger); font-weight: 700; white-space: nowrap; }
   .stat-label {
     font-family: var(--font-mono);
     font-size: 10px;
