@@ -498,6 +498,26 @@ function getIncDowntimeMinutes(inc) {
   return 0;
 }
 
+function isHistorianIncident(inc) {
+  return window.ReportingMetrics
+    ? window.ReportingMetrics.isHistorianIncident(inc)
+    : String((inc && inc.project) || '').trim().toLowerCase() === 'historian';
+}
+
+function isNgcCustomer(customerName) {
+  return window.ReportingMetrics
+    ? window.ReportingMetrics.isNgcCustomer(customerName)
+    : String(customerName || '').trim().toLowerCase() === 'ngc';
+}
+
+function partitionHistorianIncidents(incidentList) {
+  if (window.ReportingMetrics) return window.ReportingMetrics.partitionHistorianIncidents(incidentList);
+  return (incidentList || []).reduce(function (result, inc) {
+    result[isHistorianIncident(inc) ? 'historian' : 'application'].push(inc);
+    return result;
+  }, { application: [], historian: [] });
+}
+
 function getIncMttrMinutes(inc) {
   if (inc.mttrH > 0 || inc.mttrM > 0) return (inc.mttrH || 0) * 60 + (inc.mttrM || 0);
   return 0;
@@ -592,7 +612,7 @@ function escapeMetricHtml(value) {
   });
 }
 
-function openMetricDrillDown(metric, customerName) {
+function openMetricDrillDown(metric, customerName, reportingCategory) {
   if (!hasPermission('view_incidents')) {
     showToast('Access denied: you cannot view incidents', 'error');
     return;
@@ -600,7 +620,10 @@ function openMetricDrillDown(metric, customerName) {
   if (metric !== 'mttr' && metric !== 'mttd') return;
   var predicate = metric === 'mttr' ? isMissedMttr : isMissedMttd;
   var metricIncidents = incidents.filter(function (inc) {
-    return (!customerName || inc.customer === customerName) && predicate(inc);
+    if (customerName && inc.customer !== customerName) return false;
+    if (reportingCategory === 'application' && isHistorianIncident(inc)) return false;
+    if (reportingCategory === 'historian' && !isHistorianIncident(inc)) return false;
+    return predicate(inc);
   });
   metricIncidents.sort(function (a, b) {
     return getIncidentTimestamp(b, ['date_time_opened', 'startDT', 'date_created'])
@@ -1017,24 +1040,101 @@ function openCustomer360(custName) {
   renderC360Full(custName);
 }
 
-function renderC360Full(custName) {
-  var custIncs = incidents.filter(function (i) { return i.customer === custName; });
-  var total = custIncs.length;
-  var open = custIncs.filter(function (i) { return i.status !== 'Closed' && i.status !== 'Resolved'; }).length;
-  var closed = custIncs.filter(function (i) { return i.status === 'Closed' || i.status === 'Resolved'; }).length;
-  var critical = custIncs.filter(function (i) { return i.severity === 'Critical'; }).length;
-  var totalDT = custIncs.reduce(function (acc, i) { return acc + getIncDowntimeMinutes(i); }, 0);
-  var SLA_H = { Critical: 1, High: 4, Medium: 12, Normal: 24 };
-  var breached = custIncs.filter(function (i) {
+function buildC360Metrics(incidentList) {
+  var total = incidentList.length;
+  var open = incidentList.filter(function (i) { return i.status !== 'Closed' && i.status !== 'Resolved'; }).length;
+  var closed = incidentList.filter(function (i) { return i.status === 'Closed' || i.status === 'Resolved'; }).length;
+  var critical = incidentList.filter(function (i) { return i.severity === 'Critical'; }).length;
+  var totalDT = incidentList.reduce(function (sum, i) { return sum + getIncDowntimeMinutes(i); }, 0);
+  var breached = incidentList.filter(function (i) {
     if (i.status === 'Closed' || i.status === 'Resolved') return false;
-    return (Date.now() - new Date(i.startDT || (i.date + 'T09:00')).getTime()) > (SLA_H[i.severity] || 24) * 3600000;
+    return (Date.now() - new Date(i.startDT || (i.date + 'T09:00')).getTime()) > getIncidentSlaHours(i) * 3600000;
   }).length;
-  var missedMttr = countMissedMttr(custIncs);
-  var missedMttd = countMissedMttd(custIncs);
+  var withDT = incidentList.filter(function (i) { return getIncDowntimeMinutes(i) > 0; });
+  return {
+    total: total,
+    open: open,
+    closed: closed,
+    critical: critical,
+    totalDT: totalDT,
+    breached: breached,
+    missedMttr: countMissedMttr(incidentList),
+    missedMttd: countMissedMttd(incidentList),
+    avgMTTR: withDT.length ? Math.round(withDT.reduce(function (sum, i) { return sum + getIncDowntimeMinutes(i); }, 0) / withDT.length) : 0,
+    resolutionRate: total ? Math.round(closed / total * 100) : 0
+  };
+}
 
-  // ── Customer stats subtitle ──
+function renderC360MetricSection(statsRowId, metricsRowId, values, category) {
+  var statsRow = document.getElementById(statsRowId);
+  if (statsRow) {
+    var stats = [
+      { label: 'Total Incidents', value: values.total, color: 'var(--accent)' },
+      { label: 'Open', value: values.open, color: 'var(--warning)' },
+      { label: 'Closed', value: values.closed, color: 'var(--success)' },
+      { label: 'SLA Breaches', value: values.breached, color: values.breached ? 'var(--danger)' : 'var(--success)' },
+      { metric: 'mttr', label: 'Missed MTTR Count', value: values.missedMttr, color: values.missedMttr ? 'var(--danger)' : 'var(--success)' },
+      { metric: 'mttd', label: 'Missed MTTD Count', value: values.missedMttd, color: values.missedMttd ? 'var(--danger)' : 'var(--success)' }
+    ];
+    statsRow.innerHTML = stats.map(function (stat) {
+      var drillDown = stat.metric
+        ? ' class="metric-kpi-card" role="button" tabindex="0" title="View contributing incidents" onclick="openMetricDrillDown(\'' + stat.metric + '\',document.getElementById(\'c360CustName\').textContent,\'' + category + '\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();this.click()}"'
+        : '';
+      return '<div' + drillDown + ' style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px 18px">'
+        + '<div style="font-size:24px;font-weight:800;color:' + stat.color + '">' + stat.value + '</div>'
+        + '<div style="font-size:12px;color:var(--text-muted);margin-top:4px">' + stat.label + '</div></div>';
+    }).join('');
+  }
+  var metricsRow = document.getElementById(metricsRowId);
+  if (metricsRow) {
+    var metrics = [
+      { label: 'Total Downtime', value: values.totalDT ? minutesToHM(values.totalDT) : '—', color: 'var(--warning)' },
+      { label: 'Avg MTTR', value: values.avgMTTR ? minutesToHM(values.avgMTTR) : '—', color: 'var(--accent)' },
+      { label: 'Critical Incidents', value: values.critical, color: values.critical ? 'var(--danger)' : 'var(--success)' },
+      { label: 'Resolution Rate', value: values.resolutionRate + '%', color: values.resolutionRate >= 80 ? 'var(--success)' : 'var(--warning)' }
+    ];
+    metricsRow.innerHTML = metrics.map(function (metric) {
+      return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px 18px">'
+        + '<div style="font-size:24px;font-weight:800;color:' + metric.color + '">' + metric.value + '</div>'
+        + '<div style="font-size:12px;color:var(--text-muted);margin-top:4px">' + metric.label + '</div></div>';
+    }).join('');
+  }
+}
+
+function renderC360Full(custName) {
+  var allCustIncs = incidents.filter(function (i) { return i.customer === custName; });
+  var isNgc = isNgcCustomer(custName);
+  var categories = partitionHistorianIncidents(allCustIncs);
+  var custIncs = isNgc ? categories.application : allCustIncs;
+  var historianIncs = isNgc ? categories.historian : [];
+  var appValues = buildC360Metrics(custIncs);
+  var historianValues = buildC360Metrics(historianIncs);
+  var total = appValues.total;
+  var open = appValues.open;
+  var closed = appValues.closed;
+  var critical = appValues.critical;
+  var totalDT = appValues.totalDT;
+  var breached = appValues.breached;
+
+  var appHeading = document.getElementById('c360ApplicationHeading');
+  var historianSection = document.getElementById('c360HistorianSection');
+  var analyticsScope = document.getElementById('c360AnalyticsScope');
+  var categoryFilter = document.getElementById('c360FilterCategory');
+  if (appHeading) appHeading.style.display = isNgc ? '' : 'none';
+  if (historianSection) historianSection.style.display = isNgc ? '' : 'none';
+  if (analyticsScope) analyticsScope.style.display = isNgc ? '' : 'none';
+  if (categoryFilter) {
+    categoryFilter.style.display = isNgc ? '' : 'none';
+    categoryFilter.value = isNgc ? 'application' : '';
+  }
+
   var statsEl = document.getElementById('c360CustStats');
-  if (statsEl) statsEl.textContent = total + ' incidents · ' + open + ' open · ' + (totalDT > 0 ? minutesToHM(totalDT) + ' downtime' : 'no downtime recorded');
+  if (statsEl) {
+    statsEl.textContent = isNgc
+      ? appValues.total + ' application incidents · ' + (appValues.totalDT ? minutesToHM(appValues.totalDT) : '0m') + ' application downtime · '
+        + historianValues.total + ' Historian incidents · ' + (historianValues.totalDT ? minutesToHM(historianValues.totalDT) : '0m') + ' Historian downtime'
+      : total + ' incidents · ' + open + ' open · ' + (totalDT > 0 ? minutesToHM(totalDT) + ' downtime' : 'no downtime recorded');
+  }
 
   // ── Tags (unique tags from customer incidents) ──
   var tagsEl = document.getElementById('c360Tags');
@@ -1064,46 +1164,9 @@ function renderC360Full(custName) {
     ctx.fillText(healthScore, cx, cy);
   }
 
-  // ── Stats row ──
-  var statsRow = document.getElementById('c360StatsRow');
-  if (statsRow) {
-    var stats = [
-      { label: 'Total Incidents', value: total, color: 'var(--accent)' },
-      { label: 'Open', value: open, color: 'var(--warning)' },
-      { label: 'Closed', value: closed, color: 'var(--success)' },
-      { label: 'SLA Breaches', value: breached, color: breached > 0 ? 'var(--danger)' : 'var(--success)' },
-      { id: 'c360MissedMttr', metric: 'mttr', label: 'Missed MTTR Count', value: missedMttr, color: missedMttr > 0 ? 'var(--danger)' : 'var(--success)' },
-      { id: 'c360MissedMttd', metric: 'mttd', label: 'Missed MTTD Count', value: missedMttd, color: missedMttd > 0 ? 'var(--danger)' : 'var(--success)' },
-    ];
-    statsRow.innerHTML = stats.map(function (s) {
-      var drillDown = s.metric
-        ? ' class="metric-kpi-card" role="button" tabindex="0" title="View contributing incidents" onclick="openMetricDrillDown(\'' + s.metric + '\',document.getElementById(\'c360CustName\').textContent)" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();this.click()}"'
-        : '';
-      return '<div' + drillDown + ' style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px 18px">'
-        + '<div' + (s.id ? ' id="' + s.id + '"' : '') + ' style="font-size:24px;font-weight:800;color:' + s.color + '">' + s.value + '</div>'
-        + '<div style="font-size:12px;color:var(--text-muted);margin-top:4px">' + s.label + '</div></div>';
-    }).join('');
-  }
-
-  // ── Metrics row ──
-  var metricsRow = document.getElementById('c360MetricsRow');
-  if (metricsRow) {
-    var withDT = custIncs.filter(function (i) { return getIncDowntimeMinutes(i) > 0; });
-    var avgMTTR = withDT.length > 0 ? Math.round(withDT.reduce(function (s, i) { return s + getIncDowntimeMinutes(i); }, 0) / withDT.length) : 0;
-    var critCount = custIncs.filter(function (i) { return i.severity === 'Critical'; }).length;
-    var resRate = total > 0 ? Math.round(closed / total * 100) : 0;
-    var metrics = [
-      { label: 'Total Downtime', value: totalDT > 0 ? minutesToHM(totalDT) : '—', color: 'var(--warning)' },
-      { label: 'Avg MTTR', value: avgMTTR > 0 ? minutesToHM(avgMTTR) : '—', color: 'var(--accent)' },
-      { label: 'Critical Incidents', value: critCount, color: critCount > 0 ? 'var(--danger)' : 'var(--success)' },
-      { label: 'Resolution Rate', value: resRate + '%', color: resRate >= 80 ? 'var(--success)' : 'var(--warning)' },
-    ];
-    metricsRow.innerHTML = metrics.map(function (m) {
-      return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px 18px">'
-        + '<div style="font-size:24px;font-weight:800;color:' + m.color + '">' + m.value + '</div>'
-        + '<div style="font-size:12px;color:var(--text-muted);margin-top:4px">' + m.label + '</div></div>';
-    }).join('');
-  }
+  // ── Reporting category metrics ──
+  renderC360MetricSection('c360StatsRow', 'c360MetricsRow', appValues, isNgc ? 'application' : 'all');
+  if (isNgc) renderC360MetricSection('c360HistorianStatsRow', 'c360HistorianMetricsRow', historianValues, 'historian');
 
   // ── Monthly trend chart ──
   var trendEl = document.getElementById('c360TrendChart');
@@ -1603,32 +1666,48 @@ function saveProfile() {
 function renderC360Table() {
   var sevFilter = document.getElementById('c360FilterSev') ? document.getElementById('c360FilterSev').value : '';
   var statusFilter = document.getElementById('c360FilterStatus') ? document.getElementById('c360FilterStatus').value : '';
+  var categoryEl = document.getElementById('c360FilterCategory');
+  var category = categoryEl && categoryEl.style.display !== 'none' ? categoryEl.value : '';
   var custName = document.getElementById('c360CustName') ? document.getElementById('c360CustName').textContent : '';
 
   var filtered = incidents.filter(function (i) {
     if (i.customer !== custName) return false;
+    if (category === 'application' && isHistorianIncident(i)) return false;
+    if (category === 'historian' && !isHistorianIncident(i)) return false;
     if (sevFilter && i.severity !== sevFilter) return false;
     if (statusFilter && i.status !== statusFilter) return false;
     return true;
   });
 
+  var historyTitle = document.getElementById('c360HistoryTitle');
+  if (historyTitle) historyTitle.textContent = category === 'historian'
+    ? 'Historian Incident History'
+    : category === 'application' ? 'Application Incident History' : 'Complete Incident History';
   var countEl = document.getElementById('c360IncCount');
   if (countEl) countEl.textContent = filtered.length + ' incident' + (filtered.length !== 1 ? 's' : '');
 
   var table = document.getElementById('c360Table');
   if (!table) return;
   if (!filtered.length) {
-    table.innerHTML = '<tr><td colspan="5" style="padding:20px;text-align:center;color:var(--text-muted)">No incidents match the filter</td></tr>';
+    table.innerHTML = '<tr><td colspan="10" style="padding:20px;text-align:center;color:var(--text-muted)">No incidents match the filter</td></tr>';
     return;
   }
   table.innerHTML = filtered.map(function (i) {
-    return '<tr onclick="openDetailPanel(\'' + i.id + '\')" style="cursor:pointer" '
+    var sla = getSLAInfo(i);
+    var mttrMinutes = getIncMttrMinutes(i);
+    var downtimeMinutes = getIncDowntimeMinutes(i);
+    return '<tr onclick="openDetailPanel(\'' + escapeMetricHtml(i.id) + '\')" style="cursor:pointer" '
       + 'onmouseenter="this.style.background=\'rgba(79,142,247,0.05)\'" onmouseleave="this.style.background=\'\'">'
-      + '<td class="id-cell">' + i.id + '</td>'
-      + '<td class="title-cell">' + i.title + '</td>'
-      + '<td><span class="badge badge-' + i.severity.toLowerCase() + '">' + i.severity + '</span></td>'
-      + '<td><span class="badge badge-' + i.status.toLowerCase().replace(/ /g, '-').replace(/&/g, '') + '">' + i.status + '</span></td>'
-      + '<td style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">' + i.date + '</td>'
+      + '<td class="id-cell">' + escapeMetricHtml(i.id) + '</td>'
+      + '<td class="title-cell">' + escapeMetricHtml(i.title || '—') + '</td>'
+      + '<td>' + escapeMetricHtml(i.area || '—') + '</td>'
+      + '<td><span class="badge badge-' + escapeMetricHtml(i.severity.toLowerCase()) + '">' + escapeMetricHtml(i.severity) + '</span></td>'
+      + '<td><span class="badge badge-' + escapeMetricHtml(i.status.toLowerCase().replace(/ /g, '-').replace(/&/g, '')) + '">' + escapeMetricHtml(i.status) + '</span></td>'
+      + '<td><span class="' + escapeMetricHtml(sla.cls) + '" title="' + escapeMetricHtml(sla.title) + '">' + escapeMetricHtml(sla.label) + '</span></td>'
+      + '<td>' + (mttrMinutes > 0 ? minutesToHM(mttrMinutes) : '—') + '</td>'
+      + '<td>' + (downtimeMinutes > 0 ? minutesToHM(downtimeMinutes) : '—') + '</td>'
+      + '<td>' + escapeMetricHtml(i.engineer || '—') + '</td>'
+      + '<td style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">' + escapeMetricHtml(i.date || '—') + '</td>'
       + '</tr>';
   }).join('');
 }
@@ -3912,13 +3991,19 @@ function updateStats() {
   var o = document.getElementById('statOpen'); if (o) o.textContent = open;
   var c = document.getElementById('statClosed'); if (c) c.textContent = closed;
 
-  // Total Downtime (all closed incidents with recorded downtime)
+  // Application and Historian downtime are independent, while honoring dashboard filters.
   var closedIncs = data.filter(function (i) { return i.status === 'Closed' || i.status === 'Resolved'; });
-  var dt = closedIncs.reduce(function (s, i) { return s + getIncDowntimeMinutes(i); }, 0);
+  var downtimeCategories = partitionHistorianIncidents(closedIncs);
+  var applicationDowntime = downtimeCategories.application.reduce(function (s, i) { return s + getIncDowntimeMinutes(i); }, 0);
+  var historianDowntime = downtimeCategories.historian.reduce(function (s, i) { return s + getIncDowntimeMinutes(i); }, 0);
   var dtEl = document.getElementById('statDowntime');
   var dtSub = document.getElementById('statDowntimeSub');
-  if (dtEl) dtEl.textContent = dt > 0 ? minutesToHM(dt) : '0m';
-  if (dtSub) dtSub.textContent = closed + ' closed incident' + (closed !== 1 ? 's' : '');
+  var historianDtEl = document.getElementById('statHistorianDowntime');
+  var historianDtSub = document.getElementById('statHistorianDowntimeSub');
+  if (dtEl) dtEl.textContent = applicationDowntime > 0 ? minutesToHM(applicationDowntime) : '0m';
+  if (dtSub) dtSub.textContent = downtimeCategories.application.length + ' application incident' + (downtimeCategories.application.length !== 1 ? 's' : '');
+  if (historianDtEl) historianDtEl.textContent = historianDowntime > 0 ? minutesToHM(historianDowntime) : '0m';
+  if (historianDtSub) historianDtSub.textContent = downtimeCategories.historian.length + ' Historian incident' + (downtimeCategories.historian.length !== 1 ? 's' : '');
 
   // Avg Resolution (closed/resolved incidents with recorded database timing)
   var withResolution = closedIncs.filter(function (i) { return getIncResolutionMinutes(i) > 0; });

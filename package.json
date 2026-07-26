@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "ui": "node server-ui.js",
-    "start": "node server-ui.js"
+    "start": "node server-ui.js",
+    "test": "node --test"
   }
 }

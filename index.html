@@ -377,7 +377,12 @@
 <div class="stat-card" style="border-color:rgba(247,185,79,0.3);background:linear-gradient(135deg,rgba(247,185,79,0.08),rgba(247,185,79,0.02))">
 <div class="stat-label" style="color:var(--warning)">Total Downtime</div>
 <div class="stat-value" id="statDowntime" style="color:var(--warning)">—</div>
-<div class="stat-delta" id="statDowntimeSub" style="font-size:11px;color:var(--text-muted)">across closed incidents</div>
+<div class="stat-delta" id="statDowntimeSub" style="font-size:11px;color:var(--text-muted)">application incidents only</div>
+</div>
+<div class="stat-card" style="border-color:rgba(155,89,182,0.3);background:linear-gradient(135deg,rgba(155,89,182,0.08),rgba(155,89,182,0.02))">
+<div class="stat-label" style="color:#b78ae5">Historian Downtime</div>
+<div class="stat-value" id="statHistorianDowntime" style="color:#b78ae5">—</div>
+<div class="stat-delta" id="statHistorianDowntimeSub" style="font-size:11px;color:var(--text-muted)">Historian incidents only</div>
 </div>
 <div class="stat-card" style="border-color:rgba(247,92,124,0.3);background:linear-gradient(135deg,rgba(247,92,124,0.08),rgba(247,92,124,0.02))">
 <div class="stat-label" style="color:var(--danger)">SLA Breach Rate</div>
@@ -1174,10 +1179,18 @@
 <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Health Score</div>
 </div>
 </div>
+<div id="c360ApplicationHeading" style="display:none;margin:0 0 12px;font-size:15px;font-weight:800;color:var(--accent)">Application Data <span style="font-size:11px;font-weight:500;color:var(--text-muted)">(Historian excluded)</span></div>
 <!-- Stats row -->
 <div id="c360StatsRow" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:20px"></div>
 <!-- Operational metrics row -->
 <div id="c360MetricsRow" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px"></div>
+<section id="c360HistorianSection" style="display:none;margin-bottom:20px;padding:18px;border:1px solid rgba(155,89,182,0.35);border-radius:14px;background:linear-gradient(135deg,rgba(155,89,182,0.08),rgba(155,89,182,0.02))">
+<div style="font-size:15px;font-weight:800;color:#b78ae5">Historian Data</div>
+<div style="font-size:11px;color:var(--text-muted);margin:4px 0 14px">Customer infrastructure incidents reported independently from application performance.</div>
+<div id="c360HistorianStatsRow" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:14px"></div>
+<div id="c360HistorianMetricsRow" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px"></div>
+</section>
+<div id="c360AnalyticsScope" style="display:none;margin:-4px 0 14px;padding:9px 12px;border-left:3px solid var(--accent);background:rgba(79,142,247,0.06);font-size:11px;color:var(--text-muted)">The analytics below show Application Data only; Historian incidents are excluded.</div>
 <!-- Charts row: monthly trend + area breakdown -->
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
 <div class="chart-card">
@@ -1209,8 +1222,11 @@
 <!-- Full incident history table -->
 <div class="chart-card">
 <div class="chart-header" style="margin-bottom:16px">
-<div class="chart-title">Complete Incident History</div>
+<div class="chart-title" id="c360HistoryTitle">Complete Incident History</div>
 <div style="display:flex;gap:8px;align-items:center">
+<select id="c360FilterCategory" onchange="renderC360Table()" style="display:none;font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);outline:none">
+<option value="application">Application Data</option><option value="historian">Historian Data</option>
+</select>
 <select id="c360FilterSev" onchange="renderC360Table()" style="font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);outline:none">
 <option value="">All Severities</option>
 <option>Critical</option><option>High</option><option>Medium</option><option>Normal</option>
@@ -2216,5 +2232,5 @@
 <div id="c360PickerList" style="overflow-y:auto;flex:1;display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
 </div>
 </div>
-<script src="./js/app.js"></script><script src="./config/config.js"></script></body>
+<script src="./js/reportingMetrics.js"></script><script src="./js/app.js"></script><script src="./config/config.js"></script></body>
 </html>
