@@ -99,10 +99,7 @@
   }
 
   function fileIdentifier(incident) {
-    var caseNumber = normalizeText(
-      incident && (incident.sfCase || incident.sf_case || incident.sf_case_no || incident.legacy_case_number)
-    );
-    return caseNumber || normalizeText(incident && (incident.id || incident.incident_ref), 'Incident');
+    return normalizeText(incident && (incident.id || incident.incident_ref), 'Incident');
   }
 
   function buildReportModel(incident, context) {

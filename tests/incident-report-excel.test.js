@@ -36,7 +36,7 @@ function sampleIncident() {
 test('builds the sample-like two-sheet incident report layout', () => {
   const workbook = excel.buildIncidentReportWorkbook(sampleIncident(), { reportCreator: 'Rohan' });
 
-  assert.equal(workbook.filename, 'Incident_Report_00135421.xlsx');
+  assert.equal(workbook.filename, 'Incident_Report_INC-283.xlsx');
   assert.deepEqual(workbook.sheets.map((sheet) => sheet.name), ['135421', 'Sheet2']);
   assert.match(workbook.sheets[0].xml, /<dimension ref="A1:C26"\/>/);
   assert.match(workbook.sheets[0].xml, /<mergeCell ref="A1:C1"\/>/);
