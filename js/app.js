@@ -5958,9 +5958,30 @@ function printIncidentReport() {
 function exportIncidentExcel() {
   const id = document.getElementById('ir_id').textContent.split(' ')[0];
   const inc = incidents.find(i => i.id === id);
-  if (!inc) return;
-  _buildXLSX([inc], (inc.id || 'incident') + '-report.xlsx');
-  showToast('\u2713 Incident Excel exported', 'success');
+  if (!inc) { showToast('No incident selected', 'error'); return; }
+  if (!window.IncidentReportExcel) {
+    showToast('Excel report template is unavailable', 'error');
+    return;
+  }
+  try {
+    const workbook = window.IncidentReportExcel.buildIncidentReportWorkbook(inc, {
+      reportCreator: currentUserName || ''
+    });
+    const bytes = window.IncidentReportExcel.createXlsxBytes(workbook);
+    const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = workbook.filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
+    showToast('\u2713 Incident Excel exported', 'success');
+  } catch (error) {
+    console.error('Incident Excel export failed:', error);
+    showToast('Excel export failed: ' + error.message, 'error');
+  }
 }
 
 
