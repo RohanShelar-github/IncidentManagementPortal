@@ -30,6 +30,12 @@
     overflow-x: hidden;
   }
 
+  /* Keep both authentication views hidden until session restoration resolves. */
+  body.auth-pending #loginScreen,
+  body.auth-pending #portalApp {
+    display: none !important;
+  }
+
   /* ─── LOGIN SCREEN ────────────────────────────────────────── */
   #loginScreen {
     position: fixed;

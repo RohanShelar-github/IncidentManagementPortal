@@ -72,4 +72,40 @@ const getCurrentUser = async (req, res) => {
   }
 };
 
-module.exports = { login, getAllUsers, getCurrentUser };
+const deleteUser = async (req, res) => {
+  try {
+    if (String(req.user.role || '').toLowerCase() !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Only administrators can delete users' });
+    }
+
+    const userId = Number(req.params.id);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return res.status(400).json({ success: false, message: 'Invalid user ID' });
+    }
+    if (Number(req.user.id) === userId) {
+      return res.status(400).json({ success: false, message: 'You cannot delete your own user account' });
+    }
+
+    const [users] = await pool.query('SELECT id, full_name, email FROM users WHERE id = ?', [userId]);
+    if (users.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    await pool.query('DELETE FROM users WHERE id = ?', [userId]);
+    return res.status(200).json({
+      success: true,
+      message: `User ${users[0].full_name || users[0].email} deleted successfully`
+    });
+  } catch (error) {
+    if (error && error.code === 'ER_ROW_IS_REFERENCED_2') {
+      return res.status(409).json({
+        success: false,
+        message: 'This user cannot be deleted because they are referenced by existing incident history'
+      });
+    }
+    console.error('Delete user error:', error);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+module.exports = { login, getAllUsers, getCurrentUser, deleteUser };

@@ -190,17 +190,6 @@ function toMysqlDatetime(value) {
   return String(value).replace('T', ' ').substring(0, 19);
 }
 
-function hasIncidentReportStatus(value) {
-  return ['Yes', 'No'].indexOf(String(value || '').trim()) >= 0;
-}
-
-function requireIncidentReportStatus(inc) {
-  if (hasIncidentReportStatus(inc && inc.incident_report_status)) return true;
-  showToast('Please set Incident Report Status to Yes or No before closing the incident.', 'error');
-  if (inc && inc.id) openDetailPanel(inc.id, true);
-  return false;
-}
-
 function normalizeIncidentFromBackend(incident) {
   const startDT = toDatetimeLocal(incident.date_created || incident.startDT || incident.date);
   const canonicalDowntime = Number(incident.downtime_mins ?? incident.downtime_minutes_total);
@@ -254,7 +243,8 @@ function normalizeIncidentFromBackend(incident) {
     rdTickets: incident.rd_tickets ?? incident.rdTickets ?? '',
     incident_report_status: incident.incident_report_status ?? incident.incidentReportStatus ?? '',
     incidentReportStatus: incident.incident_report_status ?? incident.incidentReportStatus ?? '',
-    tags: Array.isArray(incident.tags) ? incident.tags : []
+    tags: Array.isArray(incident.tags) ? incident.tags : [],
+    comments: Array.isArray(incident.comments) ? incident.comments : []
   });
 }
 
@@ -368,6 +358,20 @@ function loadIncidentsFromBackend(callback) {
     .then(data => {
       if (data && data.success && Array.isArray(data.data)) {
         incidents = data.data.map(normalizeIncidentFromBackend);
+        incidentComments = {};
+        incidents.forEach(function (incident) {
+          incidentComments[incident.id] = (incident.comments || []).map(function (comment) {
+            var created = comment.created_at ? new Date(comment.created_at) : new Date();
+            return Object.assign({}, comment, {
+              type: 'comment',
+              action: comment.action || 'commented',
+              msg: (comment.author || 'User') + ' commented — ' + (comment.detail || ''),
+              time: created.toLocaleString(),
+              timestamp: created.getTime(),
+              incId: incident.id
+            });
+          });
+        });
         filteredIncidents = [...incidents];
         console.log('Loaded ' + incidents.length + ' incidents from backend');
         populateEngineerDropdowns();
@@ -496,6 +500,7 @@ function updateStatusBar() {
 var auditLog = [];
 var activityLog = [];
 var incidentComments = {};
+var currentNotificationIncidentId = null;
 
 // Activity data is loaded from database-backed incident actions
 
@@ -779,17 +784,77 @@ function renderFeed(incId) {
 }
 
 function submitComment(incId) {
+  incId = incId || reportCurrentIncId;
   var inp = document.getElementById('commentInput');
-  if (!inp) return;
+  if (!inp || !incId) return;
   var text = inp.value.trim();
   if (!text) return;
-  addFeedEntry(incId, 'comment', 'commented', text);
-  addNotification('info', '<strong>' + currentUserName + '</strong> commented on ' + incId);
-  inp.value = '';
-  renderFeed(incId);
+  persistIncidentComment(incId, text, function () {
+    inp.value = '';
+    renderReportComments(incId);
+    closeMentionDropdown('reportMentionDropdown');
+  });
 }
 
-function loadComments(incId) { renderFeed(incId); }
+function renderReportComments(incId) {
+  var list = document.getElementById('commentsList');
+  var count = document.getElementById('commentCount');
+  var entries = (incidentComments[incId] || []).filter(function (entry) { return entry.type === 'comment'; });
+  if (count) count.textContent = entries.length;
+  if (!list) return;
+  list.innerHTML = entries.length ? entries.slice().reverse().map(function (entry) {
+    return '<div style="padding:9px 0;border-bottom:1px solid var(--border)">'
+      + '<div style="font-size:12px;font-weight:600;color:var(--text)">' + (entry.author || 'User') + '</div>'
+      + '<div style="font-size:12px;color:var(--text-muted);margin-top:3px">' + (entry.detail || '') + '</div>'
+      + '</div>';
+  }).join('') : '<div style="font-size:12px;color:var(--text-muted);padding:8px 0">No comments yet</div>';
+}
+
+function loadComments(incId) {
+  renderFeed(incId);
+  renderReportComments(incId);
+}
+
+function persistIncidentComment(incId, text, callback) {
+  if (!window.APP_CONFIG || !window.APP_CONFIG.ENABLE_BACKEND) {
+    addFeedEntry(incId, 'comment', 'commented', text);
+    if (callback) callback();
+    return;
+  }
+  var token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) { showToast('Not authenticated. Please login first.', 'error'); return; }
+  fetch(window.APP_CONFIG.API_BASE_URL + '/incidents/' + encodeURIComponent(incId) + '/comments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ comment_text: text })
+  })
+    .then(function (response) {
+      return response.json().then(function (data) {
+        if (!response.ok || !data.success) throw new Error(data.message || 'Failed to save comment');
+        return data;
+      });
+    })
+    .then(function (data) {
+      var comment = data.data || { author: currentUserName, detail: text, type: 'comment', created_at: new Date().toISOString() };
+      if (!incidentComments[incId]) incidentComments[incId] = [];
+      incidentComments[incId].push(Object.assign({}, comment, {
+        type: 'comment',
+        action: comment.action || 'commented',
+        msg: (comment.author || currentUserName) + ' commented — ' + text,
+        time: new Date(comment.created_at || Date.now()).toLocaleString(),
+        timestamp: new Date(comment.created_at || Date.now()).getTime(),
+        incId: incId
+      }));
+      var incident = incidents.find(function (item) { return item.id === incId; });
+      if (incident) incident.comments = incidentComments[incId].slice();
+      addNotification('info', '<strong>' + currentUserName + '</strong> commented on ' + incId);
+      if (callback) callback(comment);
+    })
+    .catch(function (error) {
+      console.error('Save comment error:', error);
+      showToast(error.message || 'Failed to save comment', 'error');
+    });
+}
 
 // ─── NOTIFICATION HELPERS ──────────────────────────────────────────────────
 function showNotificationPreview(inc) {
@@ -1537,48 +1602,80 @@ function submitDpComment() {
   if (!inp || !detailCurrentId) return;
   var text = inp.value.trim();
   if (!text) { showToast('Enter a comment', 'error'); return; }
-  addFeedEntry(detailCurrentId, 'comment', 'commented', text);
-  inp.value = '';
-  renderFeed(detailCurrentId);
-  addNotification('info', '<strong>' + currentUserName + '</strong> commented on ' + detailCurrentId);
-  closeMentionDropdown();
+  persistIncidentComment(detailCurrentId, text, function () {
+    inp.value = '';
+    renderFeed(detailCurrentId);
+    closeMentionDropdown();
+  });
 }
 
 function handleCommentKey(e) {
+  if (selectMentionOnEnter(e, 'dp_comment_input', 'mentionDropdown')) return;
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitDpComment(); }
 }
 
-function handleMentionInput(el) {
-  var val = el.value;
-  var lastAt = val.lastIndexOf('@');
-  if (lastAt < 0) { closeMentionDropdown(); return; }
-  var query = val.substring(lastAt + 1).toLowerCase();
-  var dd = document.getElementById('mentionDropdown');
+function handleReportCommentKey(e) {
+  if (selectMentionOnEnter(e, 'commentInput', 'reportMentionDropdown')) return;
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment(); }
+}
+
+function handleMentionInput(el, dropdownId) {
+  dropdownId = dropdownId || 'mentionDropdown';
+  var cursor = typeof el.selectionStart === 'number' ? el.selectionStart : el.value.length;
+  var beforeCursor = el.value.substring(0, cursor);
+  var mentionMatch = beforeCursor.match(/(?:^|\s)@([^@\n]*)$/);
+  if (!mentionMatch) { closeMentionDropdown(dropdownId); return; }
+  var query = mentionMatch[1].toLowerCase().trim();
+  var dd = document.getElementById(dropdownId);
   if (!dd) return;
   var matches = users.filter(function (u) {
-    return u.name.toLowerCase().includes(query);
+    return u && u.name && u.name.toLowerCase().includes(query);
   }).slice(0, 6);
-  if (!matches.length) { closeMentionDropdown(); return; }
-  dd.innerHTML = matches.map(function (u) {
-    return '<div onclick="insertMention(\'' + u.name + '\')" style="padding:7px 12px;cursor:pointer;font-size:12px;color:var(--text)" '
-      + 'onmouseenter="this.style.background=\'rgba(79,142,247,0.1)\'" onmouseleave="this.style.background=\'\'">'
-      + u.name + ' <span style="color:var(--text-muted);font-size:11px">(' + u.role + ')</span></div>';
-  }).join('');
+  if (!matches.length) { closeMentionDropdown(dropdownId); return; }
+  dd.innerHTML = '';
+  dd._mentionMatches = matches;
+  dd._mentionStart = cursor - mentionMatch[1].length - 1;
+  dd._mentionEnd = cursor;
+  matches.forEach(function (u) {
+    var option = document.createElement('div');
+    option.style.cssText = 'padding:8px 12px;cursor:pointer;font-size:12px;color:var(--text)';
+    option.textContent = u.name + (u.role ? ' (' + u.role + ')' : '');
+    option.onmouseenter = function () { option.style.background = 'rgba(79,142,247,0.1)'; };
+    option.onmouseleave = function () { option.style.background = ''; };
+    option.onmousedown = function (event) {
+      event.preventDefault();
+      insertMention(u.name, el.id, dropdownId);
+    };
+    dd.appendChild(option);
+  });
   dd.style.display = 'block';
 }
 
-function insertMention(name) {
-  var inp = document.getElementById('dp_comment_input');
+function insertMention(name, inputId, dropdownId) {
+  inputId = inputId || 'dp_comment_input';
+  dropdownId = dropdownId || 'mentionDropdown';
+  var inp = document.getElementById(inputId);
+  var dd = document.getElementById(dropdownId);
   if (!inp) return;
-  var val = inp.value;
-  var lastAt = val.lastIndexOf('@');
-  inp.value = val.substring(0, lastAt) + '@' + name + ' ';
-  closeMentionDropdown();
+  var start = dd && Number.isInteger(dd._mentionStart) ? dd._mentionStart : inp.value.lastIndexOf('@');
+  var end = dd && Number.isInteger(dd._mentionEnd) ? dd._mentionEnd : inp.value.length;
+  inp.value = inp.value.substring(0, start) + '@' + name + ' ' + inp.value.substring(end);
+  var nextCursor = start + name.length + 2;
+  inp.setSelectionRange(nextCursor, nextCursor);
+  closeMentionDropdown(dropdownId);
   inp.focus();
 }
 
-function closeMentionDropdown() {
-  var dd = document.getElementById('mentionDropdown');
+function selectMentionOnEnter(e, inputId, dropdownId) {
+  var dd = document.getElementById(dropdownId);
+  if (e.key !== 'Enter' || e.shiftKey || !dd || dd.style.display !== 'block' || !dd._mentionMatches || !dd._mentionMatches.length) return false;
+  e.preventDefault();
+  insertMention(dd._mentionMatches[0].name, inputId, dropdownId);
+  return true;
+}
+
+function closeMentionDropdown(dropdownId) {
+  var dd = document.getElementById(dropdownId || 'mentionDropdown');
   if (dd) dd.style.display = 'none';
 }
 
@@ -1756,7 +1853,17 @@ function renderCreateTagChips() {
 }
 
 function addCreateTag(tag) {
-  tag = tag.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  tag = String(tag || '').trim();
+  if (tag.charAt(0) === '@') {
+    var requestedName = tag.substring(1).trim().toLowerCase();
+    var matchedUser = users.find(function (u) {
+      return u && u.name && u.name.toLowerCase() === requestedName;
+    });
+    if (!matchedUser) return;
+    tag = '@' + matchedUser.name;
+  } else {
+    tag = tag.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  }
   if (!tag || createModalTags.indexOf(tag) >= 0) return;
   createModalTags.push(tag);
   renderCreateTagChips();
@@ -1774,7 +1881,12 @@ function handleCreateTagKey(e) {
   if (e.key === 'Enter' || e.key === ',') {
     e.preventDefault();
     var inp = document.getElementById('f_tag_input');
-    if (inp && inp.value.trim()) addCreateTag(inp.value);
+    var box = document.getElementById('f_tag_suggestions');
+    if (inp && inp.value.trim().charAt(0) === '@' && box && box._userMatches && box._userMatches.length) {
+      addCreateTag('@' + box._userMatches[0].name);
+    } else if (inp && inp.value.trim()) {
+      addCreateTag(inp.value);
+    }
   } else if (e.key === 'Backspace') {
     var inp = document.getElementById('f_tag_input');
     if (inp && !inp.value && createModalTags.length) {
@@ -1788,6 +1900,37 @@ function showCreateTagSuggestions(q) {
   var box = document.getElementById('f_tag_suggestions');
   if (!box) return;
   q = (q || '').trim().toLowerCase();
+  box._userMatches = [];
+  if (q.charAt(0) === '@') {
+    var userQuery = q.substring(1).trim();
+    var userMatches = users.filter(function (u) {
+      return u && u.name && u.name.toLowerCase().includes(userQuery)
+        && createModalTags.indexOf('@' + u.name) < 0;
+    }).slice(0, 8);
+    if (!userMatches.length) { box.style.display = 'none'; return; }
+    box._userMatches = userMatches;
+    box.innerHTML = '';
+    userMatches.forEach(function (u) {
+      var option = document.createElement('div');
+      option.style.cssText = 'padding:8px 12px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:8px';
+      var name = document.createElement('span');
+      name.textContent = '@' + u.name;
+      var role = document.createElement('span');
+      role.style.cssText = 'color:var(--text-muted);font-size:11px';
+      role.textContent = u.role || '';
+      option.appendChild(name);
+      option.appendChild(role);
+      option.onmouseenter = function () { option.style.background = 'rgba(79,142,247,0.1)'; };
+      option.onmouseleave = function () { option.style.background = ''; };
+      option.onmousedown = function (event) {
+        event.preventDefault();
+        addCreateTag('@' + u.name);
+      };
+      box.appendChild(option);
+    });
+    box.style.display = 'block';
+    return;
+  }
   var allTags = [];
   incidents.forEach(function (i) { (i.tags || []).forEach(function (t) { if (allTags.indexOf(t) < 0) allTags.push(t); }); });
   var matches = allTags.filter(function (t) { return (!q || t.includes(q)) && createModalTags.indexOf(t) < 0; }).slice(0, 8);
@@ -2983,9 +3126,10 @@ function closeIncident(id) {
   if (!hasPermission('close_incidents')) { showToast('Access denied: you cannot close incidents', 'error'); return; }
   const inc = incidents.find(i => i.id === id);
   if (!inc) return;
-  if (!requireIncidentReportStatus(inc)) return;
 
-  const hasDetails = (inc.downtimeH > 0 || inc.downtimeM > 0) && inc.rca && inc.resolution && inc.downtimeEnd;
+  const hasDetails = (inc.downtimeH > 0 || inc.downtimeM > 0)
+    && (inc.mttrH > 0 || inc.mttrM > 0)
+    && inc.rca && inc.resolution && inc.downtimeEnd;
 
   if (hasDetails) {
     // All details already saved — just confirm close
@@ -3032,7 +3176,6 @@ function _showCloseConfirm(inc) {
 function _forceCloseIncident(id) {
   const inc = incidents.find(i => i.id === id);
   if (!inc) return;
-  if (!requireIncidentReportStatus(inc)) return;
 
   if (window.APP_CONFIG && window.APP_CONFIG.ENABLE_BACKEND) {
     const token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
@@ -3212,6 +3355,9 @@ function openDowntimeModal(id) {
   var _dtt = document.getElementById('dtm_title'); if (_dtt) _dtt.textContent = inc.title;
   document.getElementById('dtm_hours').value = inc.downtimeH || '';
   document.getElementById('dtm_mins').value = inc.downtimeM || '';
+  document.getElementById('dtm_mttr_hours').value = inc.mttrH || '';
+  document.getElementById('dtm_mttr_mins').value = inc.mttrM || '';
+  document.getElementById('dtm_resolved_by').value = inc.resolvedBy || inc.resolved_by || '';
   document.getElementById('dtm_rca').value = inc.rca || '';
   document.getElementById('dtm_resolution').value = inc.resolution || '';
   document.getElementById('dtm_inc_ref').value = id;
@@ -3252,10 +3398,12 @@ function confirmCloseIncident() {
   const id = document.getElementById('dtm_inc_ref').value;
   const inc = incidents.find(i => i.id === id);
   if (!inc) return;
-  if (!requireIncidentReportStatus(inc)) return;
 
   const h = parseInt(document.getElementById('dtm_hours').value) || 0;
   const m = parseInt(document.getElementById('dtm_mins').value) || 0;
+  const mttrH = parseInt(document.getElementById('dtm_mttr_hours').value) || 0;
+  const mttrM = parseInt(document.getElementById('dtm_mttr_mins').value) || 0;
+  const resolvedBy = document.getElementById('dtm_resolved_by').value;
   const rca = document.getElementById('dtm_rca').value.trim();
   const res = document.getElementById('dtm_resolution').value.trim();
   const endTimeRaw = document.getElementById('dtm_end_time').value;
@@ -3270,6 +3418,12 @@ function confirmCloseIncident() {
   inc.downtimeH = h;
   inc.downtimeM = m;
   inc.downtimeStr = h > 0 ? (m > 0 ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
+  inc.mttrH = mttrH;
+  inc.mttrM = mttrM;
+  inc.mttr_minutes = mttrH * 60 + mttrM;
+  inc.mttrStr = mttrH > 0 ? (mttrM > 0 ? `${mttrH}h ${mttrM}m` : `${mttrH}h`) : (mttrM > 0 ? `${mttrM}m` : '');
+  inc.resolvedBy = resolvedBy;
+  inc.resolved_by = resolvedBy;
   inc.endDT = closedAt;
   inc.date_time_closed = closedAt;
   inc.downtimeEnd = closedAt;
@@ -3298,6 +3452,10 @@ function confirmCloseIncident() {
         downtime_h: h,
         downtime_m: m,
         downtime_mins: h * 60 + m,
+        mttr_h: mttrH,
+        mttr_m: mttrM,
+        mttr_minutes: mttrH * 60 + mttrM,
+        resolved_by: resolvedBy,
         timezone: closeTZ,
         endDT: closedAt,
         date_time_closed: closedAt,
@@ -3558,6 +3716,7 @@ function renderUsersTable() {
         <div style="display:flex;gap:4px">
           <button class="btn btn-secondary btn-sm" onclick="editUserRole('${u.id}')">Change Role</button>
           <button class="btn btn-danger btn-sm" onclick="toggleUser('${u.id}')">${u.active ? 'Deactivate' : 'Activate'}</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteUser('${u.id}')">Delete</button>
         </div>
       </td>
     </tr>
@@ -3581,6 +3740,51 @@ function toggleUser(id) {
   user.active = !user.active;
   renderUsersTable();
   showToast(`${user.name} ${user.active ? 'activated' : 'deactivated'}`, 'success');
+}
+
+async function deleteUser(id) {
+  if (!hasPermission('manage_users') || String(currentRole || '').toLowerCase() !== 'admin') {
+    showToast('Only administrators can delete users', 'error');
+    return;
+  }
+  const user = users.find(function (u) { return String(u.id) === String(id); });
+  if (!user) return;
+
+  const confirmed = await showConfirm({
+    icon: '🗑️',
+    title: 'Delete User?',
+    msg: `${user.name} will be permanently removed from the database and assignee lists. This action cannot be undone.`,
+    ok: 'Delete User',
+    danger: true
+  });
+  if (!confirmed) return;
+
+  if (!window.APP_CONFIG || !window.APP_CONFIG.ENABLE_BACKEND) {
+    showToast('User deletion requires a database connection', 'error');
+    return;
+  }
+  const token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) {
+    showToast('Not authenticated. Please login first.', 'error');
+    return;
+  }
+
+  fetch(window.APP_CONFIG.API_BASE_URL + '/auth/users/' + encodeURIComponent(id), {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
+  })
+    .then(async function (response) {
+      const data = await response.json().catch(function () { return {}; });
+      if (!response.ok || !data.success) throw new Error(data.message || 'Failed to delete user');
+      users = users.filter(function (u) { return String(u.id) !== String(id); });
+      renderUsersTable();
+      populateEngineerDropdowns();
+      showToast(data.message || `${user.name} deleted successfully`, 'success');
+    })
+    .catch(function (error) {
+      console.error('Delete user error:', error);
+      showToast(error.message || 'Failed to delete user', 'error');
+    });
 }
 
 
@@ -4197,18 +4401,27 @@ function populateEngineerDropdowns() {
 }
 
 function ensureEngineerDropdownsLoaded(callback) {
-  populateEngineerDropdowns();
-  if (Array.isArray(users) && users.some(function (u) { return u && u.name; })) {
-    if (callback) callback();
-    return;
-  }
   if (!window.APP_CONFIG || !window.APP_CONFIG.ENABLE_BACKEND) {
-    if (callback) callback();
-    return;
-  }
-  loadUsersFromBackend(function () {
     populateEngineerDropdowns();
     if (callback) callback();
+    return;
+  }
+
+  // Assignees may be removed by another session or directly in the database.
+  // Do not reuse the in-memory list when opening an incident form.
+  ['f_engineer', 'dp_f_engineer'].forEach(function (id) {
+    var sel = document.getElementById(id);
+    if (sel) sel.innerHTML = '<option value="">Loading assignees...</option>';
+  });
+  loadUsersFromBackend(function (err) {
+    if (!err) {
+      populateEngineerDropdowns();
+      var tagInput = document.getElementById('f_tag_input');
+      if (tagInput && tagInput.value.trim().charAt(0) === '@') {
+        showCreateTagSuggestions(tagInput.value);
+      }
+    }
+    if (callback) callback(err);
   });
 }
 function populateAssigneeFilter() {
@@ -5963,6 +6176,8 @@ function viewIncidentReport(id) {
   const irSF = document.getElementById('ir_sf_case'); if (irSF) { irSF.textContent = inc.sfCase || '—'; irSF.style.color = inc.sfCase ? '#4f8ef7' : 'var(--text-secondary)'; }
   // Timezone: reset to IST on fresh open, render selector, apply timestamps
   reportCurrentIncId = inc.id;
+  // Refresh mention suggestions from the database whenever the report opens.
+  loadUsersFromBackend(function () {});
   // Use the timezone that was active when the incident was last saved
   const reportTZ = inc.timezone || 'IST';
   selectedTZ = reportTZ;
@@ -6494,7 +6709,6 @@ function saveDetailEdit() {
   const project = document.getElementById('dp_f_project').value;
   const productLine = document.getElementById('dp_f_product_line')?.value || '';
   const rdTickets = (document.getElementById('dp_f_rd_tickets')?.value || '').trim();
-  const incidentReportStatus = (document.getElementById('dp_f_incident_report_status')?.value || '').trim();
   const severity = document.getElementById('dp_f_severity').value;
   const status = document.getElementById('dp_f_status').value;
   const engineer = document.getElementById('dp_f_engineer').value;
@@ -6505,11 +6719,6 @@ function saveDetailEdit() {
     showToast('Please fill in all required fields', 'error');
     return;
   }
-  if (status === 'Closed' && !hasIncidentReportStatus(incidentReportStatus)) {
-    showToast('Incident Report Status is required before closing. Select Yes or No.', 'error');
-    return;
-  }
-
   // Log feed entries for meaningful changes
   if (inc.status !== status) {
     addFeedEntry(inc.id, 'status', 'changed status', `${inc.status} → ${status}`);
@@ -6521,7 +6730,7 @@ function saveDetailEdit() {
     addFeedEntry(inc.id, 'system', 'reassigned incident', `Assigned to ${engineer}`);
   }
 
-  Object.assign(inc, { title, customer, project, product_line: productLine, severity, status, engineer, date, desc, timezone: selectedTZ, incident_report_status: incidentReportStatus, incidentReportStatus });
+  Object.assign(inc, { title, customer, project, product_line: productLine, severity, status, engineer, date, desc, timezone: selectedTZ });
   if (rdTickets) { inc.rd_tickets = rdTickets; inc.rdTickets = rdTickets; }
 
   // Always save start/end datetime exactly as entered for the selected incident timezone.
@@ -6590,7 +6799,6 @@ function saveDetailEdit() {
       resolved_by: inc.resolvedBy,
       sf_case: inc.sfCase,
       rd_tickets: inc.rd_tickets || inc.rdTickets || undefined,
-      incident_report_status: incidentReportStatus,
       downtime_h: inc.downtimeH,
       downtime_m: inc.downtimeM,
       downtime_mins: inc.downtimeH * 60 + inc.downtimeM,
@@ -6673,6 +6881,74 @@ function exportDetailPDF() {
 // ─── LOGIN ────────────────────────────────────────────────────
 
 
+const SESSION_INACTIVITY_LIMIT_MS = 20 * 60 * 1000;
+const SESSION_INACTIVITY_WARNING_MS = 19 * 60 * 1000;
+const SESSION_LAST_ACTIVITY_KEY = 'incident_portal_last_activity';
+var sessionInactivityTimer = null;
+var sessionWarningTimer = null;
+var lastActivityWrite = 0;
+
+function stopSessionInactivityTracking() {
+  if (sessionInactivityTimer) clearTimeout(sessionInactivityTimer);
+  if (sessionWarningTimer) clearTimeout(sessionWarningTimer);
+  sessionInactivityTimer = null;
+  sessionWarningTimer = null;
+  var warning = document.getElementById('sessionWarn');
+  if (warning) warning.classList.remove('visible');
+}
+
+function getLastSessionActivity() {
+  return parseInt(localStorage.getItem(SESSION_LAST_ACTIVITY_KEY), 10) || 0;
+}
+
+function hasSessionInactivityExpired() {
+  var lastActivity = getLastSessionActivity();
+  return lastActivity > 0 && Date.now() - lastActivity >= SESSION_INACTIVITY_LIMIT_MS;
+}
+
+function scheduleSessionInactivityTimers() {
+  stopSessionInactivityTracking();
+  var lastActivity = getLastSessionActivity();
+  if (!lastActivity) return;
+  var elapsed = Date.now() - lastActivity;
+  if (elapsed >= SESSION_INACTIVITY_LIMIT_MS) {
+    expireInactiveSession();
+    return;
+  }
+  sessionWarningTimer = setTimeout(function () {
+    var warning = document.getElementById('sessionWarn');
+    if (warning) warning.classList.add('visible');
+  }, Math.max(0, SESSION_INACTIVITY_WARNING_MS - elapsed));
+  sessionInactivityTimer = setTimeout(expireInactiveSession, SESSION_INACTIVITY_LIMIT_MS - elapsed);
+}
+
+function recordSessionActivity() {
+  var tokenKey = window.APP_CONFIG ? window.APP_CONFIG.JWT_TOKEN_KEY : 'incident_portal_token';
+  if (!localStorage.getItem(tokenKey)) return;
+  var now = Date.now();
+  if (now - lastActivityWrite < 1000) return;
+  lastActivityWrite = now;
+  localStorage.setItem(SESSION_LAST_ACTIVITY_KEY, String(now));
+  scheduleSessionInactivityTimers();
+}
+
+function startSessionInactivityTracking(resetActivity) {
+  if (resetActivity || !getLastSessionActivity()) {
+    lastActivityWrite = Date.now();
+    localStorage.setItem(SESSION_LAST_ACTIVITY_KEY, String(lastActivityWrite));
+  }
+  scheduleSessionInactivityTimers();
+}
+
+function expireInactiveSession() {
+  var tokenKey = window.APP_CONFIG ? window.APP_CONFIG.JWT_TOKEN_KEY : 'incident_portal_token';
+  if (!localStorage.getItem(tokenKey)) {
+    stopSessionInactivityTracking();
+    return;
+  }
+  doLogoutConfirmed('Your session expired after 20 minutes of inactivity. Please sign in again.');
+}
+
 function togglePwd() {
   const inp = document.getElementById('loginPassword');
   const icon = document.getElementById('eyeIcon');
@@ -6736,6 +7012,7 @@ function doLogin() {
         }
 
         localStorage.setItem(window.APP_CONFIG.JWT_TOKEN_KEY, data.token);
+        startSessionInactivityTracking(true);
         const user = data.user;
         currentRole = user.role;
         currentUserName = user.name;
@@ -6784,7 +7061,8 @@ function doLogout() {
     doLogoutConfirmed();
   });
 }
-function doLogoutConfirmed() {
+function doLogoutConfirmed(reason) {
+  stopSessionInactivityTracking();
   const portal = document.getElementById('portalApp');
   portal.style.transition = 'opacity .3s ease';
   portal.style.opacity = '0';
@@ -6795,8 +7073,10 @@ function doLogoutConfirmed() {
     document.getElementById('loginEmail').value = '';
     document.getElementById('loginPassword').value = '';
     localStorage.removeItem(window.APP_CONFIG ? window.APP_CONFIG.JWT_TOKEN_KEY : 'incident_portal_token');
+    localStorage.removeItem(SESSION_LAST_ACTIVITY_KEY);
     const errEl = document.getElementById('loginError');
-    errEl.style.display = 'none';
+    errEl.textContent = reason || '';
+    errEl.style.display = reason ? 'block' : 'none';
     errEl.style.borderLeftColor = '';
     errEl.style.background = '';
     errEl.style.color = '';
@@ -7108,6 +7388,15 @@ function showNotificationPreview(inc) {
   const assigneeUser = users.find(u => u.name === inc.engineer) || {};
   const assigneeEmail = assigneeUser.email || (inc.engineer ? inc.engineer.toLowerCase().replace(/\s+/g, '.') + '@magiccloud.io' : 'team' + '@' + 'magiccloud.io');
   const assigneeFirst = inc.engineer ? inc.engineer.split(' ')[0] : 'Team';
+  const defaultSubject = `[${inc.severity}] ${inc.id}: ${inc.title}`;
+  const defaultBody = `Hi ${assigneeFirst},
+
+A ${inc.severity} incident has been assigned to you.
+
+ID: ${inc.id}
+Customer: ${inc.customer}
+SLA: ${inc.slaHours || 4}h from creation`;
+  currentNotificationIncidentId = inc.id;
 
   content.innerHTML = `
     <div style="margin-bottom:20px">
@@ -7115,15 +7404,14 @@ function showNotificationPreview(inc) {
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;overflow:hidden">
         <div style="background:linear-gradient(135deg,#0d0d1a,#1a1a3e);padding:16px 20px;border-bottom:1px solid var(--border)">
           <div style="font-size:13px;color:rgba(255,255,255,.5);margin-bottom:4px">To: ${inc.engineer} · ${assigneeEmail}</div>
-          <div style="font-size:15px;font-weight:700;color:white">[${inc.severity}] ${inc.id}: ${inc.title}</div>
+          <label for="notificationEmailSubject" style="display:block;font-size:10px;font-weight:700;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.8px;margin:10px 0 5px">Subject</label>
+          <input id="notificationEmailSubject" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:7px;padding:9px 11px;color:white;font-size:14px;font-weight:600;font-family:inherit;outline:none" type="text">
         </div>
         <div style="padding:16px 20px;font-size:13px;color:var(--text-secondary);line-height:1.7">
-          <p>Hi ${assigneeFirst},</p>
-          <p>A <strong style="color:${sc}">${inc.severity}</strong> incident has been assigned to you.</p>
-          <div style="background:rgba(79,142,247,.05);border-left:3px solid ${sc};padding:10px 14px;border-radius:0 6px 6px 0;margin:12px 0">
-            <div><strong>ID:</strong> ${inc.id}</div>
-            <div><strong>Customer:</strong> ${inc.customer}</div>
-            <div><strong>SLA:</strong> ${inc.slaHours || 4}h from creation</div>
+          <label for="notificationEmailBody" style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">Body</label>
+          <textarea id="notificationEmailBody" rows="8" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-left:3px solid ${sc};border-radius:7px;padding:10px 12px;color:var(--text);font-size:13px;line-height:1.55;font-family:inherit;resize:vertical;outline:none"></textarea>
+          <div style="display:flex;justify-content:flex-end;margin-top:10px">
+            <button class="btn btn-primary btn-sm" onclick="saveNotificationEmailDraft()">Save Email Draft</button>
           </div>
         </div>
       </div>
@@ -7138,7 +7426,24 @@ function showNotificationPreview(inc) {
         </div>
       </div>
     </div>`;
+  document.getElementById('notificationEmailSubject').value = inc.notificationEmailSubject || defaultSubject;
+  document.getElementById('notificationEmailBody').value = inc.notificationEmailBody || defaultBody;
   modal.style.display = 'flex';
+}
+
+function saveNotificationEmailDraft() {
+  const incident = incidents.find(function (item) { return item.id === currentNotificationIncidentId; });
+  const subject = (document.getElementById('notificationEmailSubject')?.value || '').trim();
+  const body = (document.getElementById('notificationEmailBody')?.value || '').trim();
+  if (!subject || !body) {
+    showToast('Email subject and body cannot be empty', 'error');
+    return;
+  }
+  if (incident) {
+    incident.notificationEmailSubject = subject;
+    incident.notificationEmailBody = body;
+  }
+  showToast('Email draft updated', 'success');
 }
 
 // ───────────────────────────────────────────────────────────────
@@ -7153,6 +7458,7 @@ function verifySessionAndInit() {
     }
     const portal = document.getElementById('portalApp');
     if (portal) portal.style.display = 'none';
+    document.body.classList.remove('auth-pending');
 
     populateCustomerDropdowns();
     populateAreaDropdowns();
@@ -7178,6 +7484,12 @@ function verifySessionAndInit() {
     }
     const portal = document.getElementById('portalApp');
     if (portal) portal.style.display = 'none';
+    document.body.classList.remove('auth-pending');
+    return;
+  }
+  if (hasSessionInactivityExpired()) {
+    expireInactiveSession();
+    document.body.classList.remove('auth-pending');
     return;
   }
 
@@ -7206,22 +7518,15 @@ function verifySessionAndInit() {
         const user = data.data;
         currentRole = user.role;
         currentUserName = user.name;
+        startSessionInactivityTracking(false);
 
         const loginScreen = document.getElementById('loginScreen');
         if (loginScreen) {
-          loginScreen.classList.add('hidden');
-          setTimeout(() => {
-            loginScreen.style.display = 'none';
-            const portal = document.getElementById('portalApp');
-            if (portal) {
-              portal.style.display = 'block';
-              portal.style.animation = 'cardIn .5s ease';
-            }
-          }, 450);
-        } else {
-          const portal = document.getElementById('portalApp');
-          if (portal) portal.style.display = 'block';
+          loginScreen.style.display = 'none';
+          loginScreen.classList.remove('hidden');
         }
+        const portal = document.getElementById('portalApp');
+        if (portal) portal.style.display = 'block';
 
         const _sun = document.getElementById('sidebarUserName'); if (_sun) _sun.textContent = user.name;
         const _lbl = document.getElementById('profileUserLabel'); if (_lbl) _lbl.textContent = user.name;
@@ -7264,6 +7569,7 @@ function verifySessionAndInit() {
             } else {
               navigate('home', document.getElementById('homeNav'));
             }
+            document.body.classList.remove('auth-pending');
           });
         });
       });
@@ -7286,6 +7592,7 @@ function verifySessionAndInit() {
       }
       const portal = document.getElementById('portalApp');
       if (portal) portal.style.display = 'none';
+      document.body.classList.remove('auth-pending');
 
       showToast('Session verification failed. Please login again.', 'warning');
     });
@@ -7295,6 +7602,20 @@ function verifySessionAndInit() {
 // 9. INIT ON STARTUP
 // ═══════════════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function () {
+  ['pointerdown', 'pointermove', 'keydown', 'scroll', 'touchstart'].forEach(function (eventName) {
+    document.addEventListener(eventName, recordSessionActivity, { passive: true });
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState !== 'visible') return;
+    if (hasSessionInactivityExpired()) {
+      expireInactiveSession();
+    } else {
+      recordSessionActivity();
+    }
+  });
+  window.addEventListener('storage', function (event) {
+    if (event.key === SESSION_LAST_ACTIVITY_KEY) scheduleSessionInactivityTimers();
+  });
 
   // ── Restore theme ──────────────────────────────────────────
   var savedTheme = localStorage.getItem('mc_theme');
@@ -7330,7 +7651,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var commentInp = document.getElementById('commentInput');
   if (commentInp) {
     commentInp.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment(); }
+      handleReportCommentKey(e);
     });
   }
 

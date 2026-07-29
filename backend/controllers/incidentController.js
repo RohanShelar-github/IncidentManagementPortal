@@ -48,7 +48,6 @@ const normalizeStatus = (value) => STATUS_TO_DB[value] || STATUS_TO_DB[String(va
 const normalizeSeverity = (value) => SEVERITY_TO_DB[value] || SEVERITY_TO_DB[String(value || '').trim()] || String(value || 'Medium').toLowerCase();
 const displayStatus = (value) => STATUS_FROM_DB[value] || value || 'New';
 const displaySeverity = (value) => SEVERITY_FROM_DB[String(value || '').toLowerCase()] || value || 'Medium';
-const isIncidentReportStatusValid = (value) => ['Yes', 'No'].includes(String(value || '').trim());
 const toDateTimeValue = (value) => {
   if (!value) return '';
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
@@ -117,6 +116,17 @@ function parseTags(tags) {
   if (!tags) return [];
   if (Array.isArray(tags)) return tags;
   try { return JSON.parse(tags); } catch (_) { return []; }
+}
+
+function parseComments(comments) {
+  if (!comments) return [];
+  if (Array.isArray(comments)) return comments;
+  try {
+    const parsed = JSON.parse(comments);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
 }
 
 function mapIncident(row) {
@@ -202,6 +212,7 @@ function mapIncident(row) {
     rd_tickets: row.rd_tickets || '',
     rdTickets: row.rd_tickets || '',
     tags: parseTags(row.tags),
+    comments: parseComments(row.comments),
     created_at: row.created_at,
     updated_at: row.updated_at
   };
@@ -300,8 +311,6 @@ const getIncidentById = async (req, res) => {
     if (!dbId) return res.status(404).json({ success: false, message: 'Incident not found' });
     const [rows] = await pool.query(incidentSelect + ' WHERE i.id = ?', [dbId]);
     const incident = mapIncident(rows[0]);
-    const [logs] = await pool.query('SELECT l.*, u.full_name AS author FROM activity_logs l LEFT JOIN users u ON u.id = l.action_by WHERE l.incident_id = ? ORDER BY l.created_at DESC', [dbId]);
-    incident.comments = logs.map(l => ({ id: l.id, incident_id: incident.id, author: l.author, action: l.action_type, detail: l.detail, type: l.action_type, created_at: l.created_at }));
     return res.status(200).json({ success: true, data: incident });
   } catch (error) {
     console.error('Get incident error:', error);
@@ -339,12 +348,6 @@ const updateIncident = async (req, res) => {
     if (b.project_area !== undefined) add('project_area', b.project_area || null);
     if (b.severity !== undefined) add('severity', normalizeSeverity(b.severity));
     const normalizedStatus = b.status !== undefined ? normalizeStatus(b.status) : undefined;
-    if (normalizedStatus === 'closed') {
-      const incomingReportStatus = String(b.incident_report_status || '').trim();
-      if (!isIncidentReportStatusValid(incomingReportStatus) && !isIncidentReportStatusValid(current.incident_report_status)) {
-        return res.status(400).json({ success: false, message: 'Incident Report Status must be Yes or No before closing the incident' });
-      }
-    }
     if (b.status !== undefined) add('status', normalizedStatus);
     if (b.engineer !== undefined) add('assigned_to', await resolveUserId(b.engineer));
     if (b.case_owner !== undefined) add('case_owner', b.case_owner || null);
@@ -372,7 +375,6 @@ const updateIncident = async (req, res) => {
     if ((b.sf_case !== undefined || b.sfCase !== undefined) && String(b.sf_case || b.sfCase || '').trim() !== '') add('sf_case_no', String(b.sf_case || b.sfCase).trim());
     if (b.incident_report_status !== undefined) {
       const reportStatus = String(b.incident_report_status || '').trim();
-      if (reportStatus && !isIncidentReportStatusValid(reportStatus)) return res.status(400).json({ success: false, message: 'Incident Report Status must be Yes or No' });
       add('incident_report_status', reportStatus || null);
     }
 
@@ -447,14 +449,38 @@ const getDashboardStats = async (req, res) => {
 };
 
 const addComment = async (req, res) => {
+  const connection = await pool.getConnection();
   try {
     const dbId = await findIncidentDbId(req.params.id);
     if (!dbId) return res.status(404).json({ success: false, message: 'Incident not found' });
-    await pool.query('INSERT INTO activity_logs (incident_id, action_type, action_by, detail) VALUES (?, ?, ?, ?)', [dbId, req.body.action || 'comment', req.user.id, req.body.detail || req.body.comment_text || null]);
-    return res.status(201).json({ success: true, message: 'Comment added successfully' });
+    const text = String(req.body.detail || req.body.comment_text || '').trim();
+    if (!text) return res.status(400).json({ success: false, message: 'Comment text is required' });
+
+    await connection.beginTransaction();
+    const [rows] = await connection.query('SELECT comments FROM incidents WHERE id = ? FOR UPDATE', [dbId]);
+    const comments = parseComments(rows[0] && rows[0].comments);
+    const comment = {
+      author: req.user.name || req.user.email || 'User',
+      author_id: req.user.id,
+      action: 'commented',
+      type: 'comment',
+      detail: text,
+      created_at: new Date().toISOString()
+    };
+    comments.push(comment);
+    await connection.query('UPDATE incidents SET comments = ? WHERE id = ?', [JSON.stringify(comments), dbId]);
+    await connection.query(
+      'INSERT INTO activity_logs (incident_id, action_type, action_by, detail) VALUES (?, ?, ?, ?)',
+      [dbId, 'comment', req.user.id, text]
+    );
+    await connection.commit();
+    return res.status(201).json({ success: true, message: 'Comment added successfully', data: comment });
   } catch (error) {
+    await connection.rollback();
     console.error('Add comment error:', error);
     return res.status(500).json({ success: false, message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
+  } finally {
+    connection.release();
   }
 };
 

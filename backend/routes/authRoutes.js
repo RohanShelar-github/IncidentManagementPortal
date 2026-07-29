@@ -3,7 +3,8 @@ const router = express.Router();
 const {
   login,
   getAllUsers,
-  getCurrentUser
+  getCurrentUser,
+  deleteUser
 } = require('../controllers/authController');
 const { authenticateToken } = require('../middleware/auth');
 
@@ -12,6 +13,9 @@ router.post('/login', login);
 
 // GET /api/auth/users
 router.get('/users', authenticateToken, getAllUsers);
+
+// DELETE /api/auth/users/:id
+router.delete('/users/:id', authenticateToken, deleteUser);
 
 // GET /api/auth/me
 router.get('/me', authenticateToken, getCurrentUser);

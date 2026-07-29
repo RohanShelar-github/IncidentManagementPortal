@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS incidents (
   sla_hours FLOAT NULL,
   sla_minutes SMALLINT UNSIGNED NULL,
   tags JSON NULL,
+  comments JSON NULL,
   start_dt VARCHAR(30) NULL,
   date_time_opened DATETIME NULL,
   opened_at_utc DATETIME(6) NULL,

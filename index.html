@@ -13,7 +13,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <link href="./css/styles.css" rel="stylesheet"/></head>
-<body>
+<body class="auth-pending">
 <!-- ─── LOGIN SCREEN ──────────────────────────────────────────── -->
 <div id="loginScreen">
 <div class="login-bg"></div>
@@ -265,9 +265,6 @@
 </svg>
 </span>
 </div>
-</div>
-<div style="display:flex;gap:8px;align-items:center">
-<button class="btn btn-primary" id="createIncidentBtn" onclick="openModal('incidentModal')">+ New Incident</button>
 </div>
 </div>
 <!-- ─── DASHBOARD FILTERS ──────────────────────────────── -->
@@ -1348,13 +1345,13 @@
 </div>
 </div>
 </div>
-<div class="form-group">
+<div class="form-group" style="position:relative">
 <label class="form-label">Tags</label>
 <div onclick="document.getElementById('f_tag_input').focus()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;min-height:40px;cursor:text">
 <div id="f_tag_chips" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px"></div>
-<input id="f_tag_input" oninput="showCreateTagSuggestions(this.value)" onkeydown="handleCreateTagKey(event)" placeholder="Type tag and press Enter or comma…" style="border:none;outline:none;background:transparent;color:var(--text);font-size:12px;font-family:inherit;min-width:120px;width:100%" type="text"/>
+<input id="f_tag_input" oninput="showCreateTagSuggestions(this.value)" onkeydown="handleCreateTagKey(event)" placeholder="Type a tag or @username…" style="border:none;outline:none;background:transparent;color:var(--text);font-size:12px;font-family:inherit;min-width:120px;width:100%" type="text"/>
 </div>
-<div id="f_tag_suggestions" style="display:none;position:absolute;z-index:200;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.3);max-height:160px;overflow-y:auto;min-width:200px"></div>
+<div id="f_tag_suggestions" style="display:none;position:absolute;left:0;right:0;bottom:48px;z-index:2200;background:var(--surface);border:1px solid var(--border2);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.45);max-height:180px;overflow-y:auto"></div>
 </div>
 <div class="modal-footer">
 <button class="btn btn-secondary" onclick="closeModal('incidentModal')">Cancel</button>
@@ -1494,8 +1491,9 @@
         💬 Comments <span id="commentCount" style="background:rgba(79,142,247,0.15);color:#4f8ef7;border-radius:10px;padding:1px 8px;font-size:11px">0</span>
 </div>
 <div id="commentsList" style="max-height:200px;overflow-y:auto;margin-bottom:10px"></div>
-<div class="comment-input-wrap">
-<textarea class="comment-input" id="commentInput" placeholder="Add a comment… use @name to mention" rows="2"></textarea>
+<div class="comment-input-wrap" style="position:relative">
+<div id="reportMentionDropdown" style="display:none;position:absolute;bottom:calc(100% + 4px);left:0;right:60px;background:var(--surface);border:1px solid var(--border2);border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,0.35);z-index:999;overflow:hidden"></div>
+<textarea class="comment-input" id="commentInput" onblur="setTimeout(function(){closeMentionDropdown('reportMentionDropdown')},200)" oninput="handleMentionInput(this,'reportMentionDropdown')" placeholder="Add a comment… use @name to mention" rows="2"></textarea>
 <button onclick="submitComment()" style="background:#4f8ef7;color:white;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;flex-shrink:0">Post</button>
 </div>
 </div>
@@ -1675,10 +1673,6 @@
 </div><div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
 <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px">R&amp;D Ticket</div>
 <div id="dp_rd_tickets" style="font-size:14px;font-weight:700;color:#4f8ef7;font-family:var(--font-mono)">—</div>
-</div>
-<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
-<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px">Incident Report Status</div>
-<div id="dp_incident_report_status" style="font-size:14px;font-weight:700;color:var(--text)">N/A</div>
 </div>
 <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;grid-column:1/-1">
 <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">Tags</div>
@@ -1927,14 +1921,6 @@
 <label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">R&amp;D Ticket</label>
 <input id="dp_f_rd_tickets" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="e.g. FNP-1125" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s" type="text"/>
 </div>
-<div>
-<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Incident Report Status <span style="color:var(--danger)">*</span></label>
-<select id="dp_f_incident_report_status" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer">
-<option value="">Select status</option>
-<option value="Yes">Yes</option>
-<option value="No">No</option>
-</select>
-</div>
 </div>
 <!-- Components + Applications -->
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
@@ -2020,7 +2006,7 @@
 </div>
 <!-- ─── SESSION WARNING ──────────────────────────────────────── -->
 <div class="session-warn" id="sessionWarn">
-<span>⚠ Session expiring soon</span>
+<span>⚠ Session will expire after 20 minutes of inactivity</span>
 <button onclick="document.getElementById('sessionWarn').classList.remove('visible')" style="background:transparent;border:none;color:inherit;cursor:pointer;font-weight:700">✕</button>
 </div>
 <!-- ─── PROFILE MODAL ──────────────────────────────────────────── -->
@@ -2094,7 +2080,7 @@
 <div class="scroll-top-btn" id="scrollTopBtn" onclick="scrollToTop()" title="Back to top">↑</div>
 <!-- ─── CLOSE INCIDENT / DOWNTIME MODAL ──────────────────────────── -->
 <div id="downtimeModal" style="display:none;position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,0.65);backdrop-filter:blur(4px);align-items:center;justify-content:center">
-<div style="background:var(--surface);border:1px solid var(--border2);border-radius:16px;width:90%;max-width:480px;box-shadow:0 24px 60px rgba(0,0,0,0.5);overflow:hidden">
+<div style="background:var(--surface);border:1px solid var(--border2);border-radius:16px;width:90%;max-width:480px;max-height:90vh;box-shadow:0 24px 60px rgba(0,0,0,0.5);overflow-y:auto">
 <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
 <div>
 <div style="font-size:16px;font-weight:800;color:var(--text)">✓ Close Incident</div>
@@ -2126,6 +2112,29 @@
 <span style="r:var(--text-muted);font-size:13px">mins</span>
 </div>
 </div>
+</div>
+<div style="margin-bottom:16px">
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">⚡ Mean Time to Resolve (MTTR)</label>
+<div style="display:flex;gap:10px;align-items:center">
+<div style="display:flex;align-items:center;gap:6px">
+<input id="dtm_mttr_hours" max="999" min="0" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="0" style="width:80px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:18px;font-weight:700;font-family:var(--font-mono);outline:none;text-align:center;box-sizing:border-box" type="number"/>
+<span style="color:var(--text-muted);font-size:13px">hours</span>
+</div>
+<div style="display:flex;align-items:center;gap:6px">
+<input id="dtm_mttr_mins" max="59" min="0" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="0" style="width:80px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:18px;font-weight:700;font-family:var(--font-mono);outline:none;text-align:center;box-sizing:border-box" type="number"/>
+<span style="color:var(--text-muted);font-size:13px">mins</span>
+</div>
+</div>
+</div>
+<div style="margin-bottom:16px">
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Resolved By</label>
+<select id="dtm_resolved_by" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
+<option value="">— Select —</option>
+<option>By OC Team</option>
+<option>By Customer</option>
+<option>By Stakeholder</option>
+<option>By System</option>
+</select>
 </div>
 <div style="margin-bottom:14px">
 <label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Root Cause Analysis <span style="color:var(--danger)">*</span></label>
