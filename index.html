@@ -210,7 +210,7 @@
 <div style="font-size:12px;color:var(--text-muted)">PDF &amp; Excel export</div>
 <div class="home-action-arrow">→</div>
 </div>
-<div class="home-action-card" id="homeCardCreate" onclick="openModal('incidentModal')" style="--accent:#f7b94f">
+<div class="home-action-card" id="homeCardCreate" onclick="openCreateIncidentModal()" style="--accent:#f7b94f">
 <div class="home-action-icon" style="background:rgba(247,185,79,0.12);border-color:rgba(247,185,79,0.2)">
 <svg fill="none" height="22" stroke="#f7b94f" stroke-width="1.8" viewbox="0 0 24 24" width="22"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="16"></line><line x1="8" x2="16" y1="12" y2="12"></line></svg>
 </div>
@@ -648,7 +648,7 @@
 <button class="view-toggle-btn active" id="viewTableBtn" onclick="switchIncidentView('table')">☰ Table</button>
 <button class="view-toggle-btn" id="viewKanbanBtn" onclick="switchIncidentView('kanban')">⊞ Kanban</button>
 </div>
-<button class="btn btn-primary" id="createIncidentBtn2" onclick="openModal('incidentModal')">+ Create Incident</button>
+<button class="btn btn-primary" id="createIncidentBtn2" onclick="openCreateIncidentModal()">+ Create Incident</button>
 </div>
 </div>
 <!-- FILTER BAR -->

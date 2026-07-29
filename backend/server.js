@@ -11,10 +11,19 @@ const pool = require('./config/database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
+const allowedOrigins = String(process.env.CORS_ORIGIN || 'http://localhost:5500')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 // Middleware
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:8000',
+  origin(origin, callback) {
+    // Requests without an Origin header are non-browser/server-to-server requests.
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Origin is not allowed by CORS'));
+  },
   credentials: true
 }));
 
@@ -73,7 +82,7 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, HOST, () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║   Incident Management Portal - Backend Server Started     ║

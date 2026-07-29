@@ -567,6 +567,32 @@ function getIncidentTimestamp(inc, fields) {
   return NaN;
 }
 
+function getIncidentOpenedTimestamp(inc) {
+  var canonicalUtc = inc && inc.opened_at_utc;
+  if (canonicalUtc) {
+    var canonicalTimestamp = new Date(canonicalUtc).getTime();
+    if (Number.isFinite(canonicalTimestamp)) return canonicalTimestamp;
+  }
+
+  var rawValue = inc && (inc.date_time_opened || inc.startDT || inc.date_created);
+  if (rawValue) {
+    var normalized = String(rawValue).trim().replace(' ', 'T');
+    if (/Z$|[+-]\d{2}:?\d{2}$/.test(normalized)) {
+      var absoluteTimestamp = new Date(normalized).getTime();
+      if (Number.isFinite(absoluteTimestamp)) return absoluteTimestamp;
+    }
+    var wallClockTimestamp = new Date(normalized.replace(/Z$/, '') + 'Z').getTime();
+    if (Number.isFinite(wallClockTimestamp)) {
+      return wallClockTimestamp - getTZOffset((inc && (inc.timezone || inc.source_timezone)) || 'IST') * 3600000;
+    }
+  }
+
+  if (inc && inc.date) {
+    return new Date(inc.date + 'T09:00:00').getTime();
+  }
+  return NaN;
+}
+
 // A Missed MTTR is a completed incident whose actual resolution duration
 // strictly exceeds its applicable SLA resolution target.
 function isMissedMttr(inc) {
@@ -2639,8 +2665,8 @@ const SLA_HOURS = { Critical: 1, High: 4, Medium: 12, Normal: 24 };
 
 function getSLAInfo(inc) {
   if (['Resolved', 'Closed'].includes(inc.status)) return { cls: 'sla-na', label: '—', title: 'Resolved' };
-  const slaH = SLA_HOURS[inc.severity] || 8;
-  const created = new Date(inc.date + 'T09:00:00');
+  const slaH = getIncidentSlaHours(inc);
+  const created = getIncidentOpenedTimestamp(inc);
   const now = new Date();
   const elapsedH = (now - created) / 3600000;
   const remaining = slaH - elapsedH;
@@ -3095,8 +3121,25 @@ function openModal(id) {
   }
 }
 
+function openCreateIncidentModal() {
+  editingId = null;
+  createModalTags = [];
+  renderCreateTagChips();
+  var tagInput = document.getElementById('f_tag_input');
+  if (tagInput) tagInput.value = '';
+  closeCreateTagSuggestions();
+  openModal('incidentModal');
+}
+
 function closeModal(id) {
   document.getElementById(id).classList.remove('open');
+  if (id === 'incidentModal') {
+    createModalTags = [];
+    renderCreateTagChips();
+    var tagInput = document.getElementById('f_tag_input');
+    if (tagInput) tagInput.value = '';
+    closeCreateTagSuggestions();
+  }
   editingId = null;
 }
 
@@ -3904,14 +3947,15 @@ function renderRecurringList() {
 function renderSlaCountdown() {
   var el = document.getElementById('slaCountdownList');
   if (!el) return;
-  var SLA_H = { Critical: 1, High: 4, Medium: 12, Normal: 24 };
   var now = Date.now();
-  var open = getDashboardFilteredIncidents().filter(function (i) { return i.status !== 'Closed'; });
+  var open = getDashboardFilteredIncidents().filter(function (i) {
+    return i.status !== 'Closed' && i.status !== 'Resolved';
+  });
   var badge = document.getElementById('slaCountBadge');
   if (badge) { badge.textContent = open.length; badge.style.display = open.length ? '' : 'none'; }
   var items = open.map(function (i) {
-    var slaMs = (SLA_H[i.severity] || 24) * 3600000;
-    var startMs = new Date(i.startDT || i.date + 'T09:00').getTime();
+    var slaMs = getIncidentSlaHours(i) * 3600000;
+    var startMs = getIncidentOpenedTimestamp(i);
     var remainMs = slaMs - (now - startMs);
     return { id: i.id, title: i.title, severity: i.severity, customer: i.customer, remainMs: remainMs };
   }).sort(function (a, b) { return a.remainMs - b.remainMs; }).slice(0, 6);
@@ -4241,11 +4285,10 @@ function updateStats() {
     : 'no resolution time recorded';
 
   // SLA Breach count
-  var SLA_H = { Critical: 1, High: 4, Medium: 12, Normal: 24 };
   var breachCount = data.filter(function (i) {
     if (i.status === 'Closed' || i.status === 'Resolved') return false;
-    var slaH = SLA_H[i.severity] || 24;
-    var startMs = new Date(i.startDT || (i.date + 'T09:00')).getTime();
+    var slaH = getIncidentSlaHours(i);
+    var startMs = getIncidentOpenedTimestamp(i);
     return (Date.now() - startMs) > slaH * 3600000;
   }).length;
   var slEl = document.getElementById('statSLABreach');
@@ -4290,15 +4333,35 @@ function updateStats() {
 function renderRecentTable() {
   var data = getDashboardFilteredIncidents();
   const recent = data.slice(0, 6);
-  var _rt = document.getElementById('recentTable'); if (_rt) _rt.innerHTML = recent.map(i => `
-    <tr>
-      <td class="id-cell">${i.id}</td>
-      <td class="title-cell" style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${i.title}</td>
-      <td><span class="badge badge-${i.severity.toLowerCase()}">${i.severity}</span></td>
-      <td><span class="badge badge-${i.status.toLowerCase().replace(' ', '-')}">${i.status}</span></td>
-      <td style="font-size:12px;color:var(--text3)">${i.customer}</td>
+  var _rt = document.getElementById('recentTable');
+  if (!_rt) return;
+  _rt.innerHTML = recent.map(i => `
+    <tr data-incident-id="${escapeMetricHtml(i.id)}" role="button" tabindex="0" style="cursor:pointer">
+      <td class="id-cell">${escapeMetricHtml(i.id)}</td>
+      <td class="title-cell" style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeMetricHtml(i.title)}</td>
+      <td><span class="badge badge-${i.severity.toLowerCase()}">${escapeMetricHtml(i.severity)}</span></td>
+      <td><span class="badge badge-${i.status.toLowerCase().replace(' ', '-')}">${escapeMetricHtml(i.status)}</span></td>
+      <td style="font-size:12px;color:var(--text3)">${escapeMetricHtml(i.customer)}</td>
     </tr>
   `).join('');
+  _rt.querySelectorAll('tr[data-incident-id]').forEach(function (row) {
+    function openRecentIncident() {
+      openDetailPanel(row.getAttribute('data-incident-id'));
+    }
+    row.addEventListener('click', openRecentIncident);
+    row.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        openRecentIncident();
+      }
+    });
+    row.addEventListener('mouseenter', function () {
+      row.style.background = 'rgba(79,142,247,0.05)';
+    });
+    row.addEventListener('mouseleave', function () {
+      row.style.background = '';
+    });
+  });
 }
 
 // ─── ACTIVITY ─────────────────────────────────────────────────
@@ -4760,8 +4823,8 @@ function _drawSLABreach(gridC, textC, textC2, data) {
   var breached = { Critical: 0, High: 0, Medium: 0, Normal: 0 };
 
   data.forEach(function (i) {
-    var slaH = SLA_H[i.severity] || 24;
-    var startMs = new Date(i.startDT || (i.date + 'T09:00')).getTime();
+    var slaH = getIncidentSlaHours(i);
+    var startMs = getIncidentOpenedTimestamp(i);
     var endMs = i.downtimeEnd ? new Date(i.downtimeEnd).getTime() :
       (i.status === 'Closed' || i.status === 'Resolved') ? startMs + slaH * 3600000 * 0.8 : Date.now();
     var elapsedH = (endMs - startMs) / 3600000;
@@ -7281,7 +7344,7 @@ function runCmdSearch(q) {
     { icon: '⚠', label: 'Incidents', sub: 'Manage all incidents', action: "navigate('incidents',document.querySelectorAll('.nav-item')[1])", perm: 'view_incidents' },
     { icon: '⊞', label: 'Kanban View', sub: 'Switch to Kanban board', action: "navigate('incidents',document.querySelectorAll('.nav-item')[1]);setTimeout(()=>switchIncidentView('kanban'),200)", perm: 'view_incidents' },
     { icon: '◈', label: 'Reports', sub: 'Export PDF & Excel', action: "navigate('reports',document.querySelectorAll('.nav-item')[2])", perm: 'view_reports' },
-    { icon: '+', label: 'New Incident', sub: 'Create a new incident', action: "openModal('incidentModal')", perm: 'create_incidents' },
+    { icon: '+', label: 'New Incident', sub: 'Create a new incident', action: "openCreateIncidentModal()", perm: 'create_incidents' },
     { icon: '👥', label: 'User Management', sub: 'Manage users and roles', action: "navigate('users',document.getElementById('usersNav'))", perm: 'manage_users' },
     { icon: '🎯', label: 'Start Tour', sub: 'Take the guided tour', action: 'startTour()', perm: null },
   ];

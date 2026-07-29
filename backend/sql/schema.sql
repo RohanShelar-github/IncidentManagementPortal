@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS incidents (
   title VARCHAR(255) NOT NULL,
   description TEXT NULL,
   severity ENUM('low','medium','high','critical','normal') NULL,
-  status ENUM('open','in_progress','further_investigation','escalated_to_rd','escalated_to_3rd_party','resolved','closed') DEFAULT 'open',
+  status ENUM('open','in_progress','tier_1_level_support','further_investigation','escalated_to_rd','escalated_to_cso_devops','escalated_to_3rd_party','resolved','closed') DEFAULT 'open',
   assigned_to INT NULL,
   case_owner VARCHAR(255) NULL,
   created_by INT NOT NULL,

@@ -37,6 +37,7 @@ async function main() {
     port: process.env.DB_PORT || 3306,
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'incident_management_db',
     multipleStatements: false
   });
   for (const statement of splitSql(sql)) {
