@@ -7,6 +7,8 @@ const DISPLAY_HOST = process.env.UI_DISPLAY_HOST || 'localhost';
 const PORT = Number(process.env.UI_PORT || 5500);
 const ROOT_DIR = path.resolve(__dirname);
 const INDEX_FILE = path.join(ROOT_DIR, 'index.html');
+const API_HOST = process.env.API_PROXY_HOST || '127.0.0.1';
+const API_PORT = Number(process.env.PORT || process.env.API_PROXY_PORT || 4000);
 
 const MIME_TYPES = {
   '.css': 'text/css',
@@ -51,6 +53,32 @@ function getFilePath(url) {
 
 function createUiServer() {
   return http.createServer((req, res) => {
+    if (req.url === '/api' || req.url.startsWith('/api/')) {
+      const proxyRequest = http.request({
+        hostname: API_HOST,
+        port: API_PORT,
+        path: req.url,
+        method: req.method,
+        headers: Object.assign({}, req.headers, {
+          host: `${API_HOST}:${API_PORT}`,
+          'x-forwarded-host': req.headers.host || '',
+          'x-forwarded-proto': 'http'
+        })
+      }, (proxyResponse) => {
+        res.writeHead(proxyResponse.statusCode || 502, proxyResponse.headers);
+        proxyResponse.pipe(res);
+      });
+      proxyRequest.on('error', (error) => {
+        console.error(`API proxy error for ${req.method} ${req.url}: ${error.message}`);
+        if (!res.headersSent) {
+          res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
+        }
+        res.end(JSON.stringify({ success: false, message: 'Backend API is unavailable' }));
+      });
+      req.pipe(proxyRequest);
+      return;
+    }
+
     if (!['GET', 'HEAD'].includes(req.method)) {
       res.writeHead(405, { 'Content-Type': 'text/plain' });
       res.end('Method not allowed');

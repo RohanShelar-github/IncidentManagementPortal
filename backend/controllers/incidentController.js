@@ -4,6 +4,7 @@ const {
   minutesToHM,
   resolveDurationMinutes
 } = require('../services/incidentNormalization');
+const { notifyUsers } = require('../services/notificationService');
 
 const CANONICAL_INCIDENT_FIELDS = process.env.CANONICAL_INCIDENT_FIELDS !== 'false';
 
@@ -24,8 +25,10 @@ const STATUS_TO_DB = {
   'New': 'open',
   'Open': 'open',
   'In Progress': 'in_progress',
+  'Tier 1 Level Support': 'tier_1_level_support',
   'Further Investigation': 'further_investigation',
   'Escalated to R&D': 'escalated_to_rd',
+  'Escalated to CSO Devops': 'escalated_to_cso_devops',
   'Escalated to 3rd Party': 'escalated_to_3rd_party',
   'Resolved': 'resolved',
   'Closed': 'closed'
@@ -34,8 +37,10 @@ const STATUS_TO_DB = {
 const STATUS_FROM_DB = {
   open: 'New',
   in_progress: 'In Progress',
+  tier_1_level_support: 'Tier 1 Level Support',
   further_investigation: 'Further Investigation',
   escalated_to_rd: 'Escalated to R&D',
+  escalated_to_cso_devops: 'Escalated to CSO Devops',
   escalated_to_3rd_party: 'Escalated to 3rd Party',
   resolved: 'Resolved',
   closed: 'Closed'
@@ -44,7 +49,14 @@ const STATUS_FROM_DB = {
 const SEVERITY_TO_DB = { Critical: 'critical', High: 'high', Medium: 'medium', Normal: 'normal' };
 const SEVERITY_FROM_DB = { critical: 'Critical', high: 'High', medium: 'Medium', normal: 'Normal', low: 'Normal' };
 
-const normalizeStatus = (value) => STATUS_TO_DB[value] || STATUS_TO_DB[String(value || '').trim()] || String(value || 'New').toLowerCase();
+const STATUS_TO_DB_LOWER = Object.keys(STATUS_TO_DB).reduce((result, key) => {
+  result[key.toLowerCase()] = STATUS_TO_DB[key];
+  return result;
+}, {});
+const normalizeStatus = (value) => {
+  const status = String(value || 'New').trim();
+  return STATUS_TO_DB[status] || STATUS_TO_DB_LOWER[status.toLowerCase()] || status.toLowerCase();
+};
 const normalizeSeverity = (value) => SEVERITY_TO_DB[value] || SEVERITY_TO_DB[String(value || '').trim()] || String(value || 'Medium').toLowerCase();
 const displayStatus = (value) => STATUS_FROM_DB[value] || value || 'New';
 const displaySeverity = (value) => SEVERITY_FROM_DB[String(value || '').toLowerCase()] || value || 'Medium';
@@ -177,8 +189,6 @@ function mapIncident(row) {
     closed_at_utc: row.closed_at_utc_text ? row.closed_at_utc_text.replace(' ', 'T') + 'Z' : '',
     description: row.description || '',
     desc: row.description || '',
-    components: row.components || '',
-    applications: row.applications || '',
     sla_minutes: row.sla_minutes === null || row.sla_minutes === undefined ? null : Number(row.sla_minutes),
     sla_hours: slaHours,
     slaHours,
@@ -234,7 +244,7 @@ const createIncident = async (req, res) => {
     const mttr = minutesToHM(canonical.mttr_minutes);
     const columns = [
       'incident_ref', 'legacy_case_number', 'title', 'description', 'severity', 'status', 'assigned_to', 'case_owner', 'created_by',
-      'customer_id', 'customer', 'project', 'project_area', 'area_id', 'area', 'product_line', 'components', 'applications',
+      'customer_id', 'customer', 'project', 'project_area', 'area_id', 'area', 'product_line',
       'sla_hours', 'tags', 'start_dt', 'date_time_opened', 'end_dt', 'date_time_closed', 'closed_date', 'timezone',
       'sf_case_no', 'incident_report_status', 'downtime_hours', 'downtime_minutes', 'downtime_mins', 'downtime_str',
       'mttd_str', 'mttd_minutes', 'mttr_str', 'account_name', 'internal_status', 'rd_tickets'
@@ -244,7 +254,7 @@ const createIncident = async (req, res) => {
       normalizeSeverity(b.severity), normalizeStatus(b.status || 'New'), assignedTo, b.case_owner || b.engineer || null,
       req.user.id, resolvedCustomer.id, resolvedCustomer.name || b.customer || null, b.project || null,
       b.project_area || null, resolvedArea.id, resolvedArea.name || b.area || null, b.product_line || null,
-      b.components || null, b.applications || null, b.sla_hours || null,
+      b.sla_hours || null,
       JSON.stringify(Array.isArray(b.tags) ? b.tags : []), start, b.date_time_opened || start || null,
       b.endDT || b.date_time_closed || null, b.date_time_closed || null, b.closed_date || null, toLegacyTimezone(b.timezone || canonical.source_timezone),
       b.sf_case || b.sfCase || b.legacy_case_number || null, b.incident_report_status || null,
@@ -260,6 +270,13 @@ const createIncident = async (req, res) => {
       'INSERT INTO incidents (' + columns.join(', ') + ') VALUES (' + columns.map(() => '?').join(', ') + ')',
       values
     );
+    await notifyUsers({
+      actorId: req.user.id,
+      message: `${req.user.name || req.user.email} created ${incidentRef}: ${b.title}`,
+      type: 'create',
+      incidentRef,
+      mentionText: (Array.isArray(b.tags) ? b.tags : []).join(' ')
+    });
 
     const [created] = await pool.query('SELECT id FROM incidents WHERE incident_ref = ?', [incidentRef]);
     if (created.length) {
@@ -352,8 +369,6 @@ const updateIncident = async (req, res) => {
     if (b.engineer !== undefined) add('assigned_to', await resolveUserId(b.engineer));
     if (b.case_owner !== undefined) add('case_owner', b.case_owner || null);
     if (b.description !== undefined) add('description', b.description || null);
-    if (b.components !== undefined) add('components', b.components || null);
-    if (b.applications !== undefined) add('applications', b.applications || null);
     if (b.sla_hours !== undefined) add('sla_hours', b.sla_hours || null);
     if (b.area !== undefined || b.area_id !== undefined) {
       const resolvedArea = await resolveArea(b.area_id || b.area);
@@ -412,6 +427,15 @@ const updateIncident = async (req, res) => {
       values.push(dbId);
       await pool.query('UPDATE incidents SET ' + updates.join(', ') + ' WHERE id = ?', values);
       await pool.query('INSERT INTO activity_logs (incident_id, action_type, action_by, detail) VALUES (?, ?, ?, ?)', [dbId, 'edit', req.user.id, 'Incident updated']);
+      const incidentRef = current.incident_ref || req.params.id;
+      const closed = normalizedStatus === 'closed';
+      await notifyUsers({
+        actorId: req.user.id,
+        message: `${req.user.name || req.user.email} ${closed ? 'closed' : 'updated'} ${incidentRef}`,
+        type: closed ? 'close' : 'edit',
+        incidentRef,
+        mentionText: Array.isArray(b.tags) ? b.tags.join(' ') : ''
+      });
     }
     return res.status(200).json({ success: true, message: 'Incident updated successfully' });
   } catch (error) {
@@ -424,8 +448,16 @@ const deleteIncident = async (req, res) => {
   try {
     const dbId = await findIncidentDbId(req.params.id);
     if (!dbId) return res.status(404).json({ success: false, message: 'Incident not found' });
+    const [incidentRows] = await pool.query('SELECT incident_ref, title FROM incidents WHERE id = ?', [dbId]);
     await pool.query('DELETE FROM activity_logs WHERE incident_id = ?', [dbId]);
     await pool.query('DELETE FROM incidents WHERE id = ?', [dbId]);
+    const deleted = incidentRows[0] || { incident_ref: req.params.id, title: '' };
+    await notifyUsers({
+      actorId: req.user.id,
+      message: `${req.user.name || req.user.email} deleted ${deleted.incident_ref}: ${deleted.title}`,
+      type: 'delete',
+      incidentRef: deleted.incident_ref
+    });
     return res.status(200).json({ success: true, message: 'Incident deleted successfully' });
   } catch (error) {
     console.error('Delete incident error:', error);
@@ -474,6 +506,13 @@ const addComment = async (req, res) => {
       [dbId, 'comment', req.user.id, text]
     );
     await connection.commit();
+    await notifyUsers({
+      actorId: req.user.id,
+      message: `${req.user.name || req.user.email} commented on ${req.params.id}: ${text}`,
+      type: 'comment',
+      incidentRef: req.params.id,
+      mentionText: text
+    });
     return res.status(201).json({ success: true, message: 'Comment added successfully', data: comment });
   } catch (error) {
     await connection.rollback();

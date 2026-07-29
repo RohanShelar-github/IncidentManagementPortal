@@ -35,12 +35,8 @@ document.addEventListener('click', function (e) {
       var opening = !np.classList.contains('open');
       np.classList.toggle('open');
       if (opening) {
+        loadNotificationsFromBackend({ initial: false });
         renderNotifList();
-        // Mark all as read after brief delay
-        setTimeout(function () {
-          notifications.forEach(function (n) { n.unread = false; });
-          updateNotifBadge();
-        }, 1500);
       }
     }
     return;
@@ -190,6 +186,22 @@ function toMysqlDatetime(value) {
   return String(value).replace('T', ' ').substring(0, 19);
 }
 
+function normalizeIncidentStatusLabel(value) {
+  var status = String(value || 'New').trim();
+  var labels = {
+    open: 'New',
+    in_progress: 'In Progress',
+    tier_1_level_support: 'Tier 1 Level Support',
+    further_investigation: 'Further Investigation',
+    escalated_to_rd: 'Escalated to R&D',
+    escalated_to_cso_devops: 'Escalated to CSO Devops',
+    escalated_to_3rd_party: 'Escalated to 3rd Party',
+    resolved: 'Resolved',
+    closed: 'Closed'
+  };
+  return labels[status.toLowerCase()] || status;
+}
+
 function normalizeIncidentFromBackend(incident) {
   const startDT = toDatetimeLocal(incident.date_created || incident.startDT || incident.date);
   const canonicalDowntime = Number(incident.downtime_mins ?? incident.downtime_minutes_total);
@@ -215,6 +227,7 @@ function normalizeIncidentFromBackend(incident) {
   const mttrTotal = Number.isFinite(canonicalMttr) ? Math.max(0, Math.round(canonicalMttr)) : mttrH * 60 + mttrM;
 
   return Object.assign({}, incident, {
+    status: normalizeIncidentStatusLabel(incident.status),
     date: startDT ? startDT.substring(0, 10) : (incident.date || ''),
     startDT,
     timezone: incident.timezone || '',
@@ -1741,6 +1754,7 @@ function setFeedFilter(filter, btn) {
 
 // ─── NOTIFICATION TABS ────────────────────────────────────
 function setNotifTab(tab) {
+  activeNotificationTab = tab;
   ['all', 'unread', 'mentions'].forEach(function (t) {
     var btn = document.getElementById('ntab_' + t);
     if (btn) btn.style.borderBottomColor = t === tab ? 'var(--accent)' : 'transparent';
@@ -1748,7 +1762,7 @@ function setNotifTab(tab) {
   var filtered = tab === 'unread'
     ? notifications.filter(function (n) { return n.unread; })
     : tab === 'mentions'
-      ? notifications.filter(function (n) { return n.text && n.text.includes('@' + currentUserName); })
+      ? notifications.filter(function (n) { return n.mention; })
       : notifications;
   var list = document.getElementById('notifList');
   if (!list) return;
@@ -1762,7 +1776,7 @@ function setNotifTab(tab) {
     return '<div onclick="markNotifRead(' + n.id + ')" style="padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;'
       + 'background:' + (n.unread ? 'rgba(79,142,247,0.05)' : 'transparent') + ';display:flex;gap:10px;align-items:flex-start">'
       + '<span style="font-size:14px;color:' + (typeColor[n.type] || 'var(--accent)') + '">' + (typeIcon[n.type] || '•') + '</span>'
-      + '<div style="flex:1"><div style="font-size:13px;color:var(--text)">' + n.text + '</div>'
+      + '<div style="flex:1"><div style="font-size:13px;color:var(--text)">' + escapeMetricHtml(n.text) + '</div>'
       + '<div style="font-size:11px;color:var(--text-muted);margin-top:3px">' + n.time + '</div></div>'
       + (n.unread ? '<span style="width:7px;height:7px;border-radius:50%;background:var(--accent);flex-shrink:0;margin-top:4px"></span>' : '')
       + '</div>';
@@ -2331,8 +2345,66 @@ function hasPermission(perm) {
 
 // ── NOTIFICATIONS ─────────────────────────────────────────
 var notifications = [];
+var notificationPollTimer = null;
+var latestNotificationId = 0;
+var activeNotificationTab = 'all';
 
 // Notifications are populated from live application events
+
+function notificationTimeLabel(value) {
+  if (!value) return 'Just now';
+  var date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Just now' : date.toLocaleString();
+}
+
+function loadNotificationsFromBackend(options) {
+  options = options || {};
+  if (!window.APP_CONFIG || !window.APP_CONFIG.ENABLE_BACKEND) return Promise.resolve();
+  var token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) return Promise.resolve();
+  return fetch(window.APP_CONFIG.API_BASE_URL + '/notifications?limit=100', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+    .then(function (response) {
+      if (!response.ok) throw new Error('Unable to load notifications');
+      return response.json();
+    })
+    .then(function (data) {
+      if (!data.success || !Array.isArray(data.data)) return;
+      var incoming = data.data.map(function (item) {
+        return Object.assign({}, item, { time: notificationTimeLabel(item.created_at) });
+      });
+      var newestId = incoming.reduce(function (max, item) { return Math.max(max, Number(item.id) || 0); }, 0);
+      if (!options.initial && latestNotificationId > 0) {
+        incoming.filter(function (item) {
+          return item.unread && Number(item.id) > latestNotificationId;
+        }).reverse().forEach(function (item) {
+          showToast(escapeMetricHtml(item.text), item.type === 'close' ? 'success' : 'info');
+        });
+      }
+      notifications = incoming;
+      latestNotificationId = Math.max(latestNotificationId, newestId);
+      updateNotifBadge();
+      setNotifTab(activeNotificationTab);
+    })
+    .catch(function (error) {
+      console.error('Notification load error:', error);
+    });
+}
+
+function startNotificationPolling() {
+  stopNotificationPolling();
+  loadNotificationsFromBackend({ initial: true });
+  notificationPollTimer = setInterval(function () {
+    loadNotificationsFromBackend({ initial: false });
+  }, 10000);
+}
+
+function stopNotificationPolling() {
+  if (notificationPollTimer) clearInterval(notificationPollTimer);
+  notificationPollTimer = null;
+  latestNotificationId = 0;
+}
 
 
 function addNotification(type, text, incId) {
@@ -2355,33 +2427,33 @@ function updateNotifBadge() {
 }
 
 function renderNotifList() {
-  var list = document.getElementById('notifList');
-  if (!list) return;
-  if (!notifications.length) {
-    list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px">No notifications</div>';
-    return;
-  }
-  var typeIcon = { success: '✓', error: '✕', warning: '⚠', info: 'ℹ' };
-  var typeColor = { success: 'var(--success)', error: 'var(--danger)', warning: 'var(--warning)', info: 'var(--accent)' };
-  list.innerHTML = notifications.slice(0, 50).map(function (n) {
-    return '<div onclick="markNotifRead(' + n.id + ')" style="padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;background:' + (n.unread ? 'rgba(79,142,247,0.05)' : 'transparent') + ';display:flex;gap:10px;align-items:flex-start">'
-      + '<span style="font-size:14px;color:' + (typeColor[n.type] || 'var(--accent)') + ';margin-top:1px">' + (typeIcon[n.type] || '•') + '</span>'
-      + '<div style="flex:1"><div style="font-size:13px;color:var(--text)">' + n.text + '</div>'
-      + '<div style="font-size:11px;color:var(--text-muted);margin-top:3px">' + n.time + '</div></div>'
-      + (n.unread ? '<span style="width:7px;height:7px;border-radius:50%;background:var(--accent);flex-shrink:0;margin-top:4px"></span>' : '')
-      + '</div>';
-  }).join('');
+  setNotifTab(activeNotificationTab);
 }
 
 function markNotifRead(id) {
   var n = notifications.find(function (x) { return x.id === id; });
-  if (n) { n.unread = false; updateNotifBadge(); renderNotifList(); }
+  if (n) { n.unread = false; updateNotifBadge(); setNotifTab(activeNotificationTab); }
+  var token = window.APP_CONFIG && localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (token) {
+    fetch(window.APP_CONFIG.API_BASE_URL + '/notifications/' + encodeURIComponent(id) + '/read', {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${token}` }
+    }).catch(function (error) { console.error('Mark notification read error:', error); });
+  }
+  if (n && n.incId) openDetailPanel(n.incId);
 }
 
 function markAllNotifRead() {
   notifications.forEach(function (n) { n.unread = false; });
   updateNotifBadge();
-  renderNotifList();
+  setNotifTab(activeNotificationTab);
+  var token = window.APP_CONFIG && localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (token) {
+    fetch(window.APP_CONFIG.API_BASE_URL + '/notifications/read-all', {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${token}` }
+    }).catch(function (error) { console.error('Mark all notifications read error:', error); });
+  }
 }
 const COLOR_MAP = {
   blue: { bg: 'rgba(79,142,247,0.12)', color: 'var(--accent)', cardCls: 'card-custom' },
@@ -3108,7 +3180,7 @@ function openModal(id) {
     var _imt = document.getElementById('incidentModalTitle'); if (_imt) _imt.textContent = 'Create New Incident';
     createModalTags = []; renderCreateTagChips();
     var _sib = document.getElementById('saveIncidentBtn'); if (_sib) _sib.textContent = 'Create Incident';
-    ['f_title', 'f_customer', 'f_project', 'f_product_line', 'f_severity', 'f_status', 'f_engineer', 'f_sf_case', 'f_rd_tickets', 'f_desc', 'f_components', 'f_applications', 'f_area'].forEach(f => {
+    ['f_title', 'f_customer', 'f_project', 'f_product_line', 'f_severity', 'f_status', 'f_engineer', 'f_sf_case', 'f_rd_tickets', 'f_desc', 'f_area'].forEach(f => {
       const el = document.getElementById(f);
       if (el) el.value = f === 'f_status' ? 'New' : '';
     });
@@ -3310,6 +3382,28 @@ function deleteIncident(id) {
   document.body.appendChild(overlay);
 }
 
+function removeDeletedIncidentFromUi(id) {
+  incidents = incidents.filter(function (incident) { return incident.id !== id; });
+  filteredIncidents = filteredIncidents.filter(function (incident) { return incident.id !== id; });
+  selectedIncidents.delete(id);
+  delete incidentComments[id];
+
+  var totalPages = Math.max(1, Math.ceil(filteredIncidents.length / perPage));
+  if (currentPage > totalPages) currentPage = totalPages;
+
+  if (detailCurrentId === id) {
+    document.getElementById('detailOverlay')?.classList.remove('open', 'metric-drilldown-detail');
+    document.getElementById('detailPanel')?.classList.remove('open', 'editing');
+    document.body.style.overflow = '';
+    detailCurrentId = null;
+  }
+
+  renderIncidentTable();
+  updateStats();
+  if (typeof renderKanban === 'function' && currentIncidentView === 'kanban') renderKanban();
+  renderHomePage();
+}
+
 function confirmDeleteIncident(id) {
   var overlay = document.getElementById('deleteConfirmOverlay');
   if (overlay) overlay.remove();
@@ -3331,20 +3425,7 @@ function confirmDeleteIncident(id) {
       .then(r => r.json())
       .then(data => {
         if (data && data.success) {
-          var idx = incidents.findIndex(function (i) { return i.id === id; });
-          if (idx !== -1) {
-            incidents.splice(idx, 1);
-          }
-          if (detailCurrentId === id) {
-            document.getElementById('detailOverlay')?.classList.remove('open');
-            document.getElementById('detailPanel')?.classList.remove('open');
-            document.body.style.overflow = '';
-            detailCurrentId = null;
-          }
-          renderIncidentTable();
-          updateStats();
-          if (typeof renderKanban === 'function' && currentIncidentView === 'kanban') renderKanban();
-          renderHomePage();
+          removeDeletedIncidentFromUi(id);
           showToast(id + ' has been deleted.', 'success');
           refreshDashboardData();
         } else {
@@ -3365,8 +3446,6 @@ function confirmDeleteIncident(id) {
       return;
     }
 
-    incidents.splice(idx, 1);
-
     activityLog.unshift({
       type: 'critical',
       msg: currentUserName + ' deleted ' + id + ' — ' + inc.title.substring(0, 45),
@@ -3375,17 +3454,7 @@ function confirmDeleteIncident(id) {
     });
     if (activityLog.length > 50) activityLog.pop();
 
-    if (detailCurrentId === id) {
-      document.getElementById('detailOverlay').classList.remove('open', 'metric-drilldown-detail');
-      document.getElementById('detailPanel').classList.remove('open');
-      document.body.style.overflow = '';
-      detailCurrentId = null;
-    }
-
-    renderIncidentTable();
-    updateStats();
-    if (typeof renderKanban === 'function' && currentIncidentView === 'kanban') renderKanban();
-    renderHomePage();
+    removeDeletedIncidentFromUi(id);
     showToast(id + ' has been deleted.', 'success');
   }
 }
@@ -3568,8 +3637,6 @@ function saveIncident() {
     return;
   }
 
-  const components = document.getElementById('f_components')?.value.trim() || '';
-  const applications = document.getElementById('f_applications')?.value.trim() || '';
   const area = document.getElementById('f_area')?.value || '';
   const resolvedBy = document.getElementById('f_resolved_by')?.value || '';
   const sfCase = (document.getElementById('f_sf_case')?.value || '').trim();
@@ -3601,8 +3668,6 @@ function saveIncident() {
         sf_case: sfCase,
         rd_tickets: rdTickets,
         description: desc,
-        components,
-        applications,
         sla_hours: null,
         area,
         tags: createModalTags.slice()
@@ -3637,7 +3702,7 @@ function saveIncident() {
     } else {
       const inc = incidents.find(i => i.id === editingId);
       if (inc) {
-        Object.assign(inc, { title, customer, project, product_line: productLine, rd_tickets: rdTickets, rdTickets, sfCase, severity, status, engineer, date, startDT, timezone: selectedTZ, desc, components, applications, area, tags: createModalTags.slice() });
+        Object.assign(inc, { title, customer, project, product_line: productLine, rd_tickets: rdTickets, rdTickets, sfCase, severity, status, engineer, date, startDT, timezone: selectedTZ, desc, area, tags: createModalTags.slice() });
       }
       showToast(`${editingId} updated successfully`, 'success');
       closeModal('incidentModal');
@@ -3669,8 +3734,6 @@ function saveIncident() {
         sf_case: sfCase,
         rd_tickets: rdTickets,
         description: desc,
-        components,
-        applications,
         area,
         tags: createModalTags.slice()
       };
@@ -3702,7 +3765,7 @@ function saveIncident() {
         });
     } else {
       const newId = 'INC-' + String(incidents.length + 1).padStart(3, '0');
-      incidents.unshift({ id: newId, title, customer, project, product_line: productLine, rd_tickets: rdTickets, rdTickets, severity, status, engineer, date, startDT, timezone: selectedTZ, desc, components, applications, area, resolvedBy, sfCase, mttdH, mttdM, mttd_minutes: mttdMinutes > 0 ? mttdMinutes : null, mttdStr, tags: createModalTags.slice() });
+      incidents.unshift({ id: newId, title, customer, project, product_line: productLine, rd_tickets: rdTickets, rdTickets, severity, status, engineer, date, startDT, timezone: selectedTZ, desc, area, resolvedBy, sfCase, mttdH, mttdM, mttd_minutes: mttdMinutes > 0 ? mttdMinutes : null, mttdStr, tags: createModalTags.slice() });
       addFeedEntry(newId, 'create', 'Incident created', `Severity: ${severity} · Customer: ${customer}`);
       showToast(`${newId} created successfully`, 'success');
       closeModal('incidentModal');
@@ -4744,7 +4807,7 @@ function _drawDowntimeApp(data) {
   var map = {};
   closed.forEach(function (i) {
     var dt = (i.downtimeH || 0) * 60 + (i.downtimeM || 0);
-    var app = i.applications || i.project || 'Other';
+    var app = i.project || 'Other';
     map[app] = (map[app] || 0) + dt;
   });
   var sorted = Object.keys(map).map(function (k) { return { k: k, v: map[k] }; })
@@ -6233,8 +6296,6 @@ function viewIncidentReport(id) {
   };
   _q('ir_rca', inc.rca || rcaMap[inc.severity] || 'Root cause analysis pending.');
   _q('ir_resolution', inc.resolution || resMap[inc.severity] || 'Resolution steps applied.');
-  _q('ir_components', inc.components || 'Not specified');
-  _q('ir_applications', inc.applications || 'Not specified');
   const irRB = document.getElementById('ir_resolved_by'); if (irRB) irRB.textContent = inc.resolvedBy || '—';
   const irSF = document.getElementById('ir_sf_case'); if (irSF) { irSF.textContent = inc.sfCase || '—'; irSF.style.color = inc.sfCase ? '#4f8ef7' : 'var(--text-secondary)'; }
   // Timezone: reset to IST on fresh open, render selector, apply timestamps
@@ -6296,8 +6357,6 @@ function exportIncidentPDF() {
   const reportedDate = fmtInTZ(new Date((inc.startDT || inc.date + 'T00:00')), inc.timezone || 'IST').split(',')[0];
   const severity = inc.severity;
   const status = inc.status;
-  const components = inc.components || 'Not specified';
-  const applications = inc.applications || 'Not specified';
   const resolvedBy = inc.resolvedBy || '—';
   const sfCase = inc.sfCase || '—';
   const area = inc.area || '—';
@@ -6402,11 +6461,6 @@ function exportIncidentPDF() {
   parts.push('<div class="desc-box">' + rca + '</div>');
   parts.push('<h2>Resolution</h2>');
   parts.push('<div class="desc-box">' + resolution + '</div>');
-  parts.push('<h2>Impacted Components &amp; Applications</h2>');
-  parts.push('<div class="grid2">');
-  parts.push('<div class="field"><div class="field-lbl">Components</div><div class="field-val">' + components + '</div></div>');
-  parts.push('<div class="field"><div class="field-lbl">Applications</div><div class="field-val">' + applications + '</div></div>');
-  parts.push('</div>');
   parts.push('<h2>Resolution Info</h2>');
   parts.push('<div class="grid2">');
   parts.push('<div class="field"><div class="field-lbl">Resolved By</div><div class="field-val">' + resolvedBy + '</div></div>');
@@ -6726,8 +6780,6 @@ function populateEditForm(inc) {
   set('dp_f_mttr_m', inc.mttrM || 0);
   set('dp_f_rca', inc.rca || '');
   set('dp_f_resolution', inc.resolution || '');
-  set('dp_f_components', inc.components || '');
-  set('dp_f_applications', inc.applications || '');
   set('dp_f_resolved_by', inc.resolvedBy || '');
   set('dp_f_sf_case', inc.sfCase || inc.sf_case || '');
   set('dp_f_rd_tickets', inc.rd_tickets || inc.rdTickets || '');
@@ -6824,8 +6876,6 @@ function saveDetailEdit() {
   inc.mttrStr = inc.mttrH > 0 ? (inc.mttrM > 0 ? `${inc.mttrH}h ${inc.mttrM}m` : `${inc.mttrH}h`) : inc.mttrM > 0 ? `${inc.mttrM}m` : '';
   inc.rca = getVal('dp_f_rca');
   inc.resolution = getVal('dp_f_resolution');
-  inc.components = getVal('dp_f_components');
-  inc.applications = getVal('dp_f_applications');
   inc.resolvedBy = getVal('dp_f_resolved_by');
   const sfCaseValue = getVal('dp_f_sf_case').trim();
   if (sfCaseValue) inc.sfCase = sfCaseValue;
@@ -6854,8 +6904,6 @@ function saveDetailEdit() {
       closed_date: endDb ? endDb.substring(0, 10) : undefined,
       timezone: selectedTZ,
       description: desc,
-      components: inc.components,
-      applications: inc.applications,
       area: document.getElementById('dp_f_area')?.value || null,
       rca: inc.rca,
       resolution: inc.resolution,
@@ -7076,6 +7124,7 @@ function doLogin() {
 
         localStorage.setItem(window.APP_CONFIG.JWT_TOKEN_KEY, data.token);
         startSessionInactivityTracking(true);
+        startNotificationPolling();
         const user = data.user;
         currentRole = user.role;
         currentUserName = user.name;
@@ -7126,6 +7175,7 @@ function doLogout() {
 }
 function doLogoutConfirmed(reason) {
   stopSessionInactivityTracking();
+  stopNotificationPolling();
   const portal = document.getElementById('portalApp');
   portal.style.transition = 'opacity .3s ease';
   portal.style.opacity = '0';
@@ -7582,6 +7632,7 @@ function verifySessionAndInit() {
         currentRole = user.role;
         currentUserName = user.name;
         startSessionInactivityTracking(false);
+        startNotificationPolling();
 
         const loginScreen = document.getElementById('loginScreen');
         if (loginScreen) {

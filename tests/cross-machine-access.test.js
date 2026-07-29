@@ -7,9 +7,8 @@ const root = path.resolve(__dirname, '..');
 const config = fs.readFileSync(path.join(root, 'config', 'config.js'), 'utf8');
 const server = fs.readFileSync(path.join(root, 'backend', 'server.js'), 'utf8');
 
-test('frontend API URL follows the hostname used to open the UI', () => {
-  assert.match(config, /window\.location\.hostname/);
-  assert.match(config, /`\$\{window\.location\.protocol\}\/\/\$\{apiHostname\}:4000\/api`/);
+test('frontend uses the same-origin API path exposed by the UI server', () => {
+  assert.match(config, /API_BASE_URL:\s*["']\/api["']/);
   assert.doesNotMatch(config, /API_BASE_URL:\s*["']http:\/\/localhost/);
 });
 

@@ -1324,14 +1324,6 @@
 <label class="form-label required">Description</label>
 <textarea id="f_desc" placeholder="Detailed description of the incident, impact, and steps to reproduce…" rows="3"></textarea>
 </div>
-<div class="form-group">
-<label class="form-label">Impacted Components</label>
-<input id="f_components" placeholder="e.g. Auth Service, API Gateway, DB Cluster" type="text"/>
-</div>
-<div class="form-group">
-<label class="form-label">Impacted Applications</label>
-<input id="f_applications" placeholder="e.g. Customer Portal, Mobile App, Admin Panel" type="text"/>
-</div>
 <div>
 <label class="form-label">Area <span style="color:var(--danger)">*</span></label>
 <select id="f_area" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer"><option value="">Select Area</option></select>
@@ -1467,14 +1459,6 @@
 <div class="ir-section">
 <div class="ir-section-title">Resolution</div>
 <div class="ir-desc-box" id="ir_resolution">—</div>
-</div>
-<!-- Impacted -->
-<div class="ir-section">
-<div class="ir-section-title">Impacted Components &amp; Applications</div>
-<div class="ir-grid">
-<div class="ir-field"><div class="ir-field-label">Components</div><div class="ir-field-value" id="ir_components">—</div></div>
-<div class="ir-field"><div class="ir-field-label">Applications</div><div class="ir-field-value" id="ir_applications">—</div></div>
-</div>
 </div>
 <!-- Resolution Info -->
 <div class="ir-section">
@@ -1923,16 +1907,6 @@
 </div>
 </div>
 <!-- Components + Applications -->
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
-<div>
-<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Components Affected</label>
-<input id="dp_f_components" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="e.g. Auth Service, DB" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s"/>
-</div>
-<div>
-<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Applications Affected</label>
-<input id="dp_f_applications" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="e.g. Portal, API" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s"/>
-</div>
-</div>
 </div>
 </div>
 <!-- FOOTER -->

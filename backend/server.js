@@ -6,6 +6,7 @@ require('dotenv').config();
 const authRoutes = require('./routes/authRoutes');
 const incidentRoutes = require('./routes/incidentRoutes');
 const masterDataRoutes = require('./routes/masterDataRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 const { startUiServer } = require('../server-ui');
 const pool = require('./config/database');
 
@@ -40,6 +41,7 @@ app.use((req, res, next) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/incidents', incidentRoutes);
 app.use('/api/master-data', masterDataRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check endpoint
 app.get('/api/health', async (req, res) => {
@@ -87,8 +89,8 @@ app.listen(PORT, HOST, () => {
 ╔═══════════════════════════════════════════════════════════╗
 ║   Incident Management Portal - Backend Server Started     ║
 ╠═══════════════════════════════════════════════════════════╣
-║   🚀 Server running at: http://localhost:${PORT}            ║
-║   📝 API Base URL: http://localhost:${PORT}/api              ║
+║   🚀 Server listening on: http://${HOST}:${PORT}             ║
+║   📝 Browser API path: /api (proxied through UI port 5500)   ║
 ║   🔐 Environment: ${process.env.NODE_ENV || 'development'}                        ║
 ╠═══════════════════════════════════════════════════════════╣
 ║   Available Endpoints:                                    ║
