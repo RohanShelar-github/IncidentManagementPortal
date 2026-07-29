@@ -1,4 +1,24 @@
 const pool = require('../config/database');
+const {
+  buildCanonicalValues,
+  minutesToHM,
+  resolveDurationMinutes
+} = require('../services/incidentNormalization');
+
+const CANONICAL_INCIDENT_FIELDS = process.env.CANONICAL_INCIDENT_FIELDS !== 'false';
+
+const IANA_TO_LEGACY_TIMEZONE = {
+  'Asia/Kolkata': 'IST',
+  'America/New_York': 'EST',
+  'America/Chicago': 'CST',
+  'America/Denver': 'MST',
+  'America/Los_Angeles': 'PST',
+  'Etc/UTC': 'UTC'
+};
+const toLegacyTimezone = value => {
+  const timezone = String(value || 'IST').trim() || 'IST';
+  return IANA_TO_LEGACY_TIMEZONE[timezone] || (timezone.length <= 10 ? timezone : 'UTC');
+};
 
 const STATUS_TO_DB = {
   'New': 'open',
@@ -39,13 +59,6 @@ const toDateTimeValue = (value) => {
   return String(value).replace('T', ' ').substring(0, 19);
 };
 const toDateOnly = (value) => toDateTimeValue(value).substring(0, 10);
-const minutesToHM = (mins) => {
-  const n = Number(mins);
-  if (!Number.isFinite(n) || n <= 0) return '';
-  const h = Math.floor(n / 60);
-  const m = Math.round(n % 60);
-  return h > 0 ? (m > 0 ? h + 'h ' + m + 'm' : h + 'h') : m + 'm';
-};
 const resolveMttdMinutes = (body) => {
   if (body.mttd_minutes !== undefined && body.mttd_minutes !== null && body.mttd_minutes !== '') return Number(body.mttd_minutes);
   const h = Number(body.mttdH ?? body.mttd_h ?? 0) || 0;
@@ -89,6 +102,9 @@ const resolveArea = async (nameOrId) => {
 
 const incidentSelect = `
   SELECT i.*, assignee.full_name AS engineer_name, creator.full_name AS created_by_name,
+         ${CANONICAL_INCIDENT_FIELDS
+    ? "DATE_FORMAT(i.opened_at_utc, '%Y-%m-%d %H:%i:%s') AS opened_at_utc_text, DATE_FORMAT(i.closed_at_utc, '%Y-%m-%d %H:%i:%s') AS closed_at_utc_text,"
+    : "NULL AS opened_at_utc_text, NULL AS closed_at_utc_text,"}
          customer_master.customer_name, area_master.area_name
     FROM incidents i
     LEFT JOIN users assignee ON assignee.id = i.assigned_to
@@ -105,15 +121,24 @@ function parseTags(tags) {
 
 function mapIncident(row) {
   const ref = row.incident_ref || ('INC-' + String(row.id).padStart(3, '0'));
-  const downtimeH = Number(row.downtime_hours || 0);
-  const downtimeM = Number(row.downtime_minutes || 0);
+  const downtime = minutesToHM(
+    row.downtime_mins === null || row.downtime_mins === undefined
+      ? Number(row.downtime_hours || 0) * 60 + Number(row.downtime_minutes || 0)
+      : row.downtime_mins
+  );
   const mttdMinutes = row.mttd_minutes === null || row.mttd_minutes === undefined ? null : Number(row.mttd_minutes);
-  const mttdH = Number.isFinite(mttdMinutes) && mttdMinutes > 0 ? Math.floor(mttdMinutes / 60) : 0;
-  const mttdM = Number.isFinite(mttdMinutes) && mttdMinutes > 0 ? Math.round(mttdMinutes % 60) : 0;
+  const mttd = minutesToHM(mttdMinutes);
+  const mttrMinutes = row.mttr_minutes === null || row.mttr_minutes === undefined
+    ? resolveDurationMinutes({ mttrStr: row.mttr_str }, 'mttr', null)
+    : Number(row.mttr_minutes);
+  const mttr = minutesToHM(mttrMinutes);
   const openedAt = toDateTimeValue(row.date_time_opened || row.start_dt || row.created_at);
   const startDT = toDateTimeValue(row.start_dt || row.date_time_opened);
   const endDT = toDateTimeValue(row.end_dt || row.date_time_closed);
   const closedAt = toDateTimeValue(row.date_time_closed);
+  const slaHours = row.sla_minutes === null || row.sla_minutes === undefined
+    ? row.sla_hours
+    : Number(row.sla_minutes) / 60;
   return {
     db_id: row.id,
     id: ref,
@@ -137,12 +162,16 @@ function mapIncident(row) {
     date_time_closed: closedAt,
     closed_date: row.closed_date || '',
     timezone: row.timezone || '',
+    source_timezone: row.source_timezone || '',
+    opened_at_utc: row.opened_at_utc_text ? row.opened_at_utc_text.replace(' ', 'T') + 'Z' : '',
+    closed_at_utc: row.closed_at_utc_text ? row.closed_at_utc_text.replace(' ', 'T') + 'Z' : '',
     description: row.description || '',
     desc: row.description || '',
     components: row.components || '',
     applications: row.applications || '',
-    sla_hours: row.sla_hours,
-    slaHours: row.sla_hours,
+    sla_minutes: row.sla_minutes === null || row.sla_minutes === undefined ? null : Number(row.sla_minutes),
+    sla_hours: slaHours,
+    slaHours,
     area_id: row.area_id,
     area: row.area_name || row.area || '',
     product_line: row.product_line || '',
@@ -153,17 +182,21 @@ function mapIncident(row) {
     sf_case: row.sf_case_no || row.legacy_case_number || '',
     sfCase: row.sf_case_no || row.legacy_case_number || '',
     incident_report_status: row.incident_report_status || '',
-    downtime_h: downtimeH,
-    downtime_m: downtimeM,
-    downtimeH,
-    downtimeM,
-    downtime_mins: row.downtime_mins,
-    downtimeStr: row.downtime_str || (downtimeH ? downtimeH + 'h' + (downtimeM ? ' ' + downtimeM + 'm' : '') : (downtimeM ? downtimeM + 'm' : '')),
-    mttdStr: row.mttd_str || minutesToHM(mttdMinutes),
+    downtime_h: downtime.hours,
+    downtime_m: downtime.minutes,
+    downtimeH: downtime.hours,
+    downtimeM: downtime.minutes,
+    downtime_mins: downtime.total,
+    downtime_minutes_total: downtime.total,
+    downtimeStr: downtime.text,
+    mttdStr: mttd.text,
     mttd_minutes: mttdMinutes,
-    mttdH,
-    mttdM,
-    mttrStr: row.mttr_str || '',
+    mttdH: mttd.hours,
+    mttdM: mttd.minutes,
+    mttr_minutes: mttrMinutes,
+    mttrH: mttr.hours,
+    mttrM: mttr.minutes,
+    mttrStr: mttr.text,
     account_name: row.account_name || '',
     internal_status: row.internal_status || '',
     rd_tickets: row.rd_tickets || '',
@@ -184,57 +217,43 @@ const createIncident = async (req, res) => {
     const resolvedCustomer = await resolveCustomer(b.customer_id || b.customer);
     const resolvedArea = await resolveArea(b.area_id || b.area);
     const start = b.startDT || b.date_created || b.date || new Date().toISOString().substring(0, 16);
-    const mttdMinutes = resolveMttdMinutes(b);
-
+    const canonical = buildCanonicalValues({ ...b, date_time_opened: b.date_time_opened || start }, null);
+    const downtime = minutesToHM(canonical.downtime_mins);
+    const mttd = minutesToHM(canonical.mttd_minutes);
+    const mttr = minutesToHM(canonical.mttr_minutes);
+    const columns = [
+      'incident_ref', 'legacy_case_number', 'title', 'description', 'severity', 'status', 'assigned_to', 'case_owner', 'created_by',
+      'customer_id', 'customer', 'project', 'project_area', 'area_id', 'area', 'product_line', 'components', 'applications',
+      'sla_hours', 'tags', 'start_dt', 'date_time_opened', 'end_dt', 'date_time_closed', 'closed_date', 'timezone',
+      'sf_case_no', 'incident_report_status', 'downtime_hours', 'downtime_minutes', 'downtime_mins', 'downtime_str',
+      'mttd_str', 'mttd_minutes', 'mttr_str', 'account_name', 'internal_status', 'rd_tickets'
+    ];
+    const values = [
+      incidentRef, b.legacy_case_number || b.sf_case || b.sfCase || null, b.title, b.description || null,
+      normalizeSeverity(b.severity), normalizeStatus(b.status || 'New'), assignedTo, b.case_owner || b.engineer || null,
+      req.user.id, resolvedCustomer.id, resolvedCustomer.name || b.customer || null, b.project || null,
+      b.project_area || null, resolvedArea.id, resolvedArea.name || b.area || null, b.product_line || null,
+      b.components || null, b.applications || null, b.sla_hours || null,
+      JSON.stringify(Array.isArray(b.tags) ? b.tags : []), start, b.date_time_opened || start || null,
+      b.endDT || b.date_time_closed || null, b.date_time_closed || null, b.closed_date || null, toLegacyTimezone(b.timezone || canonical.source_timezone),
+      b.sf_case || b.sfCase || b.legacy_case_number || null, b.incident_report_status || null,
+      downtime.hours, downtime.minutes, downtime.total, downtime.text || null,
+      mttd.text || null, canonical.mttd_minutes, mttr.text || null,
+      b.account_name || null, b.internal_status || null, b.rd_tickets || b.rdTickets || null
+    ];
+    if (CANONICAL_INCIDENT_FIELDS) {
+      columns.push('opened_at_utc', 'closed_at_utc', 'source_timezone', 'sla_minutes', 'mttr_minutes');
+      values.push(canonical.opened_at_utc, canonical.closed_at_utc, canonical.source_timezone, canonical.sla_minutes, canonical.mttr_minutes);
+    }
     await pool.query(
-      `INSERT INTO incidents
-       (incident_ref, legacy_case_number, title, description, severity, status, assigned_to, case_owner, created_by,
-        customer_id, customer, project, project_area, area_id, area, product_line, components, applications, sla_hours, tags,
-        start_dt, date_time_opened, end_dt, date_time_closed, closed_date, timezone, sf_case_no, incident_report_status,
-        downtime_mins, mttd_minutes, account_name, internal_status, rd_tickets)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        incidentRef,
-        b.legacy_case_number || b.sf_case || b.sfCase || null,
-        b.title,
-        b.description || null,
-        normalizeSeverity(b.severity),
-        normalizeStatus(b.status || 'New'),
-        assignedTo,
-        b.case_owner || b.engineer || null,
-        req.user.id,
-        resolvedCustomer.id,
-        resolvedCustomer.name || b.customer || null,
-        b.project || null,
-        b.project_area || null,
-        resolvedArea.id,
-        resolvedArea.name || b.area || null,
-        b.product_line || null,
-        b.components || null,
-        b.applications || null,
-        b.sla_hours || null,
-        JSON.stringify(Array.isArray(b.tags) ? b.tags : []),
-        start,
-        b.date_time_opened || start || null,
-        b.endDT || b.date_time_closed || null,
-        b.date_time_closed || null,
-        b.closed_date || null,
-        b.timezone || 'IST',
-        b.sf_case || b.sfCase || b.legacy_case_number || null,
-        b.incident_report_status || null,
-        b.downtime_mins || 0,
-        mttdMinutes,
-        b.account_name || null,
-        b.internal_status || null,
-        b.rd_tickets || b.rdTickets || null
-      ]
+      'INSERT INTO incidents (' + columns.join(', ') + ') VALUES (' + columns.map(() => '?').join(', ') + ')',
+      values
     );
 
     const [created] = await pool.query('SELECT id FROM incidents WHERE incident_ref = ?', [incidentRef]);
     if (created.length) {
       await pool.query('INSERT INTO activity_logs (incident_id, action_type, action_by, detail) VALUES (?, ?, ?, ?)', [created[0].id, 'create', req.user.id, 'Incident created']);
     }
-
     return res.status(201).json({ success: true, message: 'Incident created successfully', data: { id: incidentRef } });
   } catch (error) {
     console.error('Create incident error:', error);
@@ -294,10 +313,22 @@ const updateIncident = async (req, res) => {
   try {
     const dbId = await findIncidentDbId(req.params.id);
     if (!dbId) return res.status(404).json({ success: false, message: 'Incident not found' });
+    const [currentRows] = await pool.query('SELECT * FROM incidents WHERE id = ? LIMIT 1', [dbId]);
+    const current = currentRows[0] || {};
     const updates = [];
     const values = [];
     const add = (column, value) => { updates.push(column + ' = ?'); values.push(value); };
     const b = req.body;
+    const canonicalBody = { ...b };
+    const timezoneTouched = b.timezone !== undefined || b.source_timezone !== undefined;
+    if (timezoneTouched && b.date_time_opened === undefined && b.startDT === undefined && b.date_created === undefined && b.date === undefined) {
+      canonicalBody.date_time_opened = current.date_time_opened || current.start_dt;
+    }
+    if (timezoneTouched && b.date_time_closed === undefined && b.endDT === undefined && b.closed_at === undefined) {
+      canonicalBody.date_time_closed = current.date_time_closed || current.end_dt;
+    }
+    const canonical = buildCanonicalValues(canonicalBody, current);
+
     if (b.title !== undefined) add('title', b.title);
     if (b.customer !== undefined || b.customer_id !== undefined) {
       const resolvedCustomer = await resolveCustomer(b.customer_id || b.customer);
@@ -310,11 +341,8 @@ const updateIncident = async (req, res) => {
     const normalizedStatus = b.status !== undefined ? normalizeStatus(b.status) : undefined;
     if (normalizedStatus === 'closed') {
       const incomingReportStatus = String(b.incident_report_status || '').trim();
-      if (!isIncidentReportStatusValid(incomingReportStatus)) {
-        const [existingRows] = await pool.query('SELECT incident_report_status FROM incidents WHERE id = ? LIMIT 1', [dbId]);
-        if (!isIncidentReportStatusValid(existingRows[0]?.incident_report_status)) {
-          return res.status(400).json({ success: false, message: 'Incident Report Status must be Yes or No before closing the incident' });
-        }
+      if (!isIncidentReportStatusValid(incomingReportStatus) && !isIncidentReportStatusValid(current.incident_report_status)) {
+        return res.status(400).json({ success: false, message: 'Incident Report Status must be Yes or No before closing the incident' });
       }
     }
     if (b.status !== undefined) add('status', normalizedStatus);
@@ -337,7 +365,7 @@ const updateIncident = async (req, res) => {
     if (b.date_time_opened !== undefined) add('date_time_opened', b.date_time_opened || null);
     if (b.date_time_closed !== undefined) add('date_time_closed', b.date_time_closed || null);
     if (b.closed_date !== undefined) add('closed_date', b.closed_date || null);
-    if (b.timezone !== undefined) add('timezone', b.timezone || 'IST');
+    if (b.timezone !== undefined) add('timezone', toLegacyTimezone(b.timezone));
     if (b.rca !== undefined) add('rca', b.rca || null);
     if (b.resolution !== undefined) add('resolution', b.resolution || null);
     if (b.resolved_by !== undefined) add('resolved_by', b.resolved_by || null);
@@ -347,17 +375,37 @@ const updateIncident = async (req, res) => {
       if (reportStatus && !isIncidentReportStatusValid(reportStatus)) return res.status(400).json({ success: false, message: 'Incident Report Status must be Yes or No' });
       add('incident_report_status', reportStatus || null);
     }
-    if (b.downtime_h !== undefined || b.downtimeH !== undefined) add('downtime_hours', b.downtime_h ?? b.downtimeH ?? 0);
-    if (b.downtime_m !== undefined || b.downtimeM !== undefined) add('downtime_minutes', b.downtime_m ?? b.downtimeM ?? 0);
-    if (b.downtime_mins !== undefined) add('downtime_mins', b.downtime_mins ?? 0);
-    if (b.downtimeStr !== undefined) add('downtime_str', b.downtimeStr || null);
-    if (b.mttdStr !== undefined) add('mttd_str', b.mttdStr || null);
-    if (b.mttd_minutes !== undefined || b.mttdH !== undefined || b.mttdM !== undefined || b.mttd_h !== undefined || b.mttd_m !== undefined) add('mttd_minutes', resolveMttdMinutes(b));
-    if (b.mttrStr !== undefined) add('mttr_str', b.mttrStr || null);
+
+    const downtimeTouched = ['downtime_mins', 'downtime_minutes_total', 'downtime_h', 'downtimeH', 'downtime_m', 'downtimeM', 'downtimeStr', 'downtime_str']
+      .some((key) => b[key] !== undefined);
+    if (downtimeTouched) {
+      const duration = minutesToHM(canonical.downtime_mins);
+      add('downtime_hours', duration.hours);
+      add('downtime_minutes', duration.minutes);
+      add('downtime_mins', duration.total);
+      add('downtime_str', duration.text || null);
+    }
+    const mttdTouched = ['mttd_minutes', 'mttdH', 'mttd_h', 'mttdM', 'mttd_m', 'mttdStr', 'mttd_str']
+      .some((key) => b[key] !== undefined);
+    if (mttdTouched) {
+      add('mttd_minutes', canonical.mttd_minutes);
+      add('mttd_str', minutesToHM(canonical.mttd_minutes).text || null);
+    }
+    const mttrTouched = ['mttr_minutes', 'mttrH', 'mttr_h', 'mttrM', 'mttr_m', 'mttrStr', 'mttr_str']
+      .some((key) => b[key] !== undefined);
+    if (mttrTouched) add('mttr_str', minutesToHM(canonical.mttr_minutes).text || null);
     if (b.account_name !== undefined) add('account_name', b.account_name || null);
     if (b.internal_status !== undefined) add('internal_status', b.internal_status || null);
     if ((b.rd_tickets !== undefined || b.rdTickets !== undefined) && String(b.rd_tickets || b.rdTickets || '').trim() !== '') add('rd_tickets', String(b.rd_tickets || b.rdTickets).trim());
     if (b.tags !== undefined) add('tags', JSON.stringify(Array.isArray(b.tags) ? b.tags : []));
+
+    if (CANONICAL_INCIDENT_FIELDS) {
+      if (canonical.opened_at_utc !== undefined) add('opened_at_utc', canonical.opened_at_utc);
+      if (canonical.closed_at_utc !== undefined) add('closed_at_utc', canonical.closed_at_utc);
+      if (timezoneTouched || canonical.opened_at_utc !== undefined || canonical.closed_at_utc !== undefined) add('source_timezone', canonical.source_timezone);
+      if (b.sla_hours !== undefined || b.sla_minutes !== undefined) add('sla_minutes', canonical.sla_minutes);
+      if (mttrTouched) add('mttr_minutes', canonical.mttr_minutes);
+    }
     if (updates.length) {
       values.push(dbId);
       await pool.query('UPDATE incidents SET ' + updates.join(', ') + ' WHERE id = ?', values);
@@ -410,4 +458,13 @@ const addComment = async (req, res) => {
   }
 };
 
-module.exports = { createIncident, getIncidents, getIncidentById, updateIncident, deleteIncident, getDashboardStats, addComment };
+module.exports = {
+  createIncident,
+  getIncidents,
+  getIncidentById,
+  updateIncident,
+  deleteIncident,
+  getDashboardStats,
+  addComment,
+  _test: { mapIncident }
+};

@@ -203,28 +203,46 @@ function requireIncidentReportStatus(inc) {
 
 function normalizeIncidentFromBackend(incident) {
   const startDT = toDatetimeLocal(incident.date_created || incident.startDT || incident.date);
-  const downtimeH = Number(incident.downtime_h ?? incident.downtimeH ?? 0) || 0;
-  const downtimeM = Number(incident.downtime_m ?? incident.downtimeM ?? 0) || 0;
-  const mttrH = Number(incident.mttr_h ?? incident.mttrH ?? 0) || 0;
-  const mttrM = Number(incident.mttr_m ?? incident.mttrM ?? 0) || 0;
+  const canonicalDowntime = Number(incident.downtime_mins ?? incident.downtime_minutes_total);
+  const downtimeH = Number.isFinite(canonicalDowntime)
+    ? Math.floor(Math.max(0, canonicalDowntime) / 60)
+    : (Number(incident.downtime_h ?? incident.downtimeH ?? 0) || 0);
+  const downtimeM = Number.isFinite(canonicalDowntime)
+    ? Math.round(Math.max(0, canonicalDowntime) % 60)
+    : (Number(incident.downtime_m ?? incident.downtimeM ?? 0) || 0);
+  const canonicalMttr = Number(incident.mttr_minutes);
+  const mttrH = Number.isFinite(canonicalMttr)
+    ? Math.floor(Math.max(0, canonicalMttr) / 60)
+    : (Number(incident.mttr_h ?? incident.mttrH ?? 0) || 0);
+  const mttrM = Number.isFinite(canonicalMttr)
+    ? Math.round(Math.max(0, canonicalMttr) % 60)
+    : (Number(incident.mttr_m ?? incident.mttrM ?? 0) || 0);
   const rawMttdMinutes = incident.mttd_minutes ?? incident.mttdMinutes ?? null;
   const mttdMinutes = rawMttdMinutes === null || rawMttdMinutes === '' ? null : Number(rawMttdMinutes);
   const mttdH = Number.isFinite(mttdMinutes) && mttdMinutes > 0 ? Math.floor(mttdMinutes / 60) : 0;
   const mttdM = Number.isFinite(mttdMinutes) && mttdMinutes > 0 ? Math.round(mttdMinutes % 60) : 0;
   const dbMttdStr = incident.mttdStr ?? incident.mttd_str ?? '';
+  const downtimeTotal = Number.isFinite(canonicalDowntime) ? Math.max(0, Math.round(canonicalDowntime)) : downtimeH * 60 + downtimeM;
+  const mttrTotal = Number.isFinite(canonicalMttr) ? Math.max(0, Math.round(canonicalMttr)) : mttrH * 60 + mttrM;
 
   return Object.assign({}, incident, {
     date: startDT ? startDT.substring(0, 10) : (incident.date || ''),
     startDT,
     timezone: incident.timezone || '',
+    source_timezone: incident.source_timezone || '',
+    opened_at_utc: incident.opened_at_utc || '',
+    closed_at_utc: incident.closed_at_utc || '',
     desc: incident.description ?? incident.desc ?? '',
     product_line: incident.product_line ?? incident.productLine ?? '',
     slaHours: incident.sla_hours ?? incident.slaHours ?? null,
     downtimeH,
     downtimeM,
+    downtime_mins: downtimeTotal,
+    downtime_minutes_total: downtimeTotal,
     downtimeStr: downtimeH > 0 ? (downtimeM > 0 ? downtimeH + 'h ' + downtimeM + 'm' : downtimeH + 'h') : (downtimeM > 0 ? downtimeM + 'm' : ''),
     mttrH,
     mttrM,
+    mttr_minutes: mttrTotal,
     mttrStr: mttrH > 0 ? (mttrM > 0 ? mttrH + 'h ' + mttrM + 'm' : mttrH + 'h') : (mttrM > 0 ? mttrM + 'm' : ''),
     mttd_minutes: Number.isFinite(mttdMinutes) ? mttdMinutes : null,
     mttdH,
@@ -3279,6 +3297,7 @@ function confirmCloseIncident() {
         resolution: res,
         downtime_h: h,
         downtime_m: m,
+        downtime_mins: h * 60 + m,
         timezone: closeTZ,
         endDT: closedAt,
         date_time_closed: closedAt,
@@ -6574,8 +6593,10 @@ function saveDetailEdit() {
       incident_report_status: incidentReportStatus,
       downtime_h: inc.downtimeH,
       downtime_m: inc.downtimeM,
+      downtime_mins: inc.downtimeH * 60 + inc.downtimeM,
       mttr_h: inc.mttrH,
       mttr_m: inc.mttrM,
+      mttr_minutes: inc.mttrH * 60 + inc.mttrM,
       tags: Array.isArray(inc.tags) ? inc.tags.slice() : []
     };
 

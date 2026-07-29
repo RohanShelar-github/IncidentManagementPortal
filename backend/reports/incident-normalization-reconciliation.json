@@ -1,0 +1,22 @@
+{
+  "generatedAt": "2026-07-27T16:45:24.535Z",
+  "database": "incident_management_db",
+  "counts": {
+    "incidents": 204,
+    "canonical_opened": "204",
+    "canonical_closed": "203",
+    "canonical_timezones": "204",
+    "archived_rows": 204
+  },
+  "checks": {
+    "archive_missing": 0,
+    "downtime_parts": 0,
+    "opened_utc_missing": 0,
+    "closed_utc_missing": 0,
+    "customer_orphan": 0,
+    "customer_snapshot": 0,
+    "area_orphan": 0,
+    "area_snapshot": 0
+  },
+  "passed": true
+}
