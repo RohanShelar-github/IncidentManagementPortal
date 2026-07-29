@@ -275,7 +275,7 @@ function loadMasterData(callback) {
     if (callback) callback(null);
     return;
   }
-  const token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
   if (!token) {
     if (callback) callback(new Error('Not authenticated. Please login first.'));
     return;
@@ -312,7 +312,7 @@ function loadUsersFromBackend(callback) {
     if (callback) callback(null);
     return;
   }
-  const token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
   if (!token) {
     if (callback) callback(new Error('Not authenticated. Please login first.'));
     return;
@@ -350,7 +350,7 @@ function loadIncidentsFromBackend(callback) {
     return;
   }
 
-  const token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
   if (!token) {
     console.warn('No JWT token found. Skipping backend incident load.');
     if (callback) callback(new Error('Not authenticated. Please login first.'));
@@ -860,7 +860,7 @@ function persistIncidentComment(incId, text, callback) {
     if (callback) callback();
     return;
   }
-  var token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  var token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
   if (!token) { showToast('Not authenticated. Please login first.', 'error'); return; }
   fetch(window.APP_CONFIG.API_BASE_URL + '/incidents/' + encodeURIComponent(incId) + '/comments', {
     method: 'POST',
@@ -977,7 +977,17 @@ function switchIncidentView(view) {
 function renderKanban() {
   var board = document.getElementById('kanbanBoard');
   if (!board) return;
-  var statuses = ['New', 'In Progress', 'Further Investigation', 'Escalated to 3rd Party', 'Resolved', 'Closed'];
+  var statuses = [
+    'New',
+    'In Progress',
+    'Tier 1 Level Support',
+    'Further Investigation',
+    'Escalated to R&D',
+    'Escalated to CSO Devops',
+    'Escalated to 3rd Party',
+    'Resolved',
+    'Closed'
+  ];
   var cols = statuses.map(function (s) {
     var incs = filteredIncidents.filter(function (i) { return i.status === s; });
     return '<div style="flex:1;min-width:220px;max-width:280px">'
@@ -1480,7 +1490,7 @@ function requireAdminMasterData() {
 }
 
 function masterDataRequest(path, method, body, callback) {
-  const token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
   if (!token) { showToast('Not authenticated. Please login first.', 'error'); return; }
   fetch(window.APP_CONFIG.API_BASE_URL + path, {
     method: method,
@@ -2360,7 +2370,7 @@ function notificationTimeLabel(value) {
 function loadNotificationsFromBackend(options) {
   options = options || {};
   if (!window.APP_CONFIG || !window.APP_CONFIG.ENABLE_BACKEND) return Promise.resolve();
-  var token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  var token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
   if (!token) return Promise.resolve();
   return fetch(window.APP_CONFIG.API_BASE_URL + '/notifications?limit=100', {
     headers: { 'Authorization': `Bearer ${token}` }
@@ -2433,7 +2443,7 @@ function renderNotifList() {
 function markNotifRead(id) {
   var n = notifications.find(function (x) { return x.id === id; });
   if (n) { n.unread = false; updateNotifBadge(); setNotifTab(activeNotificationTab); }
-  var token = window.APP_CONFIG && localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  var token = window.APP_CONFIG && sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
   if (token) {
     fetch(window.APP_CONFIG.API_BASE_URL + '/notifications/' + encodeURIComponent(id) + '/read', {
       method: 'PUT',
@@ -2447,7 +2457,7 @@ function markAllNotifRead() {
   notifications.forEach(function (n) { n.unread = false; });
   updateNotifBadge();
   setNotifTab(activeNotificationTab);
-  var token = window.APP_CONFIG && localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  var token = window.APP_CONFIG && sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
   if (token) {
     fetch(window.APP_CONFIG.API_BASE_URL + '/notifications/read-all', {
       method: 'PUT',
@@ -3082,7 +3092,7 @@ function doLogin() {
     .then(function (r) { return r.json(); })
     .then(function (data) {
       if (data && data.success && data.token) {
-        localStorage.setItem(window.APP_CONFIG.JWT_TOKEN_KEY, data.token);
+        sessionStorage.setItem(window.APP_CONFIG.JWT_TOKEN_KEY, data.token);
 
         var u = data.user || {};
         currentUserName = u.name || u.email || currentUserName;
@@ -3293,7 +3303,7 @@ function _forceCloseIncident(id) {
   if (!inc) return;
 
   if (window.APP_CONFIG && window.APP_CONFIG.ENABLE_BACKEND) {
-    const token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+    const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
     if (!token) {
       showToast('Not authenticated. Please login first.', 'error');
       return;
@@ -3409,7 +3419,7 @@ function confirmDeleteIncident(id) {
   if (overlay) overlay.remove();
 
   if (window.APP_CONFIG && window.APP_CONFIG.ENABLE_BACKEND) {
-    const token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+    const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
     if (!token) {
       showToast('Not authenticated. Please login first.', 'error');
       return;
@@ -3545,7 +3555,7 @@ function confirmCloseIncident() {
   const oldStatus = inc.status;
 
   if (window.APP_CONFIG && window.APP_CONFIG.ENABLE_BACKEND) {
-    const token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+    const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
     if (!token) {
       showToast('Not authenticated. Please login first.', 'error');
       return;
@@ -3645,7 +3655,7 @@ function saveIncident() {
   if (editingId) {
     const incidentId = editingId;
     if (window.APP_CONFIG && window.APP_CONFIG.ENABLE_BACKEND) {
-      const token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+      const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
       if (!token) {
         showToast('Not authenticated. Please login first.', 'error');
         return;
@@ -3711,7 +3721,7 @@ function saveIncident() {
     }
   } else {
     if (window.APP_CONFIG && window.APP_CONFIG.ENABLE_BACKEND) {
-      const token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+      const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
       if (!token) {
         showToast('Not authenticated. Please login first.', 'error');
         return;
@@ -3869,7 +3879,7 @@ async function deleteUser(id) {
     showToast('User deletion requires a database connection', 'error');
     return;
   }
-  const token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
   if (!token) {
     showToast('Not authenticated. Please login first.', 'error');
     return;
@@ -6882,7 +6892,7 @@ function saveDetailEdit() {
   if (rdTickets) { inc.rd_tickets = rdTickets; inc.rdTickets = rdTickets; }
 
   if (window.APP_CONFIG && window.APP_CONFIG.ENABLE_BACKEND) {
-    const token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+    const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
     if (!token) {
       showToast('Not authenticated. Please login first.', 'error');
       return;
@@ -7009,7 +7019,7 @@ function stopSessionInactivityTracking() {
 }
 
 function getLastSessionActivity() {
-  return parseInt(localStorage.getItem(SESSION_LAST_ACTIVITY_KEY), 10) || 0;
+  return parseInt(sessionStorage.getItem(SESSION_LAST_ACTIVITY_KEY), 10) || 0;
 }
 
 function hasSessionInactivityExpired() {
@@ -7035,25 +7045,25 @@ function scheduleSessionInactivityTimers() {
 
 function recordSessionActivity() {
   var tokenKey = window.APP_CONFIG ? window.APP_CONFIG.JWT_TOKEN_KEY : 'incident_portal_token';
-  if (!localStorage.getItem(tokenKey)) return;
+  if (!sessionStorage.getItem(tokenKey)) return;
   var now = Date.now();
   if (now - lastActivityWrite < 1000) return;
   lastActivityWrite = now;
-  localStorage.setItem(SESSION_LAST_ACTIVITY_KEY, String(now));
+  sessionStorage.setItem(SESSION_LAST_ACTIVITY_KEY, String(now));
   scheduleSessionInactivityTimers();
 }
 
 function startSessionInactivityTracking(resetActivity) {
   if (resetActivity || !getLastSessionActivity()) {
     lastActivityWrite = Date.now();
-    localStorage.setItem(SESSION_LAST_ACTIVITY_KEY, String(lastActivityWrite));
+    sessionStorage.setItem(SESSION_LAST_ACTIVITY_KEY, String(lastActivityWrite));
   }
   scheduleSessionInactivityTimers();
 }
 
 function expireInactiveSession() {
   var tokenKey = window.APP_CONFIG ? window.APP_CONFIG.JWT_TOKEN_KEY : 'incident_portal_token';
-  if (!localStorage.getItem(tokenKey)) {
+  if (!sessionStorage.getItem(tokenKey)) {
     stopSessionInactivityTracking();
     return;
   }
@@ -7122,7 +7132,7 @@ function doLogin() {
           return;
         }
 
-        localStorage.setItem(window.APP_CONFIG.JWT_TOKEN_KEY, data.token);
+        sessionStorage.setItem(window.APP_CONFIG.JWT_TOKEN_KEY, data.token);
         startSessionInactivityTracking(true);
         startNotificationPolling();
         const user = data.user;
@@ -7152,7 +7162,30 @@ function doLogin() {
             if (badge) { badge.textContent = roleLabel; badge.className = 'role-badge ' + roleCl; }
             const sidebarRole = document.getElementById('sidebarUserRole'); if (sidebarRole) sidebarRole.textContent = roleLabel;
             switchRole(user.role);
-            showToast(`Welcome back, ${user.name}! 👋`, 'success');
+            loadMasterData(function (masterError) {
+              if (masterError) {
+                showToast('Signed in, but master data could not be loaded.', 'warning');
+                return;
+              }
+              loadUsersFromBackend(function (usersError) {
+                if (usersError) {
+                  showToast('Signed in, but users could not be loaded.', 'warning');
+                  return;
+                }
+                loadIncidentsFromBackend(function (incidentsError) {
+                  if (incidentsError) {
+                    showToast('Signed in, but incidents could not be loaded.', 'warning');
+                    return;
+                  }
+                  populateAssigneeFilter();
+                  updateTagFilter();
+                  renderIncidentTable();
+                  renderHomePage();
+                  updateStats();
+                  showToast(`Welcome back, ${user.name}! 👋`, 'success');
+                });
+              });
+            });
           } catch (e) { if (window.onerror) window.onerror(e.message, e.fileName || 'app', e.lineNumber || 0, e.columnNumber || 0, e); }
         }, 450);
       })
@@ -7185,8 +7218,8 @@ function doLogoutConfirmed(reason) {
     // Reset login form
     document.getElementById('loginEmail').value = '';
     document.getElementById('loginPassword').value = '';
-    localStorage.removeItem(window.APP_CONFIG ? window.APP_CONFIG.JWT_TOKEN_KEY : 'incident_portal_token');
-    localStorage.removeItem(SESSION_LAST_ACTIVITY_KEY);
+    sessionStorage.removeItem(window.APP_CONFIG ? window.APP_CONFIG.JWT_TOKEN_KEY : 'incident_portal_token');
+    sessionStorage.removeItem(SESSION_LAST_ACTIVITY_KEY);
     const errEl = document.getElementById('loginError');
     errEl.textContent = reason || '';
     errEl.style.display = reason ? 'block' : 'none';
@@ -7588,7 +7621,7 @@ function verifySessionAndInit() {
     return;
   }
 
-  const token = localStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
   if (!token) {
     const ls = document.getElementById('loginScreen');
     if (ls) {
@@ -7693,7 +7726,7 @@ function verifySessionAndInit() {
     })
     .catch(err => {
       console.error('Session restoration failed:', err);
-      localStorage.removeItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+      sessionStorage.removeItem(window.APP_CONFIG.JWT_TOKEN_KEY);
 
       if (sp) sp.style.display = 'none';
       if (tx) tx.textContent = 'Sign In to Portal';
@@ -7753,6 +7786,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // ── Restore role from localStorage ─────────────────────────
   loadPersistedRoles();
+
+  // Discard authentication left by older builds. Tokens now live only for
+  // the current browser tab/session; UI preferences can remain persistent.
+  if (window.APP_CONFIG && window.APP_CONFIG.JWT_TOKEN_KEY) {
+    localStorage.removeItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  }
 
   // ── Verify session and initialize ──────────────────────────
   verifySessionAndInit();

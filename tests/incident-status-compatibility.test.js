@@ -27,6 +27,25 @@ test('frontend converts canonical database statuses to display labels', () => {
   assert.match(frontend, /status: normalizeIncidentStatusLabel\(incident\.status\)/);
 });
 
+test('Kanban renders a column for every supported incident status', () => {
+  const renderStart = frontend.indexOf('function renderKanban()');
+  const renderEnd = frontend.indexOf('//', renderStart);
+  const implementation = frontend.slice(renderStart, renderEnd);
+  for (const status of [
+    'New',
+    'In Progress',
+    'Tier 1 Level Support',
+    'Further Investigation',
+    'Escalated to R&D',
+    'Escalated to CSO Devops',
+    'Escalated to 3rd Party',
+    'Resolved',
+    'Closed'
+  ]) {
+    assert.match(implementation, new RegExp(`'${status.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`));
+  }
+});
+
 test('production schema and additive migration allow the complete status workflow', () => {
   for (const value of ['tier_1_level_support', 'escalated_to_cso_devops']) {
     assert.match(schema, new RegExp(`'${value}'`));
