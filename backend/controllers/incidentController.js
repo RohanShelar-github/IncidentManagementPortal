@@ -317,6 +317,43 @@ const getIncidents = async (req, res) => {
   }
 };
 
+const getActivityLog = async (req, res) => {
+  try {
+    const requestedLimit = Number.parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 500) : 200;
+    const [rows] = await pool.query(
+      `SELECT logs.id, logs.action_type, logs.detail, logs.created_at,
+              incidents.incident_ref, incidents.title,
+              users.full_name AS user_name, users.email AS user_email
+         FROM activity_logs logs
+         LEFT JOIN incidents ON incidents.id = logs.incident_id
+         LEFT JOIN users ON users.id = logs.action_by
+        ORDER BY logs.created_at DESC, logs.id DESC
+        LIMIT ?`,
+      [limit]
+    );
+    return res.status(200).json({
+      success: true,
+      data: rows.map((row) => ({
+        id: row.id,
+        action_type: row.action_type,
+        detail: row.detail || '',
+        created_at: row.created_at,
+        incident_ref: row.incident_ref || '',
+        incident_title: row.title || '',
+        user: row.user_name || row.user_email || 'System'
+      }))
+    });
+  } catch (error) {
+    console.error('Get activity log error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
 const findIncidentDbId = async (idOrRef) => {
   const [rows] = await pool.query('SELECT id FROM incidents WHERE incident_ref = ? OR id = ? LIMIT 1', [idOrRef, Number(idOrRef) || 0]);
   return rows.length ? rows[0].id : null;
@@ -526,6 +563,7 @@ const addComment = async (req, res) => {
 module.exports = {
   createIncident,
   getIncidents,
+  getActivityLog,
   getIncidentById,
   updateIncident,
   deleteIncident,

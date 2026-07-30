@@ -1,0 +1,29 @@
+{
+  "checks": [
+    {
+      "name": "Workbook has exactly 204 source rows",
+      "passed": true,
+      "detail": "204"
+    },
+    {
+      "name": "All required headers are present",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "No source/database duplicate identifiers",
+      "passed": true,
+      "detail": "0"
+    },
+    {
+      "name": "All mandatory values and mappings are valid",
+      "passed": false,
+      "detail": "10"
+    },
+    {
+      "name": "All source timestamps remain IST wall-clock values",
+      "passed": true,
+      "detail": "No UTC conversion is performed during import"
+    }
+  ]
+}

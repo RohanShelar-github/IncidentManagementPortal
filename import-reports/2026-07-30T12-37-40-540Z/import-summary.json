@@ -1,0 +1,14 @@
+{
+  "mode": "DRY RUN",
+  "database": "incident_management_db",
+  "workbook": "C:\\Users\\in-its-ga1\\Downloads\\Incidents_ImportIntoDB.xlsx",
+  "workbook_sha256": "090538a9290e209948b0d3531a41c1bf706a22744b7cf0dc27a2df1b9d7f53b5",
+  "source_count": 204,
+  "existing_count_before": 3,
+  "valid_count": 204,
+  "duplicate_count": 0,
+  "failed_count": 0,
+  "imported_count": 0,
+  "database_count_after": null,
+  "committed": false
+}

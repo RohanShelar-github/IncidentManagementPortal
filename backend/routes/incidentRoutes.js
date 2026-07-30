@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   createIncident,
   getIncidents,
+  getActivityLog,
   getIncidentById,
   updateIncident,
   deleteIncident,
@@ -22,6 +23,9 @@ router.get('/', getIncidents);
 
 // GET /api/incidents/stats/dashboard - Get dashboard statistics
 router.get('/stats/dashboard', getDashboardStats);
+
+// GET /api/incidents/activity-log - Get persistent incident activity
+router.get('/activity-log', getActivityLog);
 
 // GET /api/incidents/:id - Get incident by ID
 router.get('/:id', getIncidentById);

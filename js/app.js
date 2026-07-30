@@ -489,8 +489,10 @@ function updateTagFilter() {
 }
 function updateStatusBar() {
   var total = incidents.length;
-  var openInc = incidents.filter(function (i) { return i.status !== 'Closed'; }).length;
-  var critical = incidents.filter(function (i) { return i.severity === 'Critical' && i.status !== 'Closed'; }).length;
+  var openInc = incidents.filter(function (i) { return i.status !== 'Closed' && i.status !== 'Resolved'; }).length;
+  var critical = incidents.filter(function (i) {
+    return i.severity === 'Critical' && i.status !== 'Closed' && i.status !== 'Resolved';
+  }).length;
   var sbIC = document.getElementById('sbIncidentCount');
   var sbOC = document.getElementById('sbOpenCount');
   var sbCC = document.getElementById('sbCriticalCount');
@@ -764,6 +766,64 @@ function addAudit(icon, action, detail) {
   }
 }
 
+function loadAuditLogFromBackend(callback) {
+  if (!window.APP_CONFIG || !window.APP_CONFIG.ENABLE_BACKEND) {
+    if (callback) callback(null);
+    return;
+  }
+  const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) {
+    if (callback) callback(new Error('Authentication required'));
+    return;
+  }
+  fetch(window.APP_CONFIG.API_BASE_URL + '/incidents/activity-log?limit=200', {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    }
+  })
+    .then(function (response) {
+      return response.json().then(function (data) {
+        return { ok: response.ok, data: data };
+      });
+    })
+    .then(function (result) {
+      if (!result.ok || !result.data || !result.data.success) {
+        throw new Error(result.data && result.data.message ? result.data.message : 'Failed to load audit log');
+      }
+      var actionLabels = {
+        create: 'Incident Created',
+        edit: 'Incident Updated',
+        close: 'Incident Closed',
+        comment: 'Comment Added'
+      };
+      var actionIcons = { create: '＋', edit: '✏', close: '✓', comment: '💬' };
+      auditLog = (result.data.data || []).map(function (entry) {
+        var incident = entry.incident_ref
+          ? entry.incident_ref + (entry.incident_title ? ' — ' + entry.incident_title : '')
+          : '';
+        var detail = [incident, entry.detail].filter(Boolean).join(' · ');
+        var timestamp = entry.created_at ? new Date(entry.created_at) : null;
+        return {
+          id: entry.id,
+          icon: actionIcons[entry.action_type] || '📋',
+          action: actionLabels[entry.action_type] || entry.action_type || 'Activity',
+          detail: detail,
+          time: timestamp && !Number.isNaN(timestamp.getTime())
+            ? timestamp.toLocaleString('en-GB')
+            : String(entry.created_at || ''),
+          user: entry.user || 'System'
+        };
+      });
+      if (callback) callback(null);
+    })
+    .catch(function (error) {
+      console.error('Error loading audit log:', error);
+      if (callback) callback(error);
+    });
+}
+
 function renderAuditLog() {
   var el = document.getElementById('auditLogEl');
   if (!el) return;
@@ -773,11 +833,12 @@ function renderAuditLog() {
   }
   el.innerHTML = auditLog.slice(0, 100).map(function (e) {
     return '<div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">'
-      + '<span style="font-size:18px;flex-shrink:0">' + (e.icon || '📋') + '</span>'
-      + '<div style="flex:1"><div style="font-size:13px;color:var(--text);font-weight:500">' + e.action + '</div>'
-      + (e.detail ? '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">' + e.detail + '</div>' : '')
+      + '<span style="font-size:18px;flex-shrink:0">' + escapeMetricHtml(e.icon || '📋') + '</span>'
+      + '<div style="flex:1"><div style="font-size:13px;color:var(--text);font-weight:500">' + escapeMetricHtml(e.action) + '</div>'
+      + (e.detail ? '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">' + escapeMetricHtml(e.detail) + '</div>' : '')
+      + '<div style="font-size:11px;color:var(--text-muted);margin-top:3px">' + escapeMetricHtml(e.user || 'System') + '</div>'
       + '</div><div style="font-size:11px;color:var(--text-muted);flex-shrink:0;font-family:var(--font-mono)">'
-      + e.time + '</div></div>';
+      + escapeMetricHtml(e.time) + '</div></div>';
   }).join('');
 }
 
@@ -2125,7 +2186,13 @@ function navigateInternal(page, el) {
   if (page === 'incidents') renderIncidentTable();
   if (page === 'users') { renderUsersTable(); }
   if (page === 'roles') { renderRolesGrid(); }
-  if (page === 'reports') renderAuditLog();
+  if (page === 'reports') {
+    renderAuditLog();
+    loadAuditLogFromBackend(function (auditErr) {
+      if (auditErr) showToast('Audit log could not be loaded: ' + auditErr.message, 'error');
+      else renderAuditLog();
+    });
+  }
   if (page === 'dashboard') { initDashFilterDropdowns(); refreshDashboardData(); }
   if (page === 'customer360') {
     // Show picker only if no customer is loaded yet
@@ -4233,6 +4300,7 @@ function setPageRefreshState(page, isLoading, errorMessage) {
 }
 
 function renderPageAfterRefresh(page) {
+  if (page === 'home') { renderHomePage(); return; }
   if (page === 'incidents') {
     if (typeof applyFilters === 'function') applyFilters();
     else renderIncidentTable();
@@ -4243,7 +4311,7 @@ function renderPageAfterRefresh(page) {
   }
   if (page === 'reports') { renderAuditLog(); return; }
   if (page === 'users') { renderUsersTable(); return; }
-  if (page === 'roles') { renderRolesGrid(); return; }
+  if (page === 'roles') { loadPersistedRoles(); renderRolesGrid(); return; }
   if (page === 'datamanagement') { renderDataManagement(); updateDmCounts(); return; }
   if (page === 'customer360') {
     var name = document.getElementById('c360CustName')?.textContent || '';
@@ -4271,18 +4339,33 @@ function refreshPageContent(event, page) {
   if (window.APP_CONFIG && window.APP_CONFIG.ENABLE_BACKEND) {
     var reloadIncidents = function () {
       if (typeof loadIncidentsFromBackend === 'function') {
-        loadIncidentsFromBackend(finish);
+        loadIncidentsFromBackend(function (incidentErr) {
+          if (incidentErr) return finish(incidentErr);
+          if (page === 'reports') return loadAuditLogFromBackend(finish);
+          finish(null);
+        });
       } else {
+        if (page === 'reports') return loadAuditLogFromBackend(finish);
         finish(null);
+      }
+    };
+    var reloadUsers = function () {
+      if (typeof loadUsersFromBackend === 'function') {
+        loadUsersFromBackend(function (usersErr) {
+          if (usersErr) return finish(usersErr);
+          reloadIncidents();
+        });
+      } else {
+        reloadIncidents();
       }
     };
     if (typeof loadMasterData === 'function') {
       loadMasterData(function (masterErr) {
         if (masterErr) return finish(masterErr);
-        reloadIncidents();
+        reloadUsers();
       });
     } else {
-      reloadIncidents();
+      reloadUsers();
     }
     return;
   }
@@ -7209,6 +7292,7 @@ function doLogout() {
 function doLogoutConfirmed(reason) {
   stopSessionInactivityTracking();
   stopNotificationPolling();
+  setLoginUrl();
   const portal = document.getElementById('portalApp');
   portal.style.transition = 'opacity .3s ease';
   portal.style.opacity = '0';
@@ -7292,9 +7376,23 @@ function setHash(page) {
   } catch (e) { /* silently ignore SecurityError */ }
 }
 
+function setLoginUrl() {
+  document.title = 'Sign In — Magic Cloud';
+  // The login screen is not an application page, so it should use the clean
+  // root URL instead of retaining the last authenticated page hash.
+  if (IN_IFRAME) return;
+  try {
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+  } catch (e) { /* silently ignore SecurityError */ }
+}
+
 if (!IN_IFRAME) {
   window.addEventListener('popstate', (e) => {
-    if (!document.getElementById('portalApp') || document.getElementById('portalApp').style.display === 'none') return;
+    const portal = document.getElementById('portalApp');
+    if (!portal || portal.style.display === 'none') {
+      setLoginUrl();
+      return;
+    }
     const page = (e.state && e.state.page) || 'dashboard';
     const navEl = document.getElementById(PAGE_NAV_MAP[page]);
     navigateInternal(page, navEl);
@@ -7610,14 +7708,7 @@ function verifySessionAndInit() {
     populateAreaDropdowns();
     populateAssigneeFilter();
     updateTagFilter();
-
-    var hash = (window.location.hash || '').replace('#', '');
-    var validPages = ['home', 'dashboard', 'incidents', 'reports', 'users', 'roles', 'customer360', 'datamanagement'];
-    if (hash && validPages.indexOf(hash) >= 0) {
-      navigate(hash);
-    } else {
-      navigate('home', document.getElementById('homeNav'));
-    }
+    setLoginUrl();
     return;
   }
 
@@ -7630,6 +7721,7 @@ function verifySessionAndInit() {
     }
     const portal = document.getElementById('portalApp');
     if (portal) portal.style.display = 'none';
+    setLoginUrl();
     document.body.classList.remove('auth-pending');
     return;
   }
@@ -7739,6 +7831,7 @@ function verifySessionAndInit() {
       }
       const portal = document.getElementById('portalApp');
       if (portal) portal.style.display = 'none';
+      setLoginUrl();
       document.body.classList.remove('auth-pending');
 
       showToast('Session verification failed. Please login again.', 'warning');
