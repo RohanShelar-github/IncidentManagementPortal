@@ -13,6 +13,10 @@
     return normalizeReportingLabel(incident && incident.project) === 'historian';
   }
 
+  function isCustomer360HistorianIncident(incident) {
+    return normalizeReportingLabel(incident && incident.area) === 'historian';
+  }
+
   function isNgcCustomer(customerName) {
     return normalizeReportingLabel(customerName) === 'ngc';
   }
@@ -20,6 +24,13 @@
   function partitionHistorianIncidents(incidentList) {
     return (incidentList || []).reduce(function (result, incident) {
       result[isHistorianIncident(incident) ? 'historian' : 'application'].push(incident);
+      return result;
+    }, { application: [], historian: [] });
+  }
+
+  function partitionCustomer360HistorianIncidents(incidentList) {
+    return (incidentList || []).reduce(function (result, incident) {
+      result[isCustomer360HistorianIncident(incident) ? 'historian' : 'application'].push(incident);
       return result;
     }, { application: [], historian: [] });
   }
@@ -39,8 +50,10 @@
   return {
     normalizeReportingLabel: normalizeReportingLabel,
     isHistorianIncident: isHistorianIncident,
+    isCustomer360HistorianIncident: isCustomer360HistorianIncident,
     isNgcCustomer: isNgcCustomer,
     partitionHistorianIncidents: partitionHistorianIncidents,
+    partitionCustomer360HistorianIncidents: partitionCustomer360HistorianIncidents,
     getDowntimeMinutes: getDowntimeMinutes,
     sumDowntimeMinutes: sumDowntimeMinutes
   };

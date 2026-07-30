@@ -18,6 +18,11 @@ test('generated subject and body remain editable defaults', () => {
   assert.match(frontend, /notificationEmailBody \|\| defaultBody/);
 });
 
+test('generated email body includes the incident description', () => {
+  assert.match(frontend, /const incidentDescription = inc\.description \|\| inc\.desc \|\| 'Not provided'/);
+  assert.match(frontend, /Description: \$\{incidentDescription\}/);
+});
+
 test('saving updates only email draft fields on the incident', () => {
   assert.match(frontend, /incident\.notificationEmailSubject = subject/);
   assert.match(frontend, /incident\.notificationEmailBody = body/);

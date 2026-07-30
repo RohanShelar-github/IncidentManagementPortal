@@ -1,11 +1,15 @@
 const pool = require('../config/database');
+const { purgeExpiredNotifications } = require('../services/notificationService');
 
 const getNotifications = async (req, res) => {
   try {
+    await purgeExpiredNotifications();
     const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 200);
     const [rows] = await pool.query(
       `SELECT id, message, type, incident_ref, is_mention, is_read, created_at
-       FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT ?`,
+       FROM notifications
+       WHERE user_id = ? AND created_at >= NOW() - INTERVAL 24 HOUR
+       ORDER BY id DESC LIMIT ?`,
       [req.user.id, limit]
     );
     return res.json({

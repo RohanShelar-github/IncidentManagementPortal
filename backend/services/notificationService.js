@@ -1,5 +1,19 @@
 const pool = require('../config/database');
 
+const NOTIFICATION_RETENTION_HOURS = 24;
+const NOTIFICATION_PURGE_INTERVAL_MS = 60 * 1000;
+let lastNotificationPurgeAt = 0;
+
+async function purgeExpiredNotifications(options = {}) {
+  const now = Date.now();
+  if (!options.force && now - lastNotificationPurgeAt < NOTIFICATION_PURGE_INTERVAL_MS) return 0;
+  lastNotificationPurgeAt = now;
+  const [result] = await pool.query(
+    'DELETE FROM notifications WHERE created_at < NOW() - INTERVAL 24 HOUR'
+  );
+  return Number(result.affectedRows) || 0;
+}
+
 function containsMention(text, fullName) {
   return String(text || '').toLowerCase().includes('@' + String(fullName || '').trim().toLowerCase());
 }
@@ -30,4 +44,10 @@ async function notifyUsers({ actorId, message, type = 'info', incidentRef = null
   }
 }
 
-module.exports = { notifyUsers, containsMention };
+module.exports = {
+  notifyUsers,
+  containsMention,
+  purgeExpiredNotifications,
+  NOTIFICATION_RETENTION_HOURS,
+  NOTIFICATION_PURGE_INTERVAL_MS
+};

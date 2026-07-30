@@ -542,6 +542,12 @@ function isHistorianIncident(inc) {
     : String((inc && inc.project) || '').trim().toLowerCase() === 'historian';
 }
 
+function isCustomer360HistorianIncident(inc) {
+  return window.ReportingMetrics
+    ? window.ReportingMetrics.isCustomer360HistorianIncident(inc)
+    : String((inc && inc.area) || '').trim().toLowerCase() === 'historian';
+}
+
 function isNgcCustomer(customerName) {
   return window.ReportingMetrics
     ? window.ReportingMetrics.isNgcCustomer(customerName)
@@ -552,6 +558,14 @@ function partitionHistorianIncidents(incidentList) {
   if (window.ReportingMetrics) return window.ReportingMetrics.partitionHistorianIncidents(incidentList);
   return (incidentList || []).reduce(function (result, inc) {
     result[isHistorianIncident(inc) ? 'historian' : 'application'].push(inc);
+    return result;
+  }, { application: [], historian: [] });
+}
+
+function partitionCustomer360HistorianIncidents(incidentList) {
+  if (window.ReportingMetrics) return window.ReportingMetrics.partitionCustomer360HistorianIncidents(incidentList);
+  return (incidentList || []).reduce(function (result, inc) {
+    result[isCustomer360HistorianIncident(inc) ? 'historian' : 'application'].push(inc);
     return result;
   }, { application: [], historian: [] });
 }
@@ -685,8 +699,8 @@ function openMetricDrillDown(metric, customerName, reportingCategory) {
   var predicate = metric === 'mttr' ? isMissedMttr : isMissedMttd;
   var metricIncidents = incidents.filter(function (inc) {
     if (customerName && inc.customer !== customerName) return false;
-    if (reportingCategory === 'application' && isHistorianIncident(inc)) return false;
-    if (reportingCategory === 'historian' && !isHistorianIncident(inc)) return false;
+    if (reportingCategory === 'application' && isCustomer360HistorianIncident(inc)) return false;
+    if (reportingCategory === 'historian' && !isCustomer360HistorianIncident(inc)) return false;
     return predicate(inc);
   });
   metricIncidents.sort(function (a, b) {
@@ -1051,7 +1065,7 @@ function renderKanban() {
   ];
   var cols = statuses.map(function (s) {
     var incs = filteredIncidents.filter(function (i) { return i.status === s; });
-    return '<div style="flex:1;min-width:220px;max-width:280px">'
+    return '<div class="kanban-status-column">'
       + '<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;padding:6px 10px;background:var(--surface2);border-radius:6px">'
       + s + ' <span style="color:var(--accent)">(' + incs.length + ')</span></div>'
       + incs.map(function (i) {
@@ -1066,7 +1080,7 @@ function renderKanban() {
       + (incs.length === 0 ? '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:12px;border:1px dashed var(--border);border-radius:8px">Empty</div>' : '')
       + '</div>';
   }).join('');
-  board.innerHTML = '<div style="display:flex;gap:12px;overflow-x:auto;padding-bottom:8px">' + cols + '</div>';
+  board.innerHTML = '<div class="kanban-columns">' + cols + '</div>';
 }
 
 // ─── DETAIL PANEL EDIT ────────────────────────────────────────────────────
@@ -1297,7 +1311,7 @@ function renderC360MetricSection(statsRowId, metricsRowId, values, category) {
 function renderC360Full(custName) {
   var allCustIncs = incidents.filter(function (i) { return i.customer === custName; });
   var isNgc = isNgcCustomer(custName);
-  var categories = partitionHistorianIncidents(allCustIncs);
+  var categories = partitionCustomer360HistorianIncidents(allCustIncs);
   var custIncs = isNgc ? categories.application : allCustIncs;
   var historianIncs = isNgc ? categories.historian : [];
   var appValues = buildC360Metrics(custIncs);
@@ -1898,8 +1912,8 @@ function renderC360Table() {
 
   var filtered = incidents.filter(function (i) {
     if (i.customer !== custName) return false;
-    if (category === 'application' && isHistorianIncident(i)) return false;
-    if (category === 'historian' && !isHistorianIncident(i)) return false;
+    if (category === 'application' && isCustomer360HistorianIncident(i)) return false;
+    if (category === 'historian' && !isCustomer360HistorianIncident(i)) return false;
     if (sevFilter && i.severity !== sevFilter) return false;
     if (statusFilter && i.status !== statusFilter) return false;
     return true;
@@ -5881,6 +5895,142 @@ function _openPDFPreview(htmlContent) {
   doc.open(); doc.write(htmlContent); doc.close();
 }
 
+function _escapeExcelPreviewValue(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function _openExcelPreview(title, columns, rows, filename, onDownload, options) {
+  var existing = document.getElementById('_excelPreviewOverlay');
+  if (existing) existing.remove();
+  options = options || {};
+  var overlay = document.createElement('div');
+  overlay.id = '_excelPreviewOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99998;background:#0b0f14;display:flex;flex-direction:column';
+  var toolbar = document.createElement('div');
+  toolbar.style.cssText = 'background:#151a21;min-height:56px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:8px 20px;border-bottom:1px solid #2a313b;flex-shrink:0';
+  var heading = document.createElement('div');
+  heading.innerHTML = '<div style="color:#f0f4f8;font-size:14px;font-weight:700">' + _escapeExcelPreviewValue(title) + '</div>'
+    + '<div style="color:#8793a1;font-size:11px;margin-top:2px">' + _escapeExcelPreviewValue(filename) + '</div>';
+  var buttons = document.createElement('div');
+  buttons.style.cssText = 'display:flex;gap:10px;flex-shrink:0';
+  var downloadBtn = document.createElement('button');
+  downloadBtn.textContent = '\u2B07 Download Excel';
+  downloadBtn.style.cssText = 'background:#22a06b;color:white;border:none;padding:8px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer';
+  downloadBtn.onclick = function () {
+    try {
+      onDownload();
+      overlay.remove();
+    } catch (error) {
+      console.error('Excel download failed:', error);
+      showToast('Excel download failed: ' + error.message, 'error');
+    }
+  };
+  var closeBtn = document.createElement('button');
+  closeBtn.textContent = '\u2715 Close';
+  closeBtn.style.cssText = 'background:#303844;color:#e0e6ed;border:none;padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer';
+  closeBtn.onclick = function () { overlay.remove(); };
+  buttons.appendChild(downloadBtn);
+  buttons.appendChild(closeBtn);
+  toolbar.appendChild(heading);
+  toolbar.appendChild(buttons);
+
+  var content = document.createElement('div');
+  content.style.cssText = 'flex:1;overflow:auto;padding:18px';
+  if (options.sheetHtml) {
+    content.innerHTML = options.sheetHtml;
+    overlay.appendChild(toolbar);
+    overlay.appendChild(content);
+    document.body.appendChild(overlay);
+    return;
+  }
+  var previewRows = rows.slice(0, options.maxRows || 100);
+  var table = '<table style="width:100%;min-width:900px;border-collapse:separate;border-spacing:0;background:#fff;color:#17202a;font:12px Segoe UI,Arial,sans-serif">'
+    + '<thead><tr>' + columns.map(function (col) {
+      return '<th style="position:sticky;top:0;z-index:1;background:#217346;color:#fff;border-right:1px solid #4d956f;border-bottom:1px solid #185c37;padding:9px 10px;text-align:left;white-space:nowrap">'
+        + _escapeExcelPreviewValue(col.label) + '</th>';
+    }).join('') + '</tr></thead><tbody>'
+    + previewRows.map(function (row, rowIndex) {
+      return '<tr>' + columns.map(function (col) {
+        return '<td style="border-right:1px solid #d8dee6;border-bottom:1px solid #d8dee6;padding:7px 10px;vertical-align:top;max-width:360px;white-space:pre-wrap;overflow-wrap:anywhere;background:'
+          + (rowIndex % 2 ? '#f7faf8' : '#fff') + '">' + _escapeExcelPreviewValue(row[col.key]) + '</td>';
+      }).join('') + '</tr>';
+    }).join('') + '</tbody></table>';
+  var note = rows.length > previewRows.length
+    ? '<div style="color:#aab4c0;font-size:12px;margin-bottom:10px">Previewing the first ' + previewRows.length + ' of ' + rows.length + ' rows. The downloaded workbook contains all rows.</div>'
+    : '<div style="color:#aab4c0;font-size:12px;margin-bottom:10px">' + rows.length + ' row' + (rows.length === 1 ? '' : 's') + ' in this preview.</div>';
+  content.innerHTML = note + (rows.length ? table : '<div style="color:#aab4c0;text-align:center;padding:60px">No data matches the selected filters.</div>');
+  overlay.appendChild(toolbar);
+  overlay.appendChild(content);
+  document.body.appendChild(overlay);
+}
+
+function _incidentExcelSheetPreview(model) {
+  function excelDate(parts) {
+    if (!parts) return '';
+    return parts.month + '/' + parts.day + '/' + parts.year;
+  }
+  function excelTime(parts) {
+    if (!parts) return '';
+    var hour = parts.hour || 0;
+    var suffix = hour >= 12 ? 'PM' : 'AM';
+    hour = hour % 12 || 12;
+    return hour + ':' + String(parts.minute || 0).padStart(2, '0') + ':' + String(parts.second || 0).padStart(2, '0') + ' ' + suffix;
+  }
+  function cells(label, value, unit, className) {
+    return '<tr class="' + (className || '') + '"><td>' + _escapeExcelPreviewValue(label) + '</td>'
+      + '<td>' + _escapeExcelPreviewValue(value) + '</td>'
+      + '<td>' + _escapeExcelPreviewValue(unit || '') + '</td></tr>';
+  }
+  function blank() {
+    return '<tr class="xl-blank"><td></td><td></td><td></td></tr>';
+  }
+  var rows = '';
+  rows += '<tr class="xl-title"><td colspan="3">Incident Report Template</td></tr>';
+  rows += blank();
+  rows += cells('Incident Type', model.incidentType);
+  rows += blank();
+  rows += cells('Summary', '', '', 'xl-section');
+  rows += cells('Incident ID', model.reportId);
+  rows += cells('Severity', model.severity);
+  rows += cells('Summary', model.title);
+  rows += cells('Incident Start Date', excelDate(model.start));
+  rows += cells('Incident Start Time', excelTime(model.start), model.timezone);
+  rows += cells('Incident End Date (Actual/Estimated)', excelDate(model.end));
+  rows += cells('Incident End Time (Actual/Estimated)', excelTime(model.end), model.end ? model.timezone : '');
+  rows += cells('Impacted Applications', model.applications);
+  rows += cells('Impacted Plants', model.components);
+  rows += cells('Downtime', model.downtime, 'Minutes');
+  rows += blank();
+  rows += cells('Details', '', '', 'xl-section');
+  rows += cells('Issue Details', model.description);
+  rows += cells('Resolution Details', model.resolution);
+  rows += cells('Instructions for Users', model.instructions);
+  rows += cells('Reporter', model.reporter);
+  rows += cells('incident report creator', model.creator);
+  rows += blank() + blank() + blank() + blank();
+
+  return '<style>'
+    + '#_excelPreviewOverlay .xl-sheet-wrap{min-width:1050px;background:#c8c8c8;padding:0 1px 24px;box-shadow:0 4px 20px rgba(0,0,0,.45)}'
+    + '#_excelPreviewOverlay .xl-cols{display:grid;grid-template-columns:280px minmax(680px,1fr) 90px;background:#e6e6e6;color:#222;font:14px Calibri,Arial,sans-serif;text-align:center;border-bottom:1px solid #777}'
+    + '#_excelPreviewOverlay .xl-cols div{border-right:1px solid #9a9a9a;padding:4px 0}'
+    + '#_excelPreviewOverlay .xl-sheet{width:100%;table-layout:fixed;border-collapse:collapse;background:#fff;color:#111;font:16px Calibri,Arial,sans-serif}'
+    + '#_excelPreviewOverlay .xl-sheet col:nth-child(1){width:280px}#_excelPreviewOverlay .xl-sheet col:nth-child(2){width:auto}#_excelPreviewOverlay .xl-sheet col:nth-child(3){width:90px}'
+    + '#_excelPreviewOverlay .xl-sheet td{border-right:1px solid #555;border-bottom:1px solid #555;height:21px;padding:0 3px;white-space:nowrap;overflow:hidden;text-overflow:clip;vertical-align:middle}'
+    + '#_excelPreviewOverlay .xl-title td{background:#d9e7f5;font-weight:700;font-size:17px}'
+    + '#_excelPreviewOverlay .xl-section td:first-child{font-weight:700}#_excelPreviewOverlay .xl-section td{height:23px}'
+    + '#_excelPreviewOverlay .xl-blank td{height:20px}'
+    + '</style>'
+    + '<div class="xl-sheet-wrap">'
+    + '<div class="xl-cols"><div>A</div><div>B</div><div>C</div></div>'
+    + '<table class="xl-sheet"><colgroup><col><col><col></colgroup><tbody>' + rows + '</tbody></table>'
+    + '</div>';
+}
+
 function generatePDFReport() {
   const data = getReportFilteredIncidents();
   showToast('Generating PDF report…', 'success');
@@ -6099,22 +6249,12 @@ function generateExcelReport() {
   const data = getReportFilteredIncidents();
   showToast('📊 Generating Excel file\u2026', 'success');
   setTimeout(() => {
-    const summary = {
-      severities: ['Critical', 'High', 'Medium', 'Normal'].map(s => ({ label: s, value: data.filter(i => i.severity === s).length })),
-      statuses: [...new Set(data.map(i => i.status))].map(s => ({ label: s, value: data.filter(i => i.status === s).length })),
-      areas: [...new Set(data.map(i => i.area || 'Unspecified'))].map(a => ({ label: a, value: data.filter(i => (i.area || 'Unspecified') === a).length })),
-      customers: Object.entries(data.reduce((m, i) => { m[i.customer] = (m[i.customer] || 0) + 1; return m; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([l, v]) => ({ label: l, value: v })),
-      total: data.length,
-      open: data.filter(i => i.status !== 'Closed' && i.status !== 'Resolved').length,
-      closed: data.filter(i => i.status === 'Closed' || i.status === 'Resolved').length,
-      critical: data.filter(i => i.severity === 'Critical').length,
-    };
     _buildXLSX(data, 'MagicCloud_Incidents_' + new Date().toISOString().split('T')[0] + '.xlsx');
-    showToast('\u2713 Excel file downloaded', 'success');
+    showToast('\u2713 Excel preview ready', 'success');
   }, 400);
 }
 
-function _buildXLSX(data, filename) {
+function _buildXLSX(data, filename, downloadNow) {
   const cols = [
     { key: 'id', label: 'ID', w: 10 },
     { key: 'title', label: 'Title', w: 45 },
@@ -6166,6 +6306,14 @@ function _buildXLSX(data, filename) {
     });
   });
 
+
+  if (!downloadNow) {
+    _openExcelPreview('Excel Preview', cols, data, filename, function () {
+      _buildXLSX(data, filename, true);
+      showToast('\u2713 Excel file downloaded', 'success');
+    });
+    return;
+  }
 
   // Shared strings
   const strs = [], strIdx = {};
@@ -6418,17 +6566,20 @@ function exportIncidentExcel() {
     const workbook = window.IncidentReportExcel.buildIncidentReportWorkbook(inc, {
       reportCreator: currentUserName || ''
     });
-    const bytes = window.IncidentReportExcel.createXlsxBytes(workbook);
-    const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = workbook.filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
-    showToast('\u2713 Incident Excel exported', 'success');
+    _openExcelPreview('Incident Excel Preview', [], [], workbook.filename, function () {
+      const bytes = window.IncidentReportExcel.createXlsxBytes(workbook);
+      const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = workbook.filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
+      showToast('\u2713 Incident Excel exported', 'success');
+    }, { sheetHtml: _incidentExcelSheetPreview(workbook.model) });
+    showToast('\u2713 Incident Excel preview ready', 'success');
   } catch (error) {
     console.error('Incident Excel export failed:', error);
     showToast('Excel export failed: ' + error.message, 'error');
@@ -7633,12 +7784,14 @@ function showNotificationPreview(inc) {
   const assigneeEmail = assigneeUser.email || (inc.engineer ? inc.engineer.toLowerCase().replace(/\s+/g, '.') + '@magiccloud.io' : 'team' + '@' + 'magiccloud.io');
   const assigneeFirst = inc.engineer ? inc.engineer.split(' ')[0] : 'Team';
   const defaultSubject = `[${inc.severity}] ${inc.id}: ${inc.title}`;
+  const incidentDescription = inc.description || inc.desc || 'Not provided';
   const defaultBody = `Hi ${assigneeFirst},
 
 A ${inc.severity} incident has been assigned to you.
 
 ID: ${inc.id}
 Customer: ${inc.customer}
+Description: ${incidentDescription}
 SLA: ${inc.slaHours || 4}h from creation`;
   currentNotificationIncidentId = inc.id;
 

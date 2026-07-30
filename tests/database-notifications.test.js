@@ -12,8 +12,16 @@ const frontend = fs.readFileSync(path.join(root, 'js', 'app.js'), 'utf8');
 
 test('authenticated notification API supports list and read state', () => {
   assert.match(server, /app\.use\('\/api\/notifications', notificationRoutes\)/);
-  assert.match(notificationController, /FROM notifications WHERE user_id = \?/);
+  assert.match(notificationController, /FROM notifications\s+WHERE user_id = \?/);
   assert.match(notificationController, /UPDATE notifications SET is_read = 1/);
+});
+
+test('notifications older than 24 hours are hidden and deleted from the database', () => {
+  assert.match(notificationController, /await purgeExpiredNotifications\(\)/);
+  assert.match(notificationController, /created_at >= NOW\(\) - INTERVAL 24 HOUR/);
+  assert.match(notificationService, /NOTIFICATION_RETENTION_HOURS = 24/);
+  assert.match(notificationService, /DELETE FROM notifications WHERE created_at < NOW\(\) - INTERVAL 24 HOUR/);
+  assert.match(notificationService, /NOTIFICATION_PURGE_INTERVAL_MS = 60 \* 1000/);
 });
 
 test('incident lifecycle and comments create database notifications', () => {
