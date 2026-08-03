@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS users (
   full_name VARCHAR(255) NOT NULL,
   email VARCHAR(255) NOT NULL,
   password VARCHAR(255) NOT NULL,
-  role ENUM('admin','cso','pmo','aoc','engineer','stakeholder','viewer') DEFAULT 'viewer',
+  role ENUM('admin','cso','pmo','aoc','engineer','stakeholder') NOT NULL DEFAULT 'stakeholder',
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY email (email)

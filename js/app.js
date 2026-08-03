@@ -3921,22 +3921,111 @@ function renderUsersTable() {
 }
 
 function editUserRole(id) {
-  const user = users.find(u => u.id === id);
-  if (!user) return;
-  const roles = ['admin', 'cso', 'pmo', 'aoc'];
-  const labels = { admin: 'Admin', cso: 'CSO', pmo: 'PMO', aoc: 'AOC' };
-  const next = roles[(roles.indexOf(user.role) + 1) % roles.length];
-  user.role = next;
-  renderUsersTable();
-  showToast(`${user.name} role changed to ${labels[next]}`, 'success');
+  if (!hasPermission('assign_roles') || String(currentRole || '').toLowerCase() !== 'admin') {
+    showToast('Only administrators can change user roles', 'error');
+    return;
+  }
+  const user = users.find(function (u) { return String(u.id) === String(id); });
+  if (!user) { showToast('User not found', 'error'); return; }
+
+  var allowedRoleKeys = ['admin', 'cso', 'pmo', 'aoc', 'engineer', 'stakeholder'];
+  var roleFallbackLabels = { admin: 'Admin', cso: 'CSO', pmo: 'PMO', aoc: 'AOC', engineer: 'Engineer', stakeholder: 'Stakeholder' };
+  var availableRoles = allowedRoleKeys.map(function (key) {
+    return roles.find(function (role) { return role.key === key; }) || { key: key, name: roleFallbackLabels[key] };
+  });
+  var existing = document.getElementById('_changeUserRoleOverlay');
+  if (existing) existing.remove();
+
+  var overlay = document.createElement('div');
+  overlay.id = '_changeUserRoleOverlay';
+  overlay.className = 'modal-overlay open';
+  overlay.innerHTML = '<div class="modal" style="width:440px">'
+    + '<div class="modal-header"><div class="modal-title">Change User Role</div><button type="button" class="modal-close" id="_closeUserRole">&#10005;</button></div>'
+    + '<div class="modal-body">'
+    + '<div style="font-size:13px;color:var(--text-muted);margin-bottom:14px">Select a new role for <strong style="color:var(--text)">' + escapeMetricHtml(user.name) + '</strong>.</div>'
+    + '<label class="form-label" for="_userRoleSelect">Role</label>'
+    + '<select class="form-control" id="_userRoleSelect">'
+    + availableRoles.map(function (role) {
+      return '<option value="' + escapeMetricHtml(role.key) + '"' + (role.key === user.role ? ' selected' : '') + '>'
+        + escapeMetricHtml(role.name) + '</option>';
+    }).join('')
+    + '</select></div>'
+    + '<div class="modal-footer"><button type="button" class="btn btn-secondary" id="_cancelUserRole">Cancel</button>'
+    + '<button type="button" class="btn btn-primary" id="_saveUserRole">Save Role</button></div></div>';
+  document.body.appendChild(overlay);
+
+  function closeRoleDialog() { overlay.remove(); }
+  document.getElementById('_closeUserRole').onclick = closeRoleDialog;
+  document.getElementById('_cancelUserRole').onclick = closeRoleDialog;
+  overlay.onclick = function (event) { if (event.target === overlay) closeRoleDialog(); };
+  document.getElementById('_saveUserRole').onclick = function () {
+    var newRole = document.getElementById('_userRoleSelect').value;
+    if (newRole === user.role) { closeRoleDialog(); return; }
+    var token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+    var saveButton = document.getElementById('_saveUserRole');
+    saveButton.disabled = true;
+    saveButton.textContent = 'Saving...';
+    fetch(window.APP_CONFIG.API_BASE_URL + '/auth/users/' + encodeURIComponent(id) + '/role', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ role: newRole })
+    })
+      .then(async function (response) {
+        var data = await response.json().catch(function () { return {}; });
+        if (!response.ok || !data.success) throw new Error(data.message || 'Failed to change user role');
+        user.role = data.data && data.data.role ? data.data.role : newRole;
+        renderUsersTable();
+        renderRolesGrid();
+        closeRoleDialog();
+        showToast(data.message || user.name + ' role updated', 'success');
+      })
+      .catch(function (error) {
+        console.error('Change user role error:', error);
+        showToast(error.message || 'Failed to change user role', 'error');
+        saveButton.disabled = false;
+        saveButton.textContent = 'Save Role';
+      });
+  };
 }
 
-function toggleUser(id) {
-  const user = users.find(u => u.id === id);
-  if (!user) return;
-  user.active = !user.active;
-  renderUsersTable();
-  showToast(`${user.name} ${user.active ? 'activated' : 'deactivated'}`, 'success');
+async function toggleUser(id) {
+  if (!hasPermission('manage_users') || String(currentRole || '').toLowerCase() !== 'admin') {
+    showToast('Only administrators can activate or deactivate users', 'error');
+    return;
+  }
+  const user = users.find(function (u) { return String(u.id) === String(id); });
+  if (!user) { showToast('User not found', 'error'); return; }
+  const nextActive = !user.active;
+  const action = nextActive ? 'Activate' : 'Deactivate';
+  const confirmed = await showConfirm({
+    icon: nextActive ? '\u2713' : '\u26D4',
+    title: action + ' User?',
+    msg: nextActive
+      ? user.name + ' will be able to sign in and use the portal again.'
+      : user.name + ' will be signed out on their next request and will not be able to log in.',
+    ok: action,
+    danger: !nextActive
+  });
+  if (!confirmed) return;
+
+  const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  fetch(window.APP_CONFIG.API_BASE_URL + '/auth/users/' + encodeURIComponent(id) + '/active', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ active: nextActive })
+  })
+    .then(async function (response) {
+      const data = await response.json().catch(function () { return {}; });
+      if (!response.ok || !data.success) throw new Error(data.message || 'Failed to update user status');
+      user.active = data.data ? data.data.active : nextActive;
+      renderUsersTable();
+      populateEngineerDropdowns();
+      showToast(data.message || user.name + ' status updated', 'success');
+    })
+    .catch(function (error) {
+      console.error('Update user status error:', error);
+      showToast(error.message || 'Failed to update user status', 'error');
+    });
 }
 
 async function deleteUser(id) {
@@ -4621,7 +4710,7 @@ function populateAreaDropdowns() {
 }
 
 function populateEngineerDropdowns() {
-  var engineerUsers = users.filter(function (u) { return u && u.name; });
+  var engineerUsers = users.filter(function (u) { return u && u.name && u.active !== false; });
   engineerUsers.sort(function (a, b) { return String(a.name || '').localeCompare(String(b.name || '')); });
   ['f_engineer', 'dp_f_engineer'].forEach(function (id) {
     var sel = document.getElementById(id);

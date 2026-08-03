@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const pool = require('../config/database');
 
 const authenticateToken = (req, res, next) => {
   // Get token from header
@@ -12,15 +13,29 @@ const authenticateToken = (req, res, next) => {
     });
   }
 
-  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-this-in-production-2024', (err, user) => {
+  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-this-in-production-2024', async (err, user) => {
     if (err) {
       return res.status(403).json({
         success: false,
         message: 'Invalid or expired token'
       });
     }
-    req.user = user;
-    next();
+    try {
+      const [users] = await pool.query('SELECT id, email, full_name, role, is_active FROM users WHERE id = ? LIMIT 1', [user.id]);
+      if (!users.length || !users[0].is_active) {
+        return res.status(403).json({ success: false, message: 'This user account is inactive' });
+      }
+      req.user = {
+        ...user,
+        email: users[0].email,
+        name: users[0].full_name || users[0].email,
+        role: users[0].role
+      };
+      next();
+    } catch (error) {
+      console.error('Authentication user lookup error:', error);
+      return res.status(500).json({ success: false, message: 'Internal server error' });
+    }
   });
 };
 
