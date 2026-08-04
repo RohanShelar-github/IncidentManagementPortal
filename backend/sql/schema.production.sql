@@ -9,6 +9,10 @@ SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE TABLE IF NOT EXISTS users (
   id INT NOT NULL AUTO_INCREMENT,
   full_name VARCHAR(255) NOT NULL,
+  phone VARCHAR(50) NULL,
+  department VARCHAR(100) NULL,
+  location VARCHAR(100) NULL,
+  bio VARCHAR(1000) NULL,
   email VARCHAR(255) NOT NULL,
   password VARCHAR(255) NOT NULL,
   role ENUM('admin','cso','pmo','aoc','engineer','stakeholder') NOT NULL DEFAULT 'stakeholder',
@@ -196,5 +200,6 @@ INSERT INTO schema_migrations(version) VALUES
   ('002_legacy_incident_master_data'),
   ('003_persist_incident_timezone_mttd'),
   ('004_rename_low_severity_to_normal'),
-  ('005_incident_canonical_normalization')
+  ('005_incident_canonical_normalization'),
+  ('013_user_profile_fields')
 ON DUPLICATE KEY UPDATE applied_at = applied_at;

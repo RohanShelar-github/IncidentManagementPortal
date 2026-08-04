@@ -1438,6 +1438,7 @@
   /* ─── TABS ────────────────────────────────────────────── */
   .tab-bar {
     display: flex;
+    flex-wrap: wrap;
     gap: 2px;
     background: var(--surface2);
     border: 1px solid var(--border);
@@ -1445,6 +1446,7 @@
     padding: 3px;
     margin-bottom: 20px;
     width: fit-content;
+    max-width: 100%;
   }
 
   .tab {

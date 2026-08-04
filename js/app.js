@@ -73,6 +73,7 @@ document.addEventListener('keydown', function (e) {
 // ─── DATA ─────────────────────────────────────────────────────
 let currentRole = 'admin';
 let currentUserName = ''; 
+let currentUserProfile = {};
 let editingId = null;
 
 let customers = [];
@@ -690,14 +691,28 @@ function escapeMetricHtml(value) {
   });
 }
 
+function isActiveIncident(inc) {
+  return Boolean(inc) && inc.status !== 'Closed' && inc.status !== 'Resolved';
+}
+
+function isActiveSlaBreached(inc) {
+  if (!isActiveIncident(inc)) return false;
+  var openedAt = getIncidentOpenedTimestamp(inc);
+  return Number.isFinite(openedAt) && (Date.now() - openedAt) > getIncidentSlaHours(inc) * 3600000;
+}
+
 function openMetricDrillDown(metric, customerName, reportingCategory) {
   if (!hasPermission('view_incidents')) {
     showToast('Access denied: you cannot view incidents', 'error');
     return;
   }
-  if (metric !== 'mttr' && metric !== 'mttd') return;
-  var predicate = metric === 'mttr' ? isMissedMttr : isMissedMttd;
-  var metricIncidents = incidents.filter(function (inc) {
+  if (['mttr', 'mttd', 'open', 'sla'].indexOf(metric) === -1) return;
+  var predicate = metric === 'mttr' ? isMissedMttr
+    : metric === 'mttd' ? isMissedMttd
+      : metric === 'open' ? isActiveIncident : isActiveSlaBreached;
+  var sourceIncidents = (metric === 'open' || metric === 'sla') && !customerName
+    ? getDashboardFilteredIncidents() : incidents;
+  var metricIncidents = sourceIncidents.filter(function (inc) {
     if (customerName && inc.customer !== customerName) return false;
     if (reportingCategory === 'application' && isCustomer360HistorianIncident(inc)) return false;
     if (reportingCategory === 'historian' && !isCustomer360HistorianIncident(inc)) return false;
@@ -714,19 +729,27 @@ function openMetricDrillDown(metric, customerName, reportingCategory) {
   var body = document.getElementById('metricDrilldownBody');
   var overlay = document.getElementById('metricDrilldownOverlay');
   if (!title || !sub || !actualHeader || !body || !overlay) return;
-  title.textContent = 'Missed ' + metric.toUpperCase() + ' Incidents';
+  var drilldownTitles = {
+    mttr: 'Missed MTTR Incidents', mttd: 'Missed MTTD Incidents',
+    open: 'Open / Active Incidents', sla: 'SLA-Breached Active Incidents'
+  };
+  title.textContent = drilldownTitles[metric];
   sub.textContent = metricIncidents.length + ' contributing incident' + (metricIncidents.length === 1 ? '' : 's')
-    + ' · ' + (customerName || 'All customers') + ' · Select a row to view details';
-  actualHeader.textContent = 'Actual ' + metric.toUpperCase();
+    + ' · ' + (customerName || ((metric === 'open' || metric === 'sla') ? 'Current dashboard filters' : 'All customers'))
+    + ' · Select a row to view details';
+  actualHeader.textContent = (metric === 'open' || metric === 'sla') ? 'Open Duration' : 'Actual ' + metric.toUpperCase();
 
   if (!metricIncidents.length) {
     body.innerHTML = '<tr><td class="metric-drilldown-empty" colspan="11">No contributing incidents found.</td></tr>';
   } else {
     body.innerHTML = metricIncidents.map(function (inc) {
-      var actualMinutes = metric === 'mttr' ? getActualMttrMinutes(inc) : getIncidentMttdMinutes(inc);
-      var targetMinutes = metric === 'mttr' ? getIncidentSlaHours(inc) * 60 : MTTD_SLA_MINUTES;
+      var isLiveMetric = metric === 'open' || metric === 'sla';
+      var actualMinutes = metric === 'mttr' ? getActualMttrMinutes(inc)
+        : metric === 'mttd' ? getIncidentMttdMinutes(inc)
+          : Math.max(0, (Date.now() - getIncidentOpenedTimestamp(inc)) / 60000);
+      var targetMinutes = metric === 'mttd' ? MTTD_SLA_MINUTES : getIncidentSlaHours(inc) * 60;
       var created = formatStoredIncidentDateTime(inc.date_time_opened || inc.startDT || inc.date_created || inc.date);
-      var resolved = formatStoredIncidentDateTime(inc.date_time_closed || inc.endDT || inc.downtimeEnd);
+      var resolved = isLiveMetric ? '—' : formatStoredIncidentDateTime(inc.date_time_closed || inc.endDT || inc.downtimeEnd);
       var severity = String(inc.severity || 'Normal');
       var status = String(inc.status || '');
       return '<tr data-incident-id="' + escapeMetricHtml(inc.id) + '">'
@@ -740,7 +763,7 @@ function openMetricDrillDown(metric, customerName, reportingCategory) {
         + '<td class="metric-date-cell">' + escapeMetricHtml(resolved) + '</td>'
         + '<td>' + formatMetricDuration(targetMinutes) + '</td>'
         + '<td>' + formatMetricDuration(actualMinutes) + '</td>'
-        + '<td class="metric-breach-cell">+' + formatMetricDuration(actualMinutes - targetMinutes) + '</td>'
+        + '<td class="metric-breach-cell">' + (actualMinutes > targetMinutes ? '+' + formatMetricDuration(actualMinutes - targetMinutes) : '—') + '</td>'
         + '</tr>';
     }).join('');
     body.querySelectorAll('tr[data-incident-id]').forEach(function (row) {
@@ -1874,32 +1897,165 @@ function openProfileModal() {
   if (!modal) return;
   var nameInp = document.getElementById('pf_name');
   var phoneInp = document.getElementById('pf_phone');
-  if (nameInp) nameInp.value = currentUserName || '';
-  if (phoneInp) phoneInp.value = '';
+  if (nameInp) nameInp.value = currentUserProfile.name || currentUserName || '';
+  if (phoneInp) phoneInp.value = currentUserProfile.phone || '';
+  var departmentInput = document.getElementById('pf_dept');
+  var locationInput = document.getElementById('pf_location');
+  var bioInput = document.getElementById('pf_bio');
+  if (departmentInput) departmentInput.value = currentUserProfile.department || '';
+  if (locationInput) locationInput.value = currentUserProfile.location || '';
+  if (bioInput) bioInput.value = currentUserProfile.bio || '';
+  resetProfilePasswordForm();
   modal.classList.add('open');
 }
 
-function saveProfile() {
-  var nameInp = document.getElementById('pf_name');
-  var newName = nameInp ? nameInp.value.trim() : '';
-  if (newName && newName !== currentUserName) {
-    currentUserName = newName;
-    // Update all display elements
-    var els = ['sidebarUserName', 'profileDdName', 'profileModalName'];
-    els.forEach(function (id) {
-      var el = document.getElementById(id);
-      if (el) el.textContent = newName;
-    });
-    var initials = newName.split(' ').map(function (w) { return w[0]; }).join('').toUpperCase().substring(0, 2);
-    ['sidebarAvatar', 'profileDdAvatar', 'profileModalAvatar'].forEach(function (id) {
-      var el = document.getElementById(id);
-      if (el) el.textContent = initials;
-    });
-    addAudit('👤', 'Profile Updated', 'Name changed to ' + newName);
-    showToast('Profile updated', 'success');
+function applyCurrentUserProfile(user) {
+  if (!user) return;
+  currentUserProfile = {
+    id: user.id,
+    name: user.name || user.full_name || user.email || '',
+    email: user.email || '', role: user.role || currentRole,
+    phone: user.phone || '', department: user.department || '',
+    location: user.location || '', bio: user.bio || '',
+    lastActive: user.lastActive || 'Just now'
+  };
+  if (currentUserProfile.name) currentUserName = currentUserProfile.name;
+  ['sidebarUserName', 'profileUserLabel', 'profileDdName', 'profileModalName'].forEach(function (id) {
+    var el = document.getElementById(id); if (el) el.textContent = currentUserName;
+  });
+  var initials = currentUserName.split(/\s+/).map(function (word) { return word[0] || ''; }).join('').substring(0, 2).toUpperCase();
+  ['sidebarAvatar', 'btnProfile', 'profileDdAvatar', 'profileModalAvatar'].forEach(function (id) {
+    var el = document.getElementById(id); if (el) el.textContent = initials;
+  });
+  ['profileDdEmail', 'profileModalEmail', 'pf_ro_email'].forEach(function (id) {
+    var el = document.getElementById(id); if (el) el.textContent = currentUserProfile.email;
+  });
+  var idElement = document.getElementById('pf_ro_id');
+  if (idElement && currentUserProfile.id) idElement.textContent = 'USR-' + String(currentUserProfile.id).padStart(3, '0');
+  var roleText = String(currentUserProfile.role || '').toUpperCase();
+  var roleElement = document.getElementById('pf_ro_role'); if (roleElement) roleElement.textContent = roleText;
+  var modalRole = document.getElementById('profileModalRole'); if (modalRole) modalRole.textContent = roleText;
+  var activeElement = document.getElementById('pf_ro_active'); if (activeElement) activeElement.textContent = currentUserProfile.lastActive;
+}
+
+function resetProfilePasswordForm() {
+  ['pf_current_password', 'pf_new_password', 'pf_confirm_password'].forEach(function (id) {
+    var input = document.getElementById(id);
+    if (input) input.value = '';
+  });
+  var section = document.getElementById('profilePasswordSection');
+  var toggle = document.getElementById('profilePasswordToggle');
+  var error = document.getElementById('profilePasswordError');
+  if (section) section.style.display = 'none';
+  if (toggle) toggle.setAttribute('aria-expanded', 'false');
+  if (error) { error.textContent = ''; error.style.display = 'none'; }
+}
+
+function toggleProfilePasswordSection() {
+  var section = document.getElementById('profilePasswordSection');
+  var toggle = document.getElementById('profilePasswordToggle');
+  if (!section) return;
+  var opening = section.style.display === 'none';
+  section.style.display = opening ? 'block' : 'none';
+  if (toggle) toggle.setAttribute('aria-expanded', String(opening));
+  if (opening) {
+    var current = document.getElementById('pf_current_password');
+    if (current) current.focus();
   }
-  var modal = document.getElementById('profileModal');
-  if (modal) modal.classList.remove('open');
+}
+
+function changeProfilePassword() {
+  var currentInput = document.getElementById('pf_current_password');
+  var newInput = document.getElementById('pf_new_password');
+  var confirmInput = document.getElementById('pf_confirm_password');
+  var error = document.getElementById('profilePasswordError');
+  var button = document.getElementById('profilePasswordSaveBtn');
+  var currentPassword = currentInput ? currentInput.value : '';
+  var newPassword = newInput ? newInput.value : '';
+  var confirmPassword = confirmInput ? confirmInput.value : '';
+
+  function showPasswordError(message) {
+    if (error) { error.textContent = message; error.style.display = 'block'; }
+  }
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    showPasswordError('Complete all password fields.'); return;
+  }
+  if (newPassword.length < 8 || newPassword.length > 72) {
+    showPasswordError('New password must be between 8 and 72 characters.'); return;
+  }
+  if (!/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword) || !/\d/.test(newPassword)) {
+    showPasswordError('Include uppercase, lowercase, and numeric characters.'); return;
+  }
+  if (newPassword !== confirmPassword) {
+    showPasswordError('New password and confirmation do not match.'); return;
+  }
+  if (currentPassword === newPassword) {
+    showPasswordError('New password must be different from the current password.'); return;
+  }
+
+  var token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) { showPasswordError('Your session has expired. Please sign in again.'); return; }
+  if (error) { error.textContent = ''; error.style.display = 'none'; }
+  if (button) { button.disabled = true; button.textContent = 'Updating...'; }
+
+  fetch(window.APP_CONFIG.API_BASE_URL + '/auth/password', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ currentPassword: currentPassword, newPassword: newPassword })
+  })
+    .then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (data) {
+        if (!response.ok || !data.success) throw new Error(data.message || 'Unable to change password');
+        return data;
+      });
+    })
+    .then(function (data) {
+      resetProfilePasswordForm();
+      showToast(data.message || 'Password changed successfully', 'success');
+    })
+    .catch(function (requestError) {
+      showPasswordError(requestError.message || 'Unable to change password');
+    })
+    .finally(function () {
+      if (button) { button.disabled = false; button.textContent = 'Update Password'; }
+    });
+}
+
+function saveProfile() {
+  var fullName = ((document.getElementById('pf_name') || {}).value || '').trim();
+  var phone = ((document.getElementById('pf_phone') || {}).value || '').trim();
+  var department = ((document.getElementById('pf_dept') || {}).value || '').trim();
+  var location = ((document.getElementById('pf_location') || {}).value || '').trim();
+  var bio = ((document.getElementById('pf_bio') || {}).value || '').trim();
+  if (!fullName) { showToast('Display name is required', 'error'); return; }
+  if (fullName.length > 255 || phone.length > 50 || department.length > 100 || location.length > 100 || bio.length > 1000) {
+    showToast('One or more profile fields are too long', 'error'); return;
+  }
+  var token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) { showToast('Your session has expired. Please sign in again.', 'error'); return; }
+  var saveButton = document.querySelector('#profileModal .modal-footer .btn-primary');
+  if (saveButton) { saveButton.disabled = true; saveButton.textContent = 'Saving...'; }
+  fetch(window.APP_CONFIG.API_BASE_URL + '/auth/profile', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ fullName: fullName, phone: phone, department: department, location: location, bio: bio })
+  })
+    .then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (data) {
+        if (!response.ok || !data.success) throw new Error(data.message || 'Unable to update profile');
+        return data;
+      });
+    })
+    .then(function (data) {
+      applyCurrentUserProfile(data.data);
+      addAudit('👤', 'Profile Updated', 'Profile details updated');
+      showToast(data.message || 'Profile updated successfully', 'success');
+      closeModal('profileModal');
+    })
+    .catch(function (error) { showToast(error.message || 'Unable to update profile', 'error'); })
+    .finally(function () {
+      if (saveButton) { saveButton.disabled = false; saveButton.textContent = 'Save Profile'; }
+    });
 }
 
 // ─── C360 TABLE ───────────────────────────────────────────
@@ -2333,6 +2489,15 @@ function switchRole(role) {
 
 // ─── ROLE MANAGEMENT ──────────────────────────────────────────
 let editingRoleKey = null;
+
+const SUPPORTED_USER_ROLES = [
+  { key: 'admin', name: 'Admin' },
+  { key: 'cso', name: 'CSO' },
+  { key: 'pmo', name: 'PMO' },
+  { key: 'aoc', name: 'AOC' },
+  { key: 'engineer', name: 'Engineer' },
+  { key: 'stakeholder', name: 'Stakeholder' }
+];
 
 const PERM_LABELS = {
   view_dashboard: 'View Dashboard',
@@ -3178,6 +3343,7 @@ function doLogin() {
         var u = data.user || {};
         currentUserName = u.name || u.email || currentUserName;
         currentRole = u.role || currentRole;
+        applyCurrentUserProfile(u);
 
         // Update UI labels immediately
         var els = ['sidebarUserName', 'profileDdName', 'profileModalName', 'pf_ro_active'];
@@ -3191,6 +3357,8 @@ function doLogin() {
         var portal = document.getElementById('portalApp');
         if (loginScreen) loginScreen.style.display = 'none';
         if (portal) portal.style.display = '';
+        setHash('home');
+        navigateInternal('home', document.getElementById('homeNav'));
 
         // Set avatar pills
         var avatar = document.getElementById('btnProfile');
@@ -3910,14 +4078,80 @@ function renderUsersTable() {
       <td style="font-size:12px;color:var(--text3)">${u.lastActive}</td>
       <td><span class="badge ${u.active ? 'badge-low' : 'badge-critical'}">${u.active ? 'Active' : 'Inactive'}</span></td>
       <td>
-        <div style="display:flex;gap:4px">
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
           <button class="btn btn-secondary btn-sm" onclick="editUserRole('${u.id}')">Change Role</button>
+          <button class="btn btn-secondary btn-sm" onclick="changeUserPassword('${u.id}')">Change Password</button>
           <button class="btn btn-danger btn-sm" onclick="toggleUser('${u.id}')">${u.active ? 'Deactivate' : 'Activate'}</button>
           <button class="btn btn-danger btn-sm" onclick="deleteUser('${u.id}')">Delete</button>
         </div>
       </td>
     </tr>
   `).join('');
+}
+
+function changeUserPassword(id) {
+  if (!hasPermission('manage_users') || String(currentRole || '').toLowerCase() !== 'admin') {
+    showToast('Only administrators can change user passwords', 'error');
+    return;
+  }
+  var user = users.find(function (item) { return String(item.id) === String(id); });
+  if (!user) { showToast('User not found', 'error'); return; }
+  var existing = document.getElementById('_changeUserPasswordOverlay');
+  if (existing) existing.remove();
+
+  var overlay = document.createElement('div');
+  overlay.id = '_changeUserPasswordOverlay';
+  overlay.className = 'modal-overlay open';
+  overlay.innerHTML = '<div class="modal" style="width:460px">'
+    + '<div class="modal-header"><div class="modal-title">Change User Password</div><button type="button" class="modal-close" id="_closeUserPassword">&#10005;</button></div>'
+    + '<div class="modal-body">'
+    + '<div style="font-size:13px;color:var(--text-muted);margin-bottom:16px">Set a new password for <strong style="color:var(--text)">' + escapeMetricHtml(user.name) + '</strong>.</div>'
+    + '<div class="form-group" style="margin-bottom:14px"><label class="form-label" for="_adminNewPassword">New Password</label>'
+    + '<input class="form-control" autocomplete="new-password" id="_adminNewPassword" maxlength="72" placeholder="Minimum 8 characters" type="password"></div>'
+    + '<div class="form-group"><label class="form-label" for="_adminConfirmPassword">Confirm Password</label>'
+    + '<input class="form-control" autocomplete="new-password" id="_adminConfirmPassword" maxlength="72" placeholder="Repeat new password" type="password"></div>'
+    + '<div style="font-size:10px;color:var(--text-muted);margin-top:10px">Use 8–72 characters with uppercase, lowercase, and a number.</div>'
+    + '<div aria-live="polite" id="_adminPasswordError" style="display:none;color:var(--danger);font-size:12px;margin-top:10px"></div></div>'
+    + '<div class="modal-footer"><button type="button" class="btn btn-secondary" id="_cancelUserPassword">Cancel</button>'
+    + '<button type="button" class="btn btn-primary" id="_saveUserPassword">Update Password</button></div></div>';
+  document.body.appendChild(overlay);
+
+  function closePasswordDialog() { overlay.remove(); }
+  function showAdminPasswordError(message) {
+    var error = document.getElementById('_adminPasswordError');
+    if (error) { error.textContent = message; error.style.display = 'block'; }
+  }
+  document.getElementById('_closeUserPassword').onclick = closePasswordDialog;
+  document.getElementById('_cancelUserPassword').onclick = closePasswordDialog;
+  overlay.onclick = function (event) { if (event.target === overlay) closePasswordDialog(); };
+  document.getElementById('_saveUserPassword').onclick = function () {
+    var newPassword = document.getElementById('_adminNewPassword').value;
+    var confirmPassword = document.getElementById('_adminConfirmPassword').value;
+    if (newPassword.length < 8 || newPassword.length > 72) { showAdminPasswordError('Password must be between 8 and 72 characters.'); return; }
+    if (!/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword) || !/\d/.test(newPassword)) { showAdminPasswordError('Include uppercase, lowercase, and numeric characters.'); return; }
+    if (newPassword !== confirmPassword) { showAdminPasswordError('Passwords do not match.'); return; }
+    var token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+    if (!token) { showAdminPasswordError('Your session has expired. Please sign in again.'); return; }
+    var saveButton = document.getElementById('_saveUserPassword');
+    saveButton.disabled = true; saveButton.textContent = 'Updating...';
+    fetch(window.APP_CONFIG.API_BASE_URL + '/auth/users/' + encodeURIComponent(id) + '/password', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ newPassword: newPassword })
+    })
+      .then(function (response) {
+        return response.json().catch(function () { return {}; }).then(function (data) {
+          if (!response.ok || !data.success) throw new Error(data.message || 'Unable to change password');
+          return data;
+        });
+      })
+      .then(function (data) { closePasswordDialog(); showToast(data.message || 'Password changed successfully', 'success'); })
+      .catch(function (error) {
+        showAdminPasswordError(error.message || 'Unable to change password');
+        saveButton.disabled = false; saveButton.textContent = 'Update Password';
+      });
+  };
+  setTimeout(function () { var input = document.getElementById('_adminNewPassword'); if (input) input.focus(); }, 0);
 }
 
 function editUserRole(id) {
@@ -4078,8 +4312,10 @@ function openAddUserModal(editKey) {
   var sel = document.getElementById('u_role');
   if (sel) {
     sel.innerHTML = '<option value="">Select role</option>'
-      + roles.map(function (r) {
-        return '<option value="' + r.key + '">' + r.icon + ' ' + r.name + '</option>';
+      + SUPPORTED_USER_ROLES.map(function (supportedRole) {
+        var roleDefinition = roles.find(function (role) { return role.key === supportedRole.key; });
+        var icon = roleDefinition && roleDefinition.icon ? roleDefinition.icon + ' ' : '';
+        return '<option value="' + supportedRole.key + '">' + icon + supportedRole.name + '</option>';
       }).join('');
   }
   document.getElementById('u_name').value = '';
@@ -4104,24 +4340,53 @@ function saveUser() {
   if (!name || !email || !role) {
     showToast('Please fill in all required fields', 'error'); return;
   }
-  if (!password || password.length < 4) {
-    showToast('Password must be at least 4 characters', 'error'); return;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    showToast('Enter a valid email address', 'error'); return;
   }
-  if (users.find(u => u.email === email)) {
+  if (password.length < 8 || password.length > 72) {
+    showToast('Password must be between 8 and 72 characters', 'error'); return;
+  }
+  if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password)) {
+    showToast('Password must include uppercase, lowercase, and numeric characters', 'error'); return;
+  }
+  if (users.find(function (user) { return String(user.email || '').toLowerCase() === email; })) {
     showToast('A user with this email already exists', 'error'); return;
   }
+  if (!hasPermission('manage_users') || String(currentRole || '').toLowerCase() !== 'admin') {
+    showToast('Only administrators can add users', 'error'); return;
+  }
+  var token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) { showToast('Your session has expired. Please sign in again.', 'error'); return; }
+  var saveButton = document.getElementById('addUserSaveBtn');
+  if (saveButton) { saveButton.disabled = true; saveButton.textContent = 'Adding...'; }
 
-  const initials = name.split(' ').map(p => p[0] || '').join('').substring(0, 2).toUpperCase();
-  // User credential persistence is handled by the backend; frontend stores only display metadata.
-
-  users.push({
-    id: 'USR-' + String(users.length + 1).padStart(3, '0'),
-    name, email, role, dept, incidents: 0, lastActive: 'Just now', active: true
-  });
-
-  closeModal('userModal');
-  renderUsersTable();
-  showToast('User ' + name + ' added — they can now log in', 'success');
+  fetch(window.APP_CONFIG.API_BASE_URL + '/auth/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ fullName: name, email: email, role: role, department: dept, password: password })
+  })
+    .then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (data) {
+        if (!response.ok || !data.success) throw new Error(data.message || 'Unable to add user');
+        return data;
+      });
+    })
+    .then(function (data) {
+      loadUsersFromBackend(function (loadError) {
+        if (loadError) {
+          showToast('User was created, but the user list could not be refreshed', 'warning');
+        } else {
+          renderUsersTable();
+          populateEngineerDropdowns();
+          showToast(data.message || 'User added successfully', 'success');
+        }
+      });
+      closeModal('userModal');
+    })
+    .catch(function (error) { showToast(error.message || 'Unable to add user', 'error'); })
+    .finally(function () {
+      if (saveButton) { saveButton.disabled = false; saveButton.textContent = 'Add User'; }
+    });
 }
 
 // ─── STATS ────────────────────────────────────────────────────
@@ -4510,7 +4775,7 @@ function refreshDashboardData(options) {
 }
 function updateStats() {
   var data = getDashboardFilteredIncidents();
-  var open = data.filter(function (i) { return i.status !== 'Closed' && i.status !== 'Resolved'; }).length;
+  var open = data.filter(isActiveIncident).length;
   var closed = data.filter(function (i) { return i.status === 'Closed' || i.status === 'Resolved'; }).length;
 
   var t = document.getElementById('statTotal'); if (t) t.textContent = data.length;
@@ -4544,12 +4809,7 @@ function updateStats() {
     : 'no resolution time recorded';
 
   // SLA Breach count
-  var breachCount = data.filter(function (i) {
-    if (i.status === 'Closed' || i.status === 'Resolved') return false;
-    var slaH = getIncidentSlaHours(i);
-    var startMs = getIncidentOpenedTimestamp(i);
-    return (Date.now() - startMs) > slaH * 3600000;
-  }).length;
+  var breachCount = data.filter(isActiveSlaBreached).length;
   var slEl = document.getElementById('statSLABreach');
   var slSub = document.getElementById('statSLABreachSub');
   if (slEl) slEl.textContent = breachCount;
@@ -7461,6 +7721,7 @@ function doLogin() {
         const user = data.user;
         currentRole = user.role;
         currentUserName = user.name;
+        applyCurrentUserProfile(user);
 
         const loginScreen = document.getElementById('loginScreen');
         loginScreen.classList.add('hidden');
@@ -7998,6 +8259,7 @@ function verifySessionAndInit() {
         const user = data.data;
         currentRole = user.role;
         currentUserName = user.name;
+        applyCurrentUserProfile(user);
         startSessionInactivityTracking(false);
         startNotificationPolling();
 
@@ -8041,15 +8303,9 @@ function verifySessionAndInit() {
               portal.style.display = 'block';
             }
 
-            var hash = (window.location.hash || '').replace('#', '');
-            var validPages = ['home', 'dashboard', 'incidents', 'reports', 'users', 'roles', 'customer360', 'datamanagement'];
-            if (hash && validPages.indexOf(hash) >= 0) {
-              var navId = PAGE_NAV_MAP[hash];
-              var navEl = navId ? document.getElementById(navId) : (hash === 'home' ? document.getElementById('homeNav') : null);
-              navigate(hash, navEl);
-            } else {
-              navigate('home', document.getElementById('homeNav'));
-            }
+            var hash = 'home';
+            var navEl = document.getElementById('homeNav');
+            navigate(hash, navEl);
             document.body.classList.remove('auth-pending');
           });
         });

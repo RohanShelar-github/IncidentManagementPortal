@@ -9,6 +9,10 @@ function userDto(user) {
     email: user.email,
     name,
     role: user.role,
+    phone: user.phone || '',
+    department: user.department || '',
+    location: user.location || '',
+    bio: user.bio || '',
     initials: user.initials || String(name || '').split(/\s+/).map(p => p[0] || '').join('').substring(0, 2).toUpperCase(),
     incidents: Number(user.incidents || 0),
     lastActive: user.last_active || 'Not tracked',
@@ -74,13 +78,138 @@ const getAllUsers = async (req, res) => {
 
 const getCurrentUser = async (req, res) => {
   try {
-    const [users] = await pool.query('SELECT id, email, full_name, role, is_active, created_at FROM users WHERE id = ?', [req.user.id]);
+    const [users] = await pool.query('SELECT id, email, full_name, role, phone, department, location, bio, is_active, created_at FROM users WHERE id = ?', [req.user.id]);
     if (users.length === 0) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
     return res.status(200).json({ success: true, data: userDto(users[0]) });
   } catch (error) {
     console.error('Get current user error:', error);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+const createUser = async (req, res) => {
+  try {
+    if (String(req.user.role || '').toLowerCase() !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Only administrators can add users' });
+    }
+    const fullName = String(req.body.fullName || '').trim();
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const role = String(req.body.role || '').trim().toLowerCase();
+    const department = String(req.body.department || '').trim();
+    const password = String(req.body.password || '');
+    const allowedRoles = ['admin', 'cso', 'pmo', 'aoc', 'engineer', 'stakeholder'];
+
+    if (!fullName || fullName.length > 255) {
+      return res.status(400).json({ success: false, message: 'Full name is required and must not exceed 255 characters' });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 255) {
+      return res.status(400).json({ success: false, message: 'Enter a valid email address' });
+    }
+    if (!allowedRoles.includes(role)) {
+      return res.status(400).json({ success: false, message: 'Invalid user role' });
+    }
+    if (department.length > 100) {
+      return res.status(400).json({ success: false, message: 'Department must not exceed 100 characters' });
+    }
+    if (password.length < 8 || password.length > 72) {
+      return res.status(400).json({ success: false, message: 'Password must be between 8 and 72 characters' });
+    }
+    if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password)) {
+      return res.status(400).json({ success: false, message: 'Password must include uppercase, lowercase, and numeric characters' });
+    }
+
+    const [existingUsers] = await pool.query('SELECT id FROM users WHERE email = ? LIMIT 1', [email]);
+    if (existingUsers.length) {
+      return res.status(409).json({ success: false, message: 'A user with this email already exists' });
+    }
+    const passwordHash = await bcrypt.hash(password, 12);
+    const [result] = await pool.query(
+      'INSERT INTO users (full_name, email, password, role, department, is_active) VALUES (?, ?, ?, ?, ?, 1)',
+      [fullName, email, passwordHash, role, department || null]
+    );
+    const [users] = await pool.query(
+      'SELECT id, email, full_name, role, phone, department, location, bio, is_active, created_at FROM users WHERE id = ?',
+      [result.insertId]
+    );
+    return res.status(201).json({ success: true, message: `User ${fullName} added successfully`, data: userDto(users[0]) });
+  } catch (error) {
+    if (error && error.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ success: false, message: 'A user with this email already exists' });
+    }
+    console.error('Create user error:', error);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+const updateProfile = async (req, res) => {
+  try {
+    const fullName = String(req.body.fullName || '').trim();
+    const phone = String(req.body.phone || '').trim();
+    const department = String(req.body.department || '').trim();
+    const location = String(req.body.location || '').trim();
+    const bio = String(req.body.bio || '').trim();
+
+    if (!fullName || fullName.length > 255) {
+      return res.status(400).json({ success: false, message: 'Display name is required and must not exceed 255 characters' });
+    }
+    if (phone.length > 50 || department.length > 100 || location.length > 100 || bio.length > 1000) {
+      return res.status(400).json({ success: false, message: 'One or more profile fields exceed the allowed length' });
+    }
+
+    const [result] = await pool.query(
+      'UPDATE users SET full_name = ?, phone = ?, department = ?, location = ?, bio = ? WHERE id = ?',
+      [fullName, phone || null, department || null, location || null, bio || null, req.user.id]
+    );
+    if (!result.affectedRows) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    const [users] = await pool.query(
+      'SELECT id, email, full_name, role, phone, department, location, bio, is_active, created_at FROM users WHERE id = ?',
+      [req.user.id]
+    );
+    return res.status(200).json({ success: true, message: 'Profile updated successfully', data: userDto(users[0]) });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+const changePassword = async (req, res) => {
+  try {
+    const currentPassword = String(req.body.currentPassword || '');
+    const newPassword = String(req.body.newPassword || '');
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Current password and new password are required' });
+    }
+    if (newPassword.length < 8 || newPassword.length > 72) {
+      return res.status(400).json({ success: false, message: 'New password must be between 8 and 72 characters' });
+    }
+    if (!/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword) || !/\d/.test(newPassword)) {
+      return res.status(400).json({ success: false, message: 'New password must include uppercase, lowercase, and numeric characters' });
+    }
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ success: false, message: 'New password must be different from the current password' });
+    }
+
+    const [users] = await pool.query('SELECT id, password FROM users WHERE id = ? LIMIT 1', [req.user.id]);
+    if (!users.length) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    const storedPassword = String(users[0].password || '');
+    const currentPasswordOk = storedPassword.startsWith('$2')
+      ? await bcrypt.compare(currentPassword, storedPassword)
+      : storedPassword === currentPassword;
+    if (!currentPasswordOk) {
+      return res.status(401).json({ success: false, message: 'Current password is incorrect' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await pool.query('UPDATE users SET password = ? WHERE id = ?', [passwordHash, req.user.id]);
+    return res.status(200).json({ success: true, message: 'Password changed successfully' });
+  } catch (error) {
+    console.error('Change password error:', error);
     return res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -112,6 +241,37 @@ const updateUserRole = async (req, res) => {
     return res.status(200).json({ success: true, message: 'User role updated successfully', data: userDto(users[0]) });
   } catch (error) {
     console.error('Update user role error:', error);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+const adminChangeUserPassword = async (req, res) => {
+  try {
+    if (String(req.user.role || '').toLowerCase() !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Only administrators can change user passwords' });
+    }
+    const userId = Number(req.params.id);
+    const newPassword = String(req.body.newPassword || '');
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return res.status(400).json({ success: false, message: 'Invalid user ID' });
+    }
+    if (newPassword.length < 8 || newPassword.length > 72) {
+      return res.status(400).json({ success: false, message: 'New password must be between 8 and 72 characters' });
+    }
+    if (!/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword) || !/\d/.test(newPassword)) {
+      return res.status(400).json({ success: false, message: 'New password must include uppercase, lowercase, and numeric characters' });
+    }
+
+    const [users] = await pool.query('SELECT id, full_name, email FROM users WHERE id = ? LIMIT 1', [userId]);
+    if (!users.length) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await pool.query('UPDATE users SET password = ? WHERE id = ?', [passwordHash, userId]);
+    const userName = users[0].full_name || users[0].email;
+    return res.status(200).json({ success: true, message: `Password changed successfully for ${userName}` });
+  } catch (error) {
+    console.error('Admin change user password error:', error);
     return res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -181,4 +341,4 @@ const deleteUser = async (req, res) => {
   }
 };
 
-module.exports = { login, getAllUsers, getCurrentUser, updateUserRole, updateUserActivation, deleteUser };
+module.exports = { login, getAllUsers, createUser, getCurrentUser, updateProfile, changePassword, updateUserRole, adminChangeUserPassword, updateUserActivation, deleteUser };
