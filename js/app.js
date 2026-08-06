@@ -3052,10 +3052,8 @@ function applyFilters() {
   var assignees = getMsValues('assigneeFilter');
   var fromEl = document.getElementById('dateFrom');
   var toEl = document.getElementById('dateTo');
-  var tagEl = document.getElementById('tagFilter');
   var from = fromEl ? fromEl.value : '';
   var to = toEl ? toEl.value : '';
-  var tag = tagEl ? tagEl.value : '';
 
   filteredIncidents = incidents.filter(function (i) {
     if (search && !i.title.toLowerCase().includes(search) && !i.id.toLowerCase().includes(search)) return false;
@@ -3066,7 +3064,6 @@ function applyFilters() {
     if (assignees.length && assignees.indexOf(i.engineer) < 0) return false;
     if (from && i.date < from) return false;
     if (to && i.date > to) return false;
-    if (tag && !(i.tags || []).includes(tag)) return false;
     return true;
   });
 
@@ -3088,7 +3085,7 @@ function clearFilters() {
   ['severityFilter', 'statusFilter', 'customerFilter', 'areaFilter', 'assigneeFilter'].forEach(function (id) {
     clearMsFilter(id);
   });
-  ['dateFrom', 'dateTo', 'tagFilter'].forEach(function (id) {
+  ['dateFrom', 'dateTo'].forEach(function (id) {
     var el = document.getElementById(id); if (el) el.value = '';
   });
   filteredIncidents = [...incidents];
@@ -3096,8 +3093,6 @@ function clearFilters() {
   renderIncidentTable();
   var badge = document.getElementById('drillDownBadge');
   if (badge) badge.style.display = 'none';
-  // reset tag filter select
-  var tf = document.getElementById('tagFilter'); if (tf) tf.value = '';
 }
 
 // ── SLA HELPERS ────────────────────────────────────────────────
@@ -3880,10 +3875,10 @@ function confirmCloseIncident() {
   const inc = incidents.find(i => i.id === id);
   if (!inc) return;
 
-  const downtimeHoursRaw = document.getElementById('dtm_hours').value;
-  const downtimeMinutesRaw = document.getElementById('dtm_mins').value;
-  const h = Number(downtimeHoursRaw);
-  const m = Number(downtimeMinutesRaw);
+  const downtimeHoursInput = document.getElementById('dtm_hours');
+  const downtimeMinutesInput = document.getElementById('dtm_mins');
+  const h = downtimeHoursInput.value === '' ? 0 : Number(downtimeHoursInput.value);
+  const m = downtimeMinutesInput.value === '' ? 0 : Number(downtimeMinutesInput.value);
   const mttrH = parseInt(document.getElementById('dtm_mttr_hours').value) || 0;
   const mttrM = parseInt(document.getElementById('dtm_mttr_mins').value) || 0;
   const resolvedBy = document.getElementById('dtm_resolved_by').value;
@@ -3893,7 +3888,7 @@ function confirmCloseIncident() {
   const endTimeRaw = document.getElementById('dtm_end_time').value;
 
   if (!endTimeRaw) { showToast('Please select the incident end date & time', 'error'); return; }
-  if (downtimeHoursRaw === '' || downtimeMinutesRaw === '' || !Number.isInteger(h) || !Number.isInteger(m)
+  if (!Number.isFinite(h) || !Number.isFinite(m) || !Number.isInteger(h) || !Number.isInteger(m)
     || h < 0 || h > 999 || m < 0 || m > 59) {
     showToast('Please enter a valid downtime (zero is allowed)', 'error'); return;
   }
@@ -8630,7 +8625,7 @@ function drillDownToIncidents(filters) {
   // Small delay to ensure page is active before applying filters
   setTimeout(function () {
     // Reset all filters first
-    ['searchFilter', 'severityFilter', 'statusFilter', 'customerFilter', 'areaFilter', 'dateFrom', 'dateTo', 'tagFilter'].forEach(function (id) {
+    ['searchFilter', 'severityFilter', 'statusFilter', 'customerFilter', 'areaFilter', 'dateFrom', 'dateTo'].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.value = '';
     });
@@ -8652,11 +8647,6 @@ function drillDownToIncidents(filters) {
       var el = document.getElementById('statusFilter');
       if (el) el.value = filters.status;
     }
-    if (filters.tag) {
-      var elTag = document.getElementById('tagFilter');
-      if (elTag) elTag.value = filters.tag;
-    }
-
     applyFilters();
 
     // Show a toast indicating what filter was applied

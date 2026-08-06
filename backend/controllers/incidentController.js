@@ -5,7 +5,7 @@ const {
   resolveDurationMinutes
 } = require('../services/incidentNormalization');
 const { notifyUsers } = require('../services/notificationService');
-const { sendIncidentCreatedEmail } = require('../services/emailService');
+const { sendIncidentClosedEmail, sendIncidentCreatedEmail } = require('../services/emailService');
 const INCIDENT_NOTIFICATION_CC = 'its24x7@magicsoftware.com';
 
 const CANONICAL_INCIDENT_FIELDS = process.env.CANONICAL_INCIDENT_FIELDS !== 'false';
@@ -396,7 +396,7 @@ const updateIncident = async (req, res) => {
   try {
     const dbId = await findIncidentDbId(req.params.id);
     if (!dbId) return res.status(404).json({ success: false, message: 'Incident not found' });
-    const [currentRows] = await pool.query('SELECT * FROM incidents WHERE id = ? LIMIT 1', [dbId]);
+    const [currentRows] = await pool.query('SELECT i.*, creator.email AS creator_email FROM incidents i LEFT JOIN users creator ON creator.id = i.created_by WHERE i.id = ? LIMIT 1', [dbId]);
     const current = currentRows[0] || {};
     const updates = [];
     const values = [];
@@ -493,6 +493,37 @@ const updateIncident = async (req, res) => {
         incidentRef,
         mentionText: Array.isArray(b.tags) ? b.tags.join(' ') : ''
       });
+      const transitionedToClosed = closed && normalizeStatus(current.status) !== 'closed';
+      if (transitionedToClosed) {
+        try {
+          const downtime = minutesToHM(canonical.downtime_mins);
+          const mttr = minutesToHM(canonical.mttr_minutes);
+          const mttd = minutesToHM(canonical.mttd_minutes);
+          await sendIncidentClosedEmail({
+            id: incidentRef,
+            title: b.title ?? current.title,
+            severity: b.severity ?? current.severity,
+            status: 'Closed',
+            customer: b.customer ?? current.customer,
+            project: b.project ?? current.project,
+            area: b.area ?? current.area,
+            engineer: b.engineer ?? current.case_owner,
+            startDT: b.startDT ?? b.date_time_opened ?? current.start_dt ?? current.date_time_opened,
+            closedAt: b.endDT ?? b.date_time_closed ?? current.end_dt ?? current.date_time_closed,
+            timezone: b.timezone ?? current.timezone,
+            description: b.description ?? current.description,
+            resolution: b.resolution ?? current.resolution,
+            resolvedBy: b.resolved_by ?? current.resolved_by,
+            downtime: downtime.text || '0m',
+            mttr: mttr.text || 'Not recorded',
+            mttd: mttd.text || 'Not recorded',
+            emailTo: current.creator_email || req.user.email,
+            emailCc: INCIDENT_NOTIFICATION_CC
+          });
+        } catch (mailError) {
+          console.error(`Incident ${incidentRef} closed email failed:`, mailError.message);
+        }
+      }
     }
     return res.status(200).json({ success: true, message: 'Incident updated successfully' });
   } catch (error) {

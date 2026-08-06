@@ -56,11 +56,16 @@ function recipientXml(kind, addresses) {
 }
 
 function incidentEmail(incident) {
-  const subject = `[${incident.severity || 'Incident'}] ${incident.id}: ${incident.title}`;
+  const isClosed = incident.emailType === 'closed';
+  const subject = isClosed
+    ? `[Closed] ${incident.id}: ${incident.title}`
+    : `[${incident.severity || 'Incident'}] ${incident.id}: ${incident.title}`;
   const portalBaseUrl = String(process.env.PORTAL_BASE_URL || '').replace(/\/$/, '');
   const incidentUrl = portalBaseUrl ? `${portalBaseUrl}/?incident=${encodeURIComponent(incident.id)}#incidents` : '';
   const body = [
-    'A new incident has been created in the AOC 24×7 Incident Management Portal.', '',
+    isClosed
+      ? 'An incident has been closed in the AOC 24×7 Incident Management Portal.'
+      : 'A new incident has been created in the AOC 24×7 Incident Management Portal.', '',
     `Incident ID: ${incident.id}`,
     `Summary: ${incident.title || 'Not provided'}`,
     `Severity: ${incident.severity || 'Not provided'}`,
@@ -70,6 +75,7 @@ function incidentEmail(incident) {
     `Area: ${incident.area || 'Not provided'}`,
     `Assigned To: ${incident.engineer || 'Not assigned'}`,
     `MTTD: ${incident.mttd || 'Not recorded'}`,
+    ...(isClosed ? [`Downtime: ${incident.downtime || '0m'}`, `MTTR: ${incident.mttr || 'Not recorded'}`, `Resolved By: ${incident.resolvedBy || 'Not recorded'}`] : []),
     `Incident Start: ${incident.startDT || incident.date_time_opened || 'Not provided'} ${incident.timezone || 'IST'}`,
     '', 'Description:', incident.description || 'Not provided',
     ...(incidentUrl ? ['', `Open Incident: ${incidentUrl}`] : [])
@@ -79,9 +85,10 @@ function incidentEmail(incident) {
     ['Status', incident.status || 'New'], ['Customer', incident.customer || 'Not provided'],
     ['Project', incident.project || 'Not provided'], ['Area', incident.area || 'Not provided'],
     ['Assigned To', incident.engineer || 'Not assigned'], ['MTTD', incident.mttd || 'Not recorded'],
-    ['Incident Start', `${incident.startDT || incident.date_time_opened || 'Not provided'} ${incident.timezone || 'IST'}`]
+    ['Incident Start', `${incident.startDT || incident.date_time_opened || 'Not provided'} ${incident.timezone || 'IST'}`],
+    ...(isClosed ? [['Downtime', incident.downtime || '0m'], ['MTTR', incident.mttr || 'Not recorded'], ['Resolved By', incident.resolvedBy || 'Not recorded'], ['Closed At', `${incident.closedAt || 'Not provided'} ${incident.timezone || 'IST'}`]] : [])
   ].map(([label, value]) => `<tr><td style="padding:8px 12px;color:#64748b;font-size:13px;border-bottom:1px solid #e2e8f0">${htmlEscape(label)}</td><td style="padding:8px 12px;color:#0f172a;font-size:13px;font-weight:600;border-bottom:1px solid #e2e8f0">${htmlEscape(value)}</td></tr>`).join('');
-  const html = `<!doctype html><html><body style="margin:0;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a"><div style="max-width:680px;margin:24px auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden"><div style="background:#172554;padding:24px;color:#fff"><div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;opacity:.8">AOC 24×7 Incident Management</div><h1 style="font-size:22px;margin:8px 0 0">Incident Created</h1></div><div style="padding:24px"><div data-additional-message></div><div style="font-size:18px;font-weight:700;margin-bottom:6px">${htmlEscape(incident.title || 'Untitled incident')}</div><div style="display:inline-block;background:#fee2e2;color:#991b1b;border-radius:999px;padding:5px 10px;font-size:12px;font-weight:700;margin-bottom:18px">${htmlEscape(incident.severity || 'Incident')}</div><table role="presentation" style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0">${details}</table><div style="margin-top:20px"><div style="font-size:13px;font-weight:700;color:#334155;margin-bottom:7px">Description</div><div style="background:#f8fafc;border-left:4px solid #3b82f6;padding:12px 14px;white-space:pre-wrap;font-size:13px;line-height:1.5">${htmlEscape(incident.description || 'Not provided')}</div></div>${incidentUrl ? `<div style="margin-top:24px;text-align:center"><a href="${htmlEscape(incidentUrl)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700;font-size:14px">Open Incident ${htmlEscape(incident.id)}</a><div style="font-size:11px;color:#64748b;margin-top:9px">Sign in when prompted; the incident will open automatically.</div></div>` : ''}</div></div></body></html>`;
+  const html = `<!doctype html><html><body style="margin:0;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a"><div style="max-width:680px;margin:24px auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden"><div style="background:#172554;padding:24px;color:#fff"><div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;opacity:.8">AOC 24×7 Incident Management</div><h1 style="font-size:22px;margin:8px 0 0">Incident ${isClosed ? 'Closed' : 'Created'}</h1></div><div style="padding:24px"><div data-additional-message></div><div style="font-size:18px;font-weight:700;margin-bottom:6px">${htmlEscape(incident.title || 'Untitled incident')}</div><div style="display:inline-block;background:${isClosed ? '#dcfce7' : '#fee2e2'};color:${isClosed ? '#166534' : '#991b1b'};border-radius:999px;padding:5px 10px;font-size:12px;font-weight:700;margin-bottom:18px">${htmlEscape(isClosed ? 'Closed' : (incident.severity || 'Incident'))}</div><table role="presentation" style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0">${details}</table><div style="margin-top:20px"><div style="font-size:13px;font-weight:700;color:#334155;margin-bottom:7px">${isClosed ? 'Resolution' : 'Description'}</div><div style="background:#f8fafc;border-left:4px solid #3b82f6;padding:12px 14px;white-space:pre-wrap;font-size:13px;line-height:1.5">${htmlEscape(isClosed ? (incident.resolution || 'Not provided') : (incident.description || 'Not provided'))}</div></div>${incidentUrl ? `<div style="margin-top:24px;text-align:center"><a href="${htmlEscape(incidentUrl)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700;font-size:14px">Open Incident ${htmlEscape(incident.id)}</a><div style="font-size:11px;color:#64748b;margin-top:9px">Sign in when prompted; the incident will open automatically.</div></div>` : ''}</div></div></body></html>`;
   return { subject, body, html, incidentUrl };
 }
 
@@ -157,4 +164,8 @@ async function sendIncidentCreatedEmail(incident) {
   return { sent: true, to, cc };
 }
 
-module.exports = { cleanAddressList, configured, getAccessToken, htmlEscape, incidentEmail, sendIncidentCreatedEmail, xmlEscape };
+async function sendIncidentClosedEmail(incident) {
+  return sendIncidentCreatedEmail({ ...incident, emailType: 'closed' });
+}
+
+module.exports = { cleanAddressList, configured, getAccessToken, htmlEscape, incidentEmail, sendIncidentClosedEmail, sendIncidentCreatedEmail, xmlEscape };

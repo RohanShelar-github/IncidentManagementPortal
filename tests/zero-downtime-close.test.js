@@ -24,3 +24,12 @@ test('close modal initializes missing downtime as explicit zero values', () => {
   assert.match(implementation, /inc\.downtimeH \?\? 0/);
   assert.match(implementation, /inc\.downtimeM \?\? 0/);
 });
+
+test('blank or zero downtime fields normalize to zero without blocking closure', () => {
+  const start = frontend.indexOf('function confirmCloseIncident');
+  const end = frontend.indexOf('\nfunction ', start + 1);
+  const implementation = frontend.slice(start, end);
+
+  assert.match(implementation, /value === '' \? 0 : Number/);
+  assert.doesNotMatch(implementation, /downtimeHoursRaw === ''|downtimeMinutesRaw === ''/);
+});

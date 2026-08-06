@@ -93,3 +93,25 @@ test('incident mail recipients default to the authenticated creator and operatio
   assert.match(controller, /emailTo: b\.notification_email\?\.to \|\| req\.user\.email/);
   assert.match(controller, /emailCc: b\.notification_email\?\.cc === undefined \? INCIDENT_NOTIFICATION_CC/);
 });
+
+test('closing an incident sends one closure email only on the transition to Closed', () => {
+  assert.match(controller, /sendIncidentClosedEmail/);
+  assert.match(controller, /transitionedToClosed = closed && normalizeStatus\(current\.status\) !== 'closed'/);
+  assert.match(controller, /if \(transitionedToClosed\)/);
+  assert.match(controller, /emailTo: current\.creator_email \|\| req\.user\.email/);
+  assert.match(controller, /emailCc: INCIDENT_NOTIFICATION_CC/);
+});
+
+test('closed email contains resolution metrics and the incident link', () => {
+  const previousUrl = process.env.PORTAL_BASE_URL;
+  process.env.PORTAL_BASE_URL = 'http://portal.example:5500';
+  const email = incidentEmail({ emailType: 'closed', id: 'INC-1001', title: 'Recovered', severity: 'High', downtime: '12m', mttr: '10m', mttd: '2m', resolution: 'Service restarted' });
+  assert.match(email.subject, /\[Closed\] INC-1001/);
+  assert.match(email.html, /Incident Closed/);
+  assert.match(email.html, /Downtime/);
+  assert.match(email.html, /12m/);
+  assert.match(email.html, /Service restarted/);
+  assert.match(email.html, /Open Incident INC-1001/);
+  if (previousUrl === undefined) delete process.env.PORTAL_BASE_URL;
+  else process.env.PORTAL_BASE_URL = previousUrl;
+});
