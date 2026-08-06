@@ -6,6 +6,58 @@ CREATE DATABASE IF NOT EXISTS incident_management_db
 USE incident_management_db;
 SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS roles (
+  id INT NOT NULL AUTO_INCREMENT,
+  role_key VARCHAR(50) NOT NULL,
+  role_name VARCHAR(100) NOT NULL,
+  icon VARCHAR(32) NULL,
+  color VARCHAR(20) NOT NULL DEFAULT 'blue',
+  description VARCHAR(500) NULL,
+  is_system TINYINT(1) NOT NULL DEFAULT 0,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id), UNIQUE KEY uq_roles_key (role_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO roles(role_key, role_name, icon, color, description, is_system) VALUES
+('admin','Admin','shield','purple','Full access to all portal features including user and role management.',1),
+('cso','CSO','globe','green','Cloud Service Operations — manages and resolves incidents, generates reports.',0),
+('pmo','PMO','clipboard','yellow','Project Management Office — read-only access to incidents and reports.',0),
+('aoc','AOC','wrench','red','Area Operations Center — operational incident handling and reporting.',0),
+('engineer','Engineer','tools','blue','Field engineer — can create and manage assigned incidents.',0),
+('stakeholder','Stakeholder','eye','gray','Read-only observer — can view dashboard and incidents only.',0)
+ON DUPLICATE KEY UPDATE role_name=VALUES(role_name);
+
+CREATE TABLE IF NOT EXISTS permissions (
+  permission_key VARCHAR(50) NOT NULL,
+  permission_name VARCHAR(100) NOT NULL,
+  PRIMARY KEY (permission_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS role_permissions (
+  role_id INT NOT NULL, permission_key VARCHAR(50) NOT NULL,
+  PRIMARY KEY (role_id, permission_key),
+  CONSTRAINT fk_role_permissions_role FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+  CONSTRAINT fk_role_permissions_permission FOREIGN KEY (permission_key) REFERENCES permissions(permission_key) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+INSERT INTO permissions(permission_key, permission_name) VALUES
+('view_dashboard','View Dashboard'),('view_incidents','View Incidents'),('create_incidents','Create Incidents'),
+('edit_incidents','Edit Incidents'),('close_incidents','Close Incidents'),('view_reports','View Reports'),
+('export_reports','Export Reports'),('view_customer360','View Customer 360'),('manage_users','Manage Users'),
+('manage_roles','Manage Roles'),('assign_roles','Assign Roles'),('manage_data','Manage Data')
+ON DUPLICATE KEY UPDATE permission_name=VALUES(permission_name);
+INSERT IGNORE INTO role_permissions(role_id, permission_key)
+SELECT r.id, p.permission_key FROM roles r CROSS JOIN permissions p WHERE r.role_key='admin';
+INSERT IGNORE INTO role_permissions(role_id, permission_key)
+SELECT r.id,p.permission_key FROM roles r JOIN permissions p ON p.permission_key IN ('view_dashboard','view_incidents','edit_incidents','close_incidents','view_reports','export_reports','view_customer360') WHERE r.role_key='cso';
+INSERT IGNORE INTO role_permissions(role_id, permission_key)
+SELECT r.id,p.permission_key FROM roles r JOIN permissions p ON p.permission_key IN ('view_dashboard','view_incidents','view_reports','export_reports','view_customer360') WHERE r.role_key='pmo';
+INSERT IGNORE INTO role_permissions(role_id, permission_key)
+SELECT r.id,p.permission_key FROM roles r JOIN permissions p ON p.permission_key IN ('view_dashboard','view_incidents','create_incidents','edit_incidents','close_incidents','view_reports','export_reports','view_customer360') WHERE r.role_key='aoc';
+INSERT IGNORE INTO role_permissions(role_id, permission_key)
+SELECT r.id,p.permission_key FROM roles r JOIN permissions p ON p.permission_key IN ('view_dashboard','view_incidents','create_incidents','edit_incidents','close_incidents','view_reports','view_customer360') WHERE r.role_key='engineer';
+INSERT IGNORE INTO role_permissions(role_id, permission_key)
+SELECT r.id,p.permission_key FROM roles r JOIN permissions p ON p.permission_key IN ('view_dashboard','view_incidents') WHERE r.role_key='stakeholder';
+
 CREATE TABLE IF NOT EXISTS users (
   id INT NOT NULL AUTO_INCREMENT,
   full_name VARCHAR(255) NOT NULL,
@@ -15,11 +67,12 @@ CREATE TABLE IF NOT EXISTS users (
   bio VARCHAR(1000) NULL,
   email VARCHAR(255) NOT NULL,
   password VARCHAR(255) NOT NULL,
-  role ENUM('admin','cso','pmo','aoc','engineer','stakeholder') NOT NULL DEFAULT 'stakeholder',
+  role VARCHAR(50) NOT NULL DEFAULT 'stakeholder',
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY email (email)
+  UNIQUE KEY email (email),
+  CONSTRAINT fk_users_role FOREIGN KEY (role) REFERENCES roles(role_key) ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS customers (
@@ -201,5 +254,7 @@ INSERT INTO schema_migrations(version) VALUES
   ('003_persist_incident_timezone_mttd'),
   ('004_rename_low_severity_to_normal'),
   ('005_incident_canonical_normalization'),
-  ('013_user_profile_fields')
+  ('013_user_profile_fields'),
+  ('014_database_roles'),
+  ('015_repair_incident_timezone_values')
 ON DUPLICATE KEY UPDATE applied_at = applied_at;

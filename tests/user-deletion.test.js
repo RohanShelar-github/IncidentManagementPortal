@@ -68,9 +68,8 @@ test('user activation migration adds an active database flag idempotently', () =
 });
 
 test('change-role choices match the portal and database role model', () => {
-  assert.match(frontend, /allowedRoleKeys = \['admin', 'cso', 'pmo', 'aoc', 'engineer', 'stakeholder'\]/);
-  assert.doesNotMatch(frontend, /allowedRoleKeys = \[[^\]]*'viewer'/);
-  assert.match(controller, /allowedRoles = \['admin', 'cso', 'pmo', 'aoc', 'engineer', 'stakeholder'\]/);
+  assert.match(frontend, /allowedRoleKeys = roles\.map\(function \(role\)/);
+  assert.match(controller, /SELECT role_key FROM roles WHERE role_key = \? LIMIT 1/);
   assert.match(roleAlignmentMigration, /UPDATE users SET role = 'stakeholder' WHERE role = 'viewer'/);
   assert.match(roleAlignmentMigration, /ENUM\('admin','cso','pmo','aoc','engineer','stakeholder'\)/);
 });

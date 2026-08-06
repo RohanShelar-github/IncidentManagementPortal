@@ -5,6 +5,8 @@ const {
   resolveDurationMinutes
 } = require('../services/incidentNormalization');
 const { notifyUsers } = require('../services/notificationService');
+const { sendIncidentCreatedEmail } = require('../services/emailService');
+const INCIDENT_NOTIFICATION_CC = 'its24x7@magicsoftware.com';
 
 const CANONICAL_INCIDENT_FIELDS = process.env.CANONICAL_INCIDENT_FIELDS !== 'false';
 
@@ -282,7 +284,25 @@ const createIncident = async (req, res) => {
     if (created.length) {
       await pool.query('INSERT INTO activity_logs (incident_id, action_type, action_by, detail) VALUES (?, ?, ?, ?)', [created[0].id, 'create', req.user.id, 'Incident created']);
     }
-    return res.status(201).json({ success: true, message: 'Incident created successfully', data: { id: incidentRef } });
+    let email = { sent: false, skipped: true, message: 'Email was not attempted' };
+    try {
+      email = await sendIncidentCreatedEmail({
+        id: incidentRef, title: b.title, severity: b.severity, status: b.status || 'New',
+        customer: resolvedCustomer.name || b.customer, project: b.project, area: resolvedArea.name || b.area,
+        engineer: b.engineer, startDT: start, date_time_opened: b.date_time_opened || start,
+        timezone: b.timezone || toLegacyTimezone(canonical.source_timezone), description: b.description,
+        mttd: mttd.text || 'Not recorded',
+        // Default to the authenticated creator and operations CC, while allowing
+        // the reviewed email preview to supply edited recipients.
+        emailTo: b.notification_email?.to || req.user.email,
+        emailCc: b.notification_email?.cc === undefined ? INCIDENT_NOTIFICATION_CC : b.notification_email.cc,
+        emailSubject: b.notification_email?.subject, emailBody: b.notification_email?.body
+      });
+    } catch (mailError) {
+      console.error(`Incident ${incidentRef} email failed:`, mailError.message);
+      email = { sent: false, skipped: false, message: mailError.message };
+    }
+    return res.status(201).json({ success: true, message: 'Incident created successfully', data: { id: incidentRef, email } });
   } catch (error) {
     console.error('Create incident error:', error);
     return res.status(500).json({ success: false, message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
@@ -485,10 +505,13 @@ const deleteIncident = async (req, res) => {
   try {
     const dbId = await findIncidentDbId(req.params.id);
     if (!dbId) return res.status(404).json({ success: false, message: 'Incident not found' });
-    const [incidentRows] = await pool.query('SELECT incident_ref, title FROM incidents WHERE id = ?', [dbId]);
+    const [incidentRows] = await pool.query('SELECT incident_ref, title, status FROM incidents WHERE id = ?', [dbId]);
+    const deleted = incidentRows[0] || { incident_ref: req.params.id, title: '', status: '' };
+    if (deleted.status === 'closed' && String(req.user.role || '').toLowerCase() !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Only administrators can delete closed incidents' });
+    }
     await pool.query('DELETE FROM activity_logs WHERE incident_id = ?', [dbId]);
     await pool.query('DELETE FROM incidents WHERE id = ?', [dbId]);
-    const deleted = incidentRows[0] || { incident_ref: req.params.id, title: '' };
     await notifyUsers({
       actorId: req.user.id,
       message: `${req.user.name || req.user.email} deleted ${deleted.incident_ref}: ${deleted.title}`,

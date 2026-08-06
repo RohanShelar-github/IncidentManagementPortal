@@ -29,7 +29,8 @@ test('successful user creation reloads users from the database', () => {
 test('backend creation is admin-only, validates the role, hashes the password, and inserts into MySQL', () => {
   assert.match(routes, /router\.post\('\/users', authenticateToken, createUser\)/);
   assert.match(controller, /Only administrators can add users/);
-  assert.match(controller, /allowedRoles = \['admin', 'cso', 'pmo', 'aoc', 'engineer', 'stakeholder'\]/);
+  assert.match(controller, /SELECT role_key FROM roles WHERE role_key = \? LIMIT 1/);
+  assert.match(controller, /if \(!matchingRoles\.length\)/);
   assert.match(controller, /bcrypt\.hash\(password, 12\)/);
   assert.match(controller, /INSERT INTO users \(full_name, email, password, role, department, is_active\)/);
   assert.match(controller, /ER_DUP_ENTRY/);

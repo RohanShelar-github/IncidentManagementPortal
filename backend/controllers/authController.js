@@ -99,7 +99,6 @@ const createUser = async (req, res) => {
     const role = String(req.body.role || '').trim().toLowerCase();
     const department = String(req.body.department || '').trim();
     const password = String(req.body.password || '');
-    const allowedRoles = ['admin', 'cso', 'pmo', 'aoc', 'engineer', 'stakeholder'];
 
     if (!fullName || fullName.length > 255) {
       return res.status(400).json({ success: false, message: 'Full name is required and must not exceed 255 characters' });
@@ -107,7 +106,8 @@ const createUser = async (req, res) => {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 255) {
       return res.status(400).json({ success: false, message: 'Enter a valid email address' });
     }
-    if (!allowedRoles.includes(role)) {
+    const [matchingRoles] = await pool.query('SELECT role_key FROM roles WHERE role_key = ? LIMIT 1', [role]);
+    if (!matchingRoles.length) {
       return res.status(400).json({ success: false, message: 'Invalid user role' });
     }
     if (department.length > 100) {
@@ -222,11 +222,11 @@ const updateUserRole = async (req, res) => {
 
     const userId = Number(req.params.id);
     const role = String(req.body.role || '').trim().toLowerCase();
-    const allowedRoles = ['admin', 'cso', 'pmo', 'aoc', 'engineer', 'stakeholder'];
     if (!Number.isInteger(userId) || userId <= 0) {
       return res.status(400).json({ success: false, message: 'Invalid user ID' });
     }
-    if (!allowedRoles.includes(role)) {
+    const [matchingRoles] = await pool.query('SELECT role_key FROM roles WHERE role_key = ? LIMIT 1', [role]);
+    if (!matchingRoles.length) {
       return res.status(400).json({ success: false, message: 'Invalid user role' });
     }
     if (Number(req.user.id) === userId) {

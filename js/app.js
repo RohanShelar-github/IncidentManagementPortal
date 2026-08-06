@@ -187,6 +187,69 @@ function toMysqlDatetime(value) {
   return String(value).replace('T', ' ').substring(0, 19);
 }
 
+// Parse a database datetime as a wall-clock value in its declared timezone.
+// This deliberately avoids `new Date('YYYY-MM-DD HH:mm')`, which applies the
+// browser machine timezone and caused report timestamps to be converted twice.
+function wallClockToDate(value, timezone) {
+  if (!value) return null;
+  var match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) {
+    var absolute = new Date(value);
+    return isNaN(absolute.getTime()) ? null : absolute;
+  }
+  var wallUtc = Date.UTC(+match[1], +match[2] - 1, +match[3], +match[4], +match[5], +(match[6] || 0));
+  return new Date(wallUtc - getTZOffset(timezone || 'IST') * 3600000);
+}
+
+function canonicalUtcDate(value) {
+  if (!value) return null;
+  var text = String(value);
+  var date = new Date(/[zZ]$|[+-]\d\d:\d\d$/.test(text) ? text : text.replace(' ', 'T') + 'Z');
+  return isNaN(date.getTime()) ? null : date;
+}
+
+function incidentTimestampDate(inc, kind) {
+  var isEnd = kind === 'end';
+  var canonical = canonicalUtcDate(isEnd ? inc.closed_at_utc : inc.opened_at_utc);
+  if (canonical) return canonical;
+  var wall = isEnd
+    ? (inc.date_time_closed || inc.endDT || inc.downtimeEnd)
+    : (inc.date_time_opened || inc.startDT || inc.date_created || inc.date);
+  return wallClockToDate(wall, inc.timezone || inc.source_timezone || 'IST');
+}
+
+function toDatetimeLocalWall(value) {
+  if (!value) return '';
+  var match = String(value).match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
+  return match ? match[1] + 'T' + match[2] : toDatetimeLocal(value);
+}
+
+function setIncidentEndHint(hintId, targetTimezone, converted) {
+  var hint = document.getElementById(hintId);
+  if (!hint) return;
+  var target = targetTimezone || 'IST';
+  hint.textContent = converted && target !== 'IST'
+    ? 'Converted from IST to ' + target
+    : 'Enter end time in IST' + (target !== 'IST' ? ' → converts to ' + target : '');
+}
+
+function markIncidentEndAsIST(fieldId, hintId) {
+  var field = document.getElementById(fieldId);
+  if (!field) return;
+  field.dataset.inputTimezone = 'IST';
+  setIncidentEndHint(hintId, selectedTZ || 'IST', false);
+}
+
+function convertIncidentEndFromIST(fieldId, hintId) {
+  var field = document.getElementById(fieldId);
+  if (!field || !field.value || field.dataset.inputTimezone !== 'IST') return field ? field.value : '';
+  var targetTimezone = selectedTZ || 'IST';
+  field.value = convertDatetimeLocalTZ(field.value, 'IST', targetTimezone);
+  field.dataset.inputTimezone = targetTimezone;
+  setIncidentEndHint(hintId, targetTimezone, true);
+  return field.value;
+}
+
 function normalizeIncidentStatusLabel(value) {
   var status = String(value || 'New').trim();
   var labels = {
@@ -204,7 +267,8 @@ function normalizeIncidentStatusLabel(value) {
 }
 
 function normalizeIncidentFromBackend(incident) {
-  const startDT = toDatetimeLocal(incident.date_created || incident.startDT || incident.date);
+  const startDT = toDatetimeLocalWall(incident.startDT || incident.date_time_opened || incident.date_created || incident.date);
+  const endDT = toDatetimeLocalWall(incident.endDT || incident.date_time_closed || incident.downtimeEnd);
   const canonicalDowntime = Number(incident.downtime_mins ?? incident.downtime_minutes_total);
   const downtimeH = Number.isFinite(canonicalDowntime)
     ? Math.floor(Math.max(0, canonicalDowntime) / 60)
@@ -231,10 +295,12 @@ function normalizeIncidentFromBackend(incident) {
     status: normalizeIncidentStatusLabel(incident.status),
     date: startDT ? startDT.substring(0, 10) : (incident.date || ''),
     startDT,
+    endDT,
     timezone: incident.timezone || '',
     source_timezone: incident.source_timezone || '',
     opened_at_utc: incident.opened_at_utc || '',
     closed_at_utc: incident.closed_at_utc || '',
+    downtimeEnd: endDT,
     desc: incident.description ?? incident.desc ?? '',
     product_line: incident.product_line ?? incident.productLine ?? '',
     slaHours: incident.sla_hours ?? incident.slaHours ?? null,
@@ -403,6 +469,15 @@ function loadIncidentsFromBackend(callback) {
 }
 
 let incidents = [];
+
+function openLinkedIncidentIfReady() {
+  var incidentId = '';
+  try { incidentId = new URLSearchParams(window.location.search).get('incident') || ''; } catch (e) { }
+  if (!incidentId || !incidents.some(function (incident) { return incident.id === incidentId; })) return false;
+  navigateInternal('incidents', document.getElementById('incidentsNav'));
+  setTimeout(function () { openDetailPanel(incidentId); }, 0);
+  return true;
+}
 let filteredIncidents = [];
 let currentPage = 1;
 let perPage = 8;
@@ -517,6 +592,7 @@ var auditLog = [];
 var activityLog = [];
 var incidentComments = {};
 var currentNotificationIncidentId = null;
+var pendingIncidentEmail = null;
 
 // Activity data is loaded from database-backed incident actions
 
@@ -2587,7 +2663,51 @@ function loadPersistedRoles() {
   } catch (e) { }
 }
 
-loadPersistedRoles(); // restore any admin-saved role changes
+// Database-backed role persistence. These declarations intentionally replace
+// the legacy localStorage implementations above during the migration period.
+function persistRoles() {
+  var token = window.APP_CONFIG && sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) return Promise.reject(new Error('Authentication is required to save roles'));
+  return fetch(window.APP_CONFIG.API_BASE_URL + '/roles', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ roles: roles })
+  }).then(function (response) {
+    return response.json().catch(function () { return {}; }).then(function (data) {
+      if (!response.ok || !data.success) throw new Error(data.message || 'Unable to save roles');
+      roles = data.data;
+      localStorage.removeItem('mc_roles');
+      renderRolesGrid(); renderRolesPermTable(); refreshUserRoleTabs();
+      return data;
+    });
+  }).catch(function (error) {
+    showToast(error.message || 'Unable to save roles', 'error');
+    return loadPersistedRoles().then(function () { return null; });
+  });
+}
+
+function loadPersistedRoles(callback) {
+  var token = window.APP_CONFIG && sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) { if (callback) callback(new Error('Not authenticated')); return Promise.resolve(); }
+  return fetch(window.APP_CONFIG.API_BASE_URL + '/roles', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  }).then(function (response) {
+    return response.json().catch(function () { return {}; }).then(function (data) {
+      if (!response.ok || !data.success || !Array.isArray(data.data)) throw new Error(data.message || 'Unable to load roles');
+      roles = data.data;
+      localStorage.removeItem('mc_roles');
+      renderRolesGrid(); renderRolesPermTable(); refreshUserRoleTabs();
+      if (currentRole) switchRole(currentRole);
+      if (callback) callback(null, roles);
+      return roles;
+    });
+  }).catch(function (error) {
+    console.error('Load roles error:', error);
+    if (callback) callback(error);
+  });
+}
+
+loadPersistedRoles(); // load shared roles when an authenticated session is available
 
 // ── PERMISSION HELPERS ────────────────────────────────────
 function getRolePerms(roleKey) {
@@ -2871,13 +2991,12 @@ function saveRole() {
     return;
   }
 
-  if (editingRoleKey) {
+  const wasEditing = Boolean(editingRoleKey);
+  if (wasEditing) {
     // Edit existing
     const role = roles.find(r => r.key === editingRoleKey);
     if (role) {
       Object.assign(role, { name, icon, color, desc, perms });
-      showToast(`Role "${name}" updated`, 'success');
-      persistRoles();
     }
   } else {
     // Check key is unique
@@ -2887,20 +3006,14 @@ function saveRole() {
     }
     roles.push({ key, name, icon, color, desc, perms, system: false });
     // Also add to login pill options, user form select, etc.
-    showToast(`Role "${name}" created`, 'success');
-    persistRoles();
   }
 
-  closeModal('roleModal');
-  renderRolesGrid();
-
-  // Update the roles filter tabs on the users page
-  refreshUserRoleTabs();
-
-  // Re-apply permissions live if the edited role is the currently logged-in role
-  if (editingRoleKey === currentRole || (!editingRoleKey && false)) {
-    switchRole(currentRole);
-  }
+  persistRoles().then(function (saved) {
+    if (!saved) return;
+    closeModal('roleModal');
+    showToast(`Role "${name}" ${wasEditing ? 'updated' : 'created'}`, 'success');
+    if (editingRoleKey === currentRole) switchRole(currentRole);
+  });
 }
 
 function deleteRole(key) {
@@ -2911,12 +3024,11 @@ function deleteRole(key) {
   showConfirm({ icon: '🗑', title: `Delete Role "${role.name}"`, msg: 'This role will be permanently deleted and cannot be recovered. Users assigned this role will lose access.', ok: 'Delete', danger: true }).then(ok => {
     if (!ok) return;
     roles = roles.filter(r => r.key !== key);
-    persistRoles();
-    addAudit('🗑', 'Role Deleted', role.name);
-    renderRolesGrid();
-    renderRolesPermTable();
-    refreshUserRoleTabs();
-    showToast(`Role "${role.name}" deleted`, 'success');
+    persistRoles().then(function (saved) {
+      if (!saved) return;
+      addAudit('🗑', 'Role Deleted', role.name);
+      showToast(`Role "${role.name}" deleted`, 'success');
+    });
   });
 }
 
@@ -3042,10 +3154,10 @@ function renderIncidentTable() {
       <td onclick="event.stopPropagation()">
         <div style="display:flex;gap:4px">
           ${i.status === 'Closed' ? `<span style="display:inline-flex;gap:4px"><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();viewIncidentReport('${i.id}')">📋 Report</button>${hasPermission('edit_incidents') ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openDetailPanelEdit('${i.id}')" title="Edit report fields">✏</button>` : ''}</span>` : ''}
-          ${hasPermission('edit_incidents') || hasPermission('close_incidents') ? `
+          ${hasPermission('edit_incidents') || hasPermission('close_incidents') || i.status !== 'Closed' || currentRole === 'admin' ? `
             ${i.status !== 'Closed' && hasPermission('edit_incidents') ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openDetailPanel('${i.id}',true)">✏ Edit</button>` : ''}
             ${i.status !== 'Closed' && hasPermission('close_incidents') ? `<button class="btn btn-success btn-sm" onclick="event.stopPropagation();openDowntimeModal('${i.id}')">Close</button>` : ''}
-            ${i.status !== 'Closed' && hasPermission('manage_users') ? `<button class="btn btn-sm" onclick="event.stopPropagation();deleteIncident('${i.id}')" style="background:rgba(247,92,124,0.15);color:#f75c7c;border:1px solid rgba(247,92,124,0.3);font-size:10px;padding:3px 8px;" title="Delete incident">🗑 Delete</button>` : ''}
+            ${i.status !== 'Closed' || currentRole === 'admin' ? `<button class="btn btn-sm" onclick="event.stopPropagation();deleteIncident('${i.id}')" style="background:transparent;color:#f75c7c;border:none;font-size:15px;padding:3px 7px;" title="Delete incident" aria-label="Delete incident">&#128465;</button>` : ''}
           ` : ''}
         </div>
       </td>
@@ -3339,6 +3451,7 @@ function doLogin() {
     .then(function (data) {
       if (data && data.success && data.token) {
         sessionStorage.setItem(window.APP_CONFIG.JWT_TOKEN_KEY, data.token);
+        loadPersistedRoles();
 
         var u = data.user || {};
         currentUserName = u.name || u.email || currentUserName;
@@ -3372,6 +3485,7 @@ function doLogin() {
           loadUsersFromBackend(function () {
             loadIncidentsFromBackend(function () {
               refreshDashboardData();
+              openLinkedIncidentIfReady();
             });
           });
         });
@@ -3608,12 +3722,8 @@ function _forceCloseIncident(id) {
 function deleteIncident(id) {
   var inc = incidents.find(function (i) { return i.id === id; });
   if (!inc) return;
-  if (inc.status === 'Closed') {
-    showToast('Closed incidents cannot be deleted.', 'error');
-    return;
-  }
-  if (!hasPermission('manage_users')) {
-    showToast('You do not have permission to delete incidents.', 'error');
+  if (inc.status === 'Closed' && currentRole !== 'admin') {
+    showToast('Only administrators can delete closed incidents.', 'error');
     return;
   }
 
@@ -3700,10 +3810,6 @@ function confirmDeleteIncident(id) {
     if (idx === -1) return;
 
     var inc = incidents[idx];
-    if (inc.status === 'Closed') {
-      showToast('Closed incidents cannot be deleted.', 'error');
-      return;
-    }
 
     activityLog.unshift({
       type: 'critical',
@@ -3724,8 +3830,8 @@ function openDowntimeModal(id) {
   const modal = document.getElementById('downtimeModal');
   document.getElementById('dtm_inc_id').textContent = id;
   var _dtt = document.getElementById('dtm_title'); if (_dtt) _dtt.textContent = inc.title;
-  document.getElementById('dtm_hours').value = inc.downtimeH || '';
-  document.getElementById('dtm_mins').value = inc.downtimeM || '';
+  document.getElementById('dtm_hours').value = inc.downtimeH ?? 0;
+  document.getElementById('dtm_mins').value = inc.downtimeM ?? 0;
   document.getElementById('dtm_mttr_hours').value = inc.mttrH || '';
   document.getElementById('dtm_mttr_mins').value = inc.mttrM || '';
   document.getElementById('dtm_resolved_by').value = inc.resolvedBy || inc.resolved_by || '';
@@ -3741,7 +3847,7 @@ function openDowntimeModal(id) {
   var endEl = document.getElementById('dtm_end_time');
   var storedEnd = inc.date_time_closed || inc.endDT || inc.downtimeEnd;
   if (endEl && storedEnd) {
-    endEl.value = toDatetimeLocal(storedEnd);
+    endEl.value = toDatetimeLocalWall(storedEnd);
   } else if (endEl) {
     // Default to current time in display TZ
     var now = new Date();
@@ -3752,6 +3858,8 @@ function openDowntimeModal(id) {
     endEl.value = tzNow.getUTCFullYear() + '-' + pad3(tzNow.getUTCMonth() + 1) + '-' + pad3(tzNow.getUTCDate())
       + 'T' + pad3(tzNow.getUTCHours()) + ':' + pad3(tzNow.getUTCMinutes());
   }
+  if (endEl) endEl.dataset.inputTimezone = dtmTZ;
+  setIncidentEndHint('dtm_end_tz_hint', dtmTZ, false);
   modal.style.display = 'flex';
 }
 
@@ -3762,6 +3870,8 @@ function changeCloseTZ(newKey) {
     endEl.value = convertDatetimeLocalTZ(endEl.value, selectedTZ, newKey);
   }
   selectedTZ = newKey;
+  if (endEl) endEl.dataset.inputTimezone = newKey;
+  setIncidentEndHint('dtm_end_tz_hint', newKey, false);
   renderTZSelector('closeTZSelector', newKey, 'changeCloseTZ(this.value)');
 }
 
@@ -3770,17 +3880,23 @@ function confirmCloseIncident() {
   const inc = incidents.find(i => i.id === id);
   if (!inc) return;
 
-  const h = parseInt(document.getElementById('dtm_hours').value) || 0;
-  const m = parseInt(document.getElementById('dtm_mins').value) || 0;
+  const downtimeHoursRaw = document.getElementById('dtm_hours').value;
+  const downtimeMinutesRaw = document.getElementById('dtm_mins').value;
+  const h = Number(downtimeHoursRaw);
+  const m = Number(downtimeMinutesRaw);
   const mttrH = parseInt(document.getElementById('dtm_mttr_hours').value) || 0;
   const mttrM = parseInt(document.getElementById('dtm_mttr_mins').value) || 0;
   const resolvedBy = document.getElementById('dtm_resolved_by').value;
   const rca = document.getElementById('dtm_rca').value.trim();
   const res = document.getElementById('dtm_resolution').value.trim();
+  convertIncidentEndFromIST('dtm_end_time', 'dtm_end_tz_hint');
   const endTimeRaw = document.getElementById('dtm_end_time').value;
 
   if (!endTimeRaw) { showToast('Please select the incident end date & time', 'error'); return; }
-  if (h === 0 && m === 0) { showToast('Please enter the downtime before closing', 'error'); return; }
+  if (downtimeHoursRaw === '' || downtimeMinutesRaw === '' || !Number.isInteger(h) || !Number.isInteger(m)
+    || h < 0 || h > 999 || m < 0 || m > 59) {
+    showToast('Please enter a valid downtime (zero is allowed)', 'error'); return;
+  }
   if (!rca) { showToast('Please enter the Root Cause Analysis', 'error'); return; }
 
   const closeTZ = selectedTZ || inc.timezone || 'IST';
@@ -3901,6 +4017,12 @@ function saveIncident() {
   const sfCase = (document.getElementById('f_sf_case')?.value || '').trim();
   const rdTickets = (document.getElementById('f_rd_tickets')?.value || '').trim();
 
+  if (!editingId && !pendingIncidentEmail) {
+    showPreSendEmailPreview({ title, customer, project, product_line: productLine, severity, status,
+      engineer, startDT: openedAt, timezone: selectedTZ, description: desc, area });
+    return;
+  }
+
   if (editingId) {
     const incidentId = editingId;
     if (window.APP_CONFIG && window.APP_CONFIG.ENABLE_BACKEND) {
@@ -3994,7 +4116,8 @@ function saveIncident() {
         rd_tickets: rdTickets,
         description: desc,
         area,
-        tags: createModalTags.slice()
+        tags: createModalTags.slice(),
+        notification_email: pendingIncidentEmail
       };
 
       fetch(window.APP_CONFIG.API_BASE_URL + '/incidents', {
@@ -4008,7 +4131,15 @@ function saveIncident() {
         .then(r => r.json())
         .then(data => {
           if (data && data.success) {
+            pendingIncidentEmail = null;
             showToast(`${data.data.id} created successfully`, 'success');
+            if (data.data.email && data.data.email.sent) {
+              showToast(`Email sent to ${data.data.email.to}`, 'success');
+            } else if (data.data.email && !data.data.email.skipped) {
+              showToast(`Incident created, but email failed: ${data.data.email.message}`, 'error');
+            } else if (data.data.email && data.data.email.skipped) {
+              showToast(`Incident created; email not sent: ${data.data.email.message}`, 'error');
+            }
             closeModal('incidentModal');
             loadIncidentsFromBackend(() => {
               renderIncidentTable();
@@ -4162,7 +4293,7 @@ function editUserRole(id) {
   const user = users.find(function (u) { return String(u.id) === String(id); });
   if (!user) { showToast('User not found', 'error'); return; }
 
-  var allowedRoleKeys = ['admin', 'cso', 'pmo', 'aoc', 'engineer', 'stakeholder'];
+  var allowedRoleKeys = roles.map(function (role) { return role.key; });
   var roleFallbackLabels = { admin: 'Admin', cso: 'CSO', pmo: 'PMO', aoc: 'AOC', engineer: 'Engineer', stakeholder: 'Stakeholder' };
   var availableRoles = allowedRoleKeys.map(function (key) {
     return roles.find(function (role) { return role.key === key; }) || { key: key, name: roleFallbackLabels[key] };
@@ -4312,10 +4443,9 @@ function openAddUserModal(editKey) {
   var sel = document.getElementById('u_role');
   if (sel) {
     sel.innerHTML = '<option value="">Select role</option>'
-      + SUPPORTED_USER_ROLES.map(function (supportedRole) {
-        var roleDefinition = roles.find(function (role) { return role.key === supportedRole.key; });
-        var icon = roleDefinition && roleDefinition.icon ? roleDefinition.icon + ' ' : '';
-        return '<option value="' + supportedRole.key + '">' + icon + supportedRole.name + '</option>';
+      + roles.map(function (roleDefinition) {
+        var icon = roleDefinition.icon ? roleDefinition.icon + ' ' : '';
+        return '<option value="' + roleDefinition.key + '">' + icon + roleDefinition.name + '</option>';
       }).join('');
   }
   document.getElementById('u_name').value = '';
@@ -6639,12 +6769,11 @@ function _buildXLSX(data, filename, downloadNow) {
     // Start time: stored in IST as datetime-local string
     const istOff = getTZOffset('IST');
     const rawStart = inc.startDT || (inc.date + 'T09:00');
-    const startUTC = new Date(rawStart).getTime() - istOff * 3600000;
-    const startDateObj = new Date(startUTC);
+    const startDateObj = incidentTimestampDate(inc, 'start') || wallClockToDate(rawStart, xlTZ);
     const slaActual = (inc.downtimeH || 0) + (inc.downtimeM || 0) / 60 || slaH;
-    const endDateObj = new Date(startDateObj.getTime() + slaActual * 3600000);
-    const startTime = fmtInTZ(inc.downtimeStart ? new Date(inc.downtimeStart) : startDateObj, xlTZ);
-    const endTime = fmtInTZ(inc.downtimeEnd ? new Date(inc.downtimeEnd) : endDateObj, xlTZ);
+    const endDateObj = incidentTimestampDate(inc, 'end') || new Date(startDateObj.getTime() + slaActual * 3600000);
+    const startTime = fmtInTZ(startDateObj, xlTZ);
+    const endTime = fmtInTZ(endDateObj, xlTZ);
     return Object.assign({}, inc, {
       timezone: xlTZ,
       startTime: startTime,
@@ -6947,7 +7076,7 @@ function exportIncidentPDF() {
   const customer = inc.customer;
   const project = inc.project;
   const engineer = inc.engineer;
-  const reportedDate = fmtInTZ(new Date((inc.startDT || inc.date + 'T00:00')), inc.timezone || 'IST').split(',')[0];
+  const reportedDate = fmtInTZ(incidentTimestampDate(inc, 'start'), inc.timezone || 'IST').split(',')[0];
   const severity = inc.severity;
   const status = inc.status;
   const resolvedBy = inc.resolvedBy || '—';
@@ -6961,12 +7090,11 @@ function exportIncidentPDF() {
   const slaHours = { Critical: 1, High: 4, Medium: 12, Normal: 24 }[severity] || 6;
   const istOff = getTZOffset('IST');
   const rawStart = inc.startDT || (inc.date + 'T09:00');
-  const startUTC = new Date(rawStart).getTime() - istOff * 3600000;
-  const baseDate = new Date(startUTC);
-  const startTime = fmtInTZ(inc.downtimeStart ? new Date(inc.downtimeStart) : baseDate, pdfTZ);
+  const baseDate = incidentTimestampDate(inc, 'start') || wallClockToDate(rawStart, pdfTZ);
+  const startTime = fmtInTZ(baseDate, pdfTZ);
   const actualHours = (inc.downtimeH || 0) + (inc.downtimeM || 0) / 60 || slaHours;
-  const endDate = new Date(baseDate.getTime() + actualHours * 3600000);
-  const endTime = fmtInTZ(inc.downtimeEnd ? new Date(inc.downtimeEnd) : endDate, pdfTZ);
+  const endDate = incidentTimestampDate(inc, 'end') || new Date(baseDate.getTime() + actualHours * 3600000);
+  const endTime = fmtInTZ(endDate, pdfTZ);
   const downtime = inc.downtimeStr || (inc.downtimeH > 0 ? `${inc.downtimeH}h${inc.downtimeM > 0 ? ' ' + inc.downtimeM + 'm' : ''}` : inc.downtimeM > 0 ? `${inc.downtimeM}m` : slaHours + 'h');
 
   const rcaMap = {
@@ -7363,8 +7491,11 @@ function populateEditForm(inc) {
 
   // Always populate start/end datetime from stored incident fields without timezone reinterpretation.
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
-  set('dp_f_start_dt', toDatetimeLocal(inc.date_time_opened || inc.startDT || (inc.date ? inc.date + 'T09:00' : '')));
-  set('dp_f_end_dt', toDatetimeLocal(inc.date_time_closed || inc.endDT || inc.downtimeEnd || ''));
+  set('dp_f_start_dt', toDatetimeLocalWall(inc.startDT || inc.date_time_opened || (inc.date ? inc.date + 'T09:00' : '')));
+  set('dp_f_end_dt', toDatetimeLocalWall(inc.endDT || inc.date_time_closed || inc.downtimeEnd || ''));
+  var editEndEl = document.getElementById('dp_f_end_dt');
+  if (editEndEl) editEndEl.dataset.inputTimezone = selectedTZ || inc.timezone || 'IST';
+  setIncidentEndHint('dp_end_tz_hint', selectedTZ || inc.timezone || 'IST', false);
 
   // Always populate report fields regardless of status
   set('dp_f_dtH', inc.downtimeH || 0);
@@ -7444,6 +7575,7 @@ function saveDetailEdit() {
   // Always save start/end datetime exactly as entered for the selected incident timezone.
   const getVal = id => { const el = document.getElementById(id); return el ? el.value : ''; };
   var startDTval = getVal('dp_f_start_dt');
+  convertIncidentEndFromIST('dp_f_end_dt', 'dp_end_tz_hint');
   var endDTval = getVal('dp_f_end_dt');
   const startDb = toMysqlDatetime(startDTval || date);
   const endDb = endDTval ? toMysqlDatetime(endDTval) : '';
@@ -7716,6 +7848,7 @@ function doLogin() {
         }
 
         sessionStorage.setItem(window.APP_CONFIG.JWT_TOKEN_KEY, data.token);
+        loadPersistedRoles();
         startSessionInactivityTracking(true);
         startNotificationPolling();
         const user = data.user;
@@ -7766,6 +7899,7 @@ function doLogin() {
                   renderIncidentTable();
                   renderHomePage();
                   updateStats();
+                  openLinkedIncidentIfReady();
                   showToast(`Welcome back, ${user.name}! 👋`, 'success');
                 });
               });
@@ -8178,6 +8312,57 @@ SLA: ${inc.slaHours || 4}h from creation`;
   modal.style.display = 'flex';
 }
 
+function showPreSendEmailPreview(inc) {
+  const modal = document.getElementById('notifSimModal');
+  const content = document.getElementById('notifSimContent');
+  if (!modal || !content) return;
+  const defaultSubject = `[${inc.severity}] New Incident: ${inc.title}`;
+  const defaultBody = '';
+  content.innerHTML = `
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">The notification defaults to your signed-in email address with the operations team copied. You may edit the recipients, subject, and message.</div>
+    <label class="form-label required" for="notificationEmailTo">To</label>
+    <input id="notificationEmailTo" type="text" style="width:100%;box-sizing:border-box;margin-bottom:10px" placeholder="recipient@example.com">
+    <label class="form-label" for="notificationEmailCc">CC</label>
+    <input id="notificationEmailCc" type="text" style="width:100%;box-sizing:border-box;margin-bottom:10px" placeholder="cc@example.com (optional)">
+    <label class="form-label required" for="notificationEmailSubject">Subject</label>
+    <input id="notificationEmailSubject" type="text" maxlength="255" style="width:100%;box-sizing:border-box;margin-bottom:10px">
+    <label class="form-label" for="notificationEmailBody">Additional message (optional)</label>
+    <textarea id="notificationEmailBody" rows="4" maxlength="20000" style="width:100%;box-sizing:border-box;resize:vertical" placeholder="Add a note above the formatted incident details"></textarea>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+      <button class="btn btn-secondary" onclick="cancelPreSendEmailPreview()">Back</button>
+      <button class="btn btn-primary" id="confirmIncidentEmailBtn" onclick="confirmIncidentEmailAndCreate()">Create Incident &amp; Send Email</button>
+    </div>`;
+  document.getElementById('notificationEmailTo').value = currentUserProfile.email || '';
+  document.getElementById('notificationEmailCc').value = 'its24x7@magicsoftware.com';
+  document.getElementById('notificationEmailSubject').value = defaultSubject;
+  document.getElementById('notificationEmailBody').value = defaultBody;
+  modal.style.display = 'flex';
+}
+
+function validEmailList(value, required) {
+  const addresses = String(value || '').split(',').map(v => v.trim()).filter(Boolean);
+  return (!required || addresses.length > 0) && addresses.every(v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v));
+}
+
+function cancelPreSendEmailPreview() {
+  pendingIncidentEmail = null;
+  document.getElementById('notifSimModal').style.display = 'none';
+}
+
+function confirmIncidentEmailAndCreate() {
+  const to = (document.getElementById('notificationEmailTo')?.value || '').trim();
+  const cc = (document.getElementById('notificationEmailCc')?.value || '').trim();
+  const subject = (document.getElementById('notificationEmailSubject')?.value || '').trim();
+  const body = (document.getElementById('notificationEmailBody')?.value || '').trim();
+  if (!validEmailList(to, true) || !validEmailList(cc, false)) {
+    showToast('Enter valid comma-separated To and CC email addresses', 'error'); return;
+  }
+  if (!subject) { showToast('Email subject cannot be empty', 'error'); return; }
+  pendingIncidentEmail = { to, cc, subject, body };
+  document.getElementById('notifSimModal').style.display = 'none';
+  saveIncident();
+}
+
 function saveNotificationEmailDraft() {
   const incident = incidents.find(function (item) { return item.id === currentNotificationIncidentId; });
   const subject = (document.getElementById('notificationEmailSubject')?.value || '').trim();
@@ -8303,9 +8488,11 @@ function verifySessionAndInit() {
               portal.style.display = 'block';
             }
 
-            var hash = 'home';
-            var navEl = document.getElementById('homeNav');
-            navigate(hash, navEl);
+            if (!openLinkedIncidentIfReady()) {
+              var hash = 'home';
+              var navEl = document.getElementById('homeNav');
+              navigate(hash, navEl);
+            }
             document.body.classList.remove('auth-pending');
           });
         });
@@ -8550,6 +8737,9 @@ function changeEditTZ(newKey) {
     if (el && el.value) el.value = convertDatetimeLocalTZ(el.value, oldKey, newKey);
   });
   selectedTZ = newKey;
+  var endEl = document.getElementById('dp_f_end_dt');
+  if (endEl) endEl.dataset.inputTimezone = newKey;
+  setIncidentEndHint('dp_end_tz_hint', newKey, false);
   renderTZSelector('editTZSelector', newKey, 'changeEditTZ(this.value)');
 }
 
@@ -8563,15 +8753,12 @@ function updateReportTimestamps(incId, tzKey) {
   var irDate = document.getElementById('ir_date');
   if (irDate) {
     // Use startDT if available (has time), else fall back to date string
-    var rawDate = inc.startDT ? inc.startDT : (inc.date + 'T00:00:00');
-    var d = new Date(rawDate);
+    var d = incidentTimestampDate(inc, 'start');
     if (!isNaN(d)) {
       var months = ['January', 'February', 'March', 'April', 'May', 'June',
         'July', 'August', 'September', 'October', 'November', 'December'];
       // Shift to target TZ
-      var off = getTZOffset(tzKey);
-      var utcMs = d.getTime() - getTZOffset('IST') * 3600000; // convert from IST to UTC
-      var targetMs = utcMs + off * 3600000;
+      var targetMs = d.getTime() + getTZOffset(tzKey) * 3600000;
       var ld = new Date(targetMs);
       irDate.textContent = ld.getUTCDate() + ' ' + months[ld.getUTCMonth()] + ' ' + ld.getUTCFullYear();
     }
@@ -8583,14 +8770,13 @@ function updateReportTimestamps(incId, tzKey) {
   var rawStart = inc.startDT || (inc.date + 'T09:00');
   // Parse as IST: treat string as local IST, convert to UTC for Date object
   var istOff = getTZOffset('IST'); // +5.5
-  var startUTC = new Date(rawStart).getTime() - istOff * 3600000;
-  var startDate = new Date(startUTC);
+  var startDate = incidentTimestampDate(inc, 'start') || wallClockToDate(rawStart, tzKey);
 
   var actualHours = (inc.downtimeH || 0) + (inc.downtimeM || 0) / 60 || slaHours;
-  var endDate = new Date(startDate.getTime() + actualHours * 3600000);
+  var endDate = incidentTimestampDate(inc, 'end') || new Date(startDate.getTime() + actualHours * 3600000);
 
-  var startSrc = inc.downtimeStart ? new Date(inc.downtimeStart) : startDate;
-  var endSrc = inc.downtimeEnd ? new Date(inc.downtimeEnd) : endDate;
+  var startSrc = startDate;
+  var endSrc = endDate;
 
   var irStart = document.getElementById('ir_start_time');
   var irEnd = document.getElementById('ir_end_time');
@@ -8626,18 +8812,9 @@ viewIncidentReport = function (id) {
   setTimeout(() => loadComments(id), 200);
 };
 
-// Show notification preview when critical/high incident is created
+// Preserve the main save handler; pre-send preview is handled before creation.
 const _origSaveIncident = saveIncident;
 saveIncident = function () {
-  const prevLen = incidents.length;
   _origSaveIncident();
-  setTimeout(() => {
-    if (incidents.length > prevLen) {
-      const newest = incidents[0]; // unshift() adds to front, so newest is [0]
-      if (newest && (newest.severity === 'Critical' || newest.severity === 'High')) {
-        showNotificationPreview(newest);
-      }
-    }
-  }, 600);
 };
 

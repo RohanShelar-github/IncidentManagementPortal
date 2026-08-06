@@ -16,11 +16,10 @@ test('Add User exposes every role supported by the database model', () => {
   }
 });
 
-test('Add User rebuilds its dropdown from the authoritative supported-role list', () => {
-  assert.match(frontend, /const SUPPORTED_USER_ROLES = \[/);
-  assert.match(frontend, /SUPPORTED_USER_ROLES\.map\(function \(supportedRole\)/);
-  assert.doesNotMatch(frontend.slice(frontend.indexOf('function openAddUserModal'), frontend.indexOf('function saveUser')), /roles\.map/);
-  assert.doesNotMatch(frontend, /SUPPORTED_USER_ROLES[^;]*viewer/);
+test('Add User rebuilds its dropdown from the database-backed role list', () => {
+  const implementation = frontend.slice(frontend.indexOf('function openAddUserModal'), frontend.indexOf('function saveUser'));
+  assert.match(implementation, /roles\.map\(function \(roleDefinition\)/);
+  assert.match(frontend, /API_BASE_URL \+ '\/roles'/);
 });
 
 test('User Management filters expose every supported role', () => {

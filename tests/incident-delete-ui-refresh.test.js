@@ -26,3 +26,35 @@ test('UI removal happens only after backend confirms successful deletion', () =>
   assert.ok(success >= 0);
   assert.ok(removal > success);
 });
+
+test('closed incidents expose delete only to the admin role', () => {
+  const renderStart = frontend.indexOf('function renderIncidentTable()');
+  const renderEnd = frontend.indexOf('function renderPagination()', renderStart);
+  const rendering = frontend.slice(renderStart, renderEnd);
+  assert.match(rendering, /i\.status !== 'Closed' \|\| currentRole === 'admin'/);
+
+  const deleteStart = frontend.indexOf('function deleteIncident(id)');
+  const deleteEnd = frontend.indexOf('function openDowntimeModal', deleteStart);
+  const deletion = frontend.slice(deleteStart, deleteEnd);
+  assert.match(deletion, /inc\.status === 'Closed' && currentRole !== 'admin'/);
+  assert.match(deletion, /Only administrators can delete closed incidents/);
+});
+
+test('backend allows authenticated deletion of open incidents but reserves closed deletion for Admin', () => {
+  const controller = fs.readFileSync(path.resolve(__dirname, '..', 'backend', 'controllers', 'incidentController.js'), 'utf8');
+  const start = controller.indexOf('const deleteIncident =');
+  const end = controller.indexOf('const getDashboardStats', start);
+  const deletion = controller.slice(start, end);
+  assert.doesNotMatch(deletion, /permission_key = 'manage_users'/);
+  assert.match(deletion, /deleted\.status === 'closed'/);
+  assert.match(deletion, /req\.user\.role[\s\S]*!== 'admin'/);
+  assert.match(deletion, /return res\.status\(403\)/);
+});
+
+test('open incident delete action is visible to every role', () => {
+  const renderStart = frontend.indexOf('function renderIncidentTable()');
+  const renderEnd = frontend.indexOf('function renderPagination()', renderStart);
+  const rendering = frontend.slice(renderStart, renderEnd);
+  assert.match(rendering, /\$\{i\.status !== 'Closed' \|\| currentRole === 'admin' \? `<button[^`]*deleteIncident/);
+  assert.doesNotMatch(rendering, /hasPermission\('manage_users'\)[^\n]*deleteIncident/);
+});

@@ -25,3 +25,13 @@ test('restored authenticated sessions also land on Home', () => {
   assert.match(implementation, /var navEl = document\.getElementById\('homeNav'\)/);
   assert.match(implementation, /navigate\(hash, navEl\)/);
 });
+
+test('normal visits default to Home and only explicit email links open incidents', () => {
+  const start = source.indexOf('function openLinkedIncidentIfReady()');
+  const end = source.indexOf('\nfunction ', start + 1);
+  const implementation = source.slice(start, end);
+  assert.match(implementation, /URLSearchParams\(window\.location\.search\)\.get\('incident'\)/);
+  assert.match(implementation, /if \(!incidentId/);
+  assert.match(implementation, /return false/);
+  assert.match(implementation, /openDetailPanel\(incidentId\)/);
+});

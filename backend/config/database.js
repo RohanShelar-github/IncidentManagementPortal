@@ -7,6 +7,9 @@ const pool = mysql.createPool({
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'incident_management_db',
+  // DATETIME columns are wall-clock values, not JavaScript instants. Returning
+  // strings prevents the server machine timezone from silently shifting them.
+  dateStrings: true,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0

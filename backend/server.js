@@ -2,13 +2,16 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '.env.local'), override: true });
 
 const authRoutes = require('./routes/authRoutes');
 const incidentRoutes = require('./routes/incidentRoutes');
 const masterDataRoutes = require('./routes/masterDataRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const roleRoutes = require('./routes/roleRoutes');
 const { startUiServer } = require('../server-ui');
 const pool = require('./config/database');
+const { configured: emailConfigured } = require('./services/emailService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -42,6 +45,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/incidents', incidentRoutes);
 app.use('/api/master-data', masterDataRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/roles', roleRoutes);
 
 // Health check endpoint
 app.get('/api/health', async (req, res) => {
@@ -52,6 +56,7 @@ app.get('/api/health', async (req, res) => {
       database: 'connected',
       databaseName: db[0].database_name,
       databaseTime: db[0].database_time,
+      emailConfigured: emailConfigured(),
       timestamp: new Date().toISOString(),
       message: 'Incident Management Backend is running'
     });
