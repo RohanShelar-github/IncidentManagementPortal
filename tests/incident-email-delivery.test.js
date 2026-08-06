@@ -94,6 +94,14 @@ test('incident mail recipients default to the authenticated creator and operatio
   assert.match(controller, /emailCc: b\.notification_email\?\.cc === undefined \? INCIDENT_NOTIFICATION_CC/);
 });
 
+test('created and closed incident emails include the fixed operational BCC list', () => {
+  assert.match(controller, /const INCIDENT_NOTIFICATION_BCC = 'prachi_palande@magicsoftware\.com,nikhil_kawade@magicsoftware\.com,shravani_bhosale@magicsoftware\.com,jidnyasa_patil@magicsoftware\.com'/);
+  assert.equal((controller.match(/emailBcc: INCIDENT_NOTIFICATION_BCC/g) || []).length, 2);
+  const service = fs.readFileSync('backend/services/emailService.js', 'utf8');
+  assert.match(service, /bcc: bcc \|\| undefined/);
+  assert.match(service, /recipientXml\('BccRecipients', bcc\)/);
+});
+
 test('closing an incident sends one closure email only on the transition to Closed', () => {
   assert.match(controller, /sendIncidentClosedEmail/);
   assert.match(controller, /transitionedToClosed = closed && normalizeStatus\(current\.status\) !== 'closed'/);

@@ -114,6 +114,7 @@ async function sendIncidentCreatedEmail(incident) {
   }
   const to = cleanAddressList(incident.emailTo, process.env.MAIL_TO);
   const cc = cleanAddressList(incident.emailCc, process.env.MAIL_CC);
+  const bcc = cleanAddressList(incident.emailBcc, process.env.MAIL_BCC);
   if (!to || !content.subject || !content.body) throw new Error('Email To, subject, and body are required');
   if (String(process.env.MAIL_PROVIDER || '').toLowerCase() === 'smtp') {
     const secure = String(process.env.SMTP_SECURE || '').toLowerCase() === 'true';
@@ -131,6 +132,7 @@ async function sendIncidentCreatedEmail(incident) {
       from: process.env.MAIL_FROM,
       to,
       cc: cc || undefined,
+      bcc: bcc || undefined,
       subject: content.subject,
       text: defaults.body,
       html: defaults.html
@@ -148,6 +150,7 @@ async function sendIncidentCreatedEmail(incident) {
     <t:From><t:Mailbox><t:EmailAddress>${xmlEscape(from)}</t:EmailAddress></t:Mailbox></t:From>
     ${recipientXml('ToRecipients', to)}
     ${recipientXml('CcRecipients', cc)}
+    ${recipientXml('BccRecipients', bcc)}
   </t:Message></m:Items></m:CreateItem></soap:Body>
 </soap:Envelope>`;
   const response = await fetch(process.env.MAIL_EWS_URL || DEFAULT_EWS_URL, {

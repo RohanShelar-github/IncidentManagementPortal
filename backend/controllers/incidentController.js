@@ -7,6 +7,7 @@ const {
 const { notifyUsers } = require('../services/notificationService');
 const { sendIncidentClosedEmail, sendIncidentCreatedEmail } = require('../services/emailService');
 const INCIDENT_NOTIFICATION_CC = 'its24x7@magicsoftware.com';
+const INCIDENT_NOTIFICATION_BCC = 'prachi_palande@magicsoftware.com,nikhil_kawade@magicsoftware.com,shravani_bhosale@magicsoftware.com,jidnyasa_patil@magicsoftware.com';
 
 const CANONICAL_INCIDENT_FIELDS = process.env.CANONICAL_INCIDENT_FIELDS !== 'false';
 
@@ -296,6 +297,7 @@ const createIncident = async (req, res) => {
         // the reviewed email preview to supply edited recipients.
         emailTo: b.notification_email?.to || req.user.email,
         emailCc: b.notification_email?.cc === undefined ? INCIDENT_NOTIFICATION_CC : b.notification_email.cc,
+        emailBcc: INCIDENT_NOTIFICATION_BCC,
         emailSubject: b.notification_email?.subject, emailBody: b.notification_email?.body
       });
     } catch (mailError) {
@@ -518,7 +520,8 @@ const updateIncident = async (req, res) => {
             mttr: mttr.text || 'Not recorded',
             mttd: mttd.text || 'Not recorded',
             emailTo: current.creator_email || req.user.email,
-            emailCc: INCIDENT_NOTIFICATION_CC
+            emailCc: INCIDENT_NOTIFICATION_CC,
+            emailBcc: INCIDENT_NOTIFICATION_BCC
           });
         } catch (mailError) {
           console.error(`Incident ${incidentRef} closed email failed:`, mailError.message);
