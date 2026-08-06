@@ -790,6 +790,7 @@ function openMetricDrillDown(metric, customerName, reportingCategory) {
     ? getDashboardFilteredIncidents() : incidents;
   var metricIncidents = sourceIncidents.filter(function (inc) {
     if (customerName && inc.customer !== customerName) return false;
+    if (metric === 'mttr' && !customerName && !reportingCategory && isCustomer360HistorianIncident(inc)) return false;
     if (reportingCategory === 'application' && isCustomer360HistorianIncident(inc)) return false;
     if (reportingCategory === 'historian' && !isCustomer360HistorianIncident(inc)) return false;
     return predicate(inc);
@@ -3855,7 +3856,32 @@ function openDowntimeModal(id) {
   }
   if (endEl) endEl.dataset.inputTimezone = dtmTZ;
   setIncidentEndHint('dtm_end_tz_hint', dtmTZ, false);
+  var critical = String(inc.severity || '').toLowerCase() === 'critical';
+  var downtimeHours = document.getElementById('dtm_hours');
+  var downtimeMinutes = document.getElementById('dtm_mins');
+  [downtimeHours, downtimeMinutes].forEach(function (field) {
+    field.readOnly = critical;
+    field.style.opacity = critical ? '.7' : '1';
+    field.style.cursor = critical ? 'not-allowed' : '';
+  });
+  var downtimeHint = document.getElementById('dtm_downtime_hint');
+  if (downtimeHint) downtimeHint.style.display = critical ? 'block' : 'none';
+  if (critical) updateCriticalDowntime();
   modal.style.display = 'flex';
+}
+
+function updateCriticalDowntime() {
+  const id = document.getElementById('dtm_inc_ref')?.value;
+  const inc = incidents.find(function (item) { return item.id === id; });
+  if (!inc || String(inc.severity || '').toLowerCase() !== 'critical') return;
+  const endEl = document.getElementById('dtm_end_time');
+  if (!endEl || !endEl.value) return;
+  const startDate = incidentTimestampDate(inc, 'start');
+  const endDate = wallClockToDate(endEl.value, endEl.dataset.inputTimezone || selectedTZ || inc.timezone || 'IST');
+  if (!startDate || !endDate) return;
+  const totalMinutes = Math.max(0, Math.round((endDate.getTime() - startDate.getTime()) / 60000));
+  document.getElementById('dtm_hours').value = Math.floor(totalMinutes / 60);
+  document.getElementById('dtm_mins').value = totalMinutes % 60;
 }
 
 function changeCloseTZ(newKey) {
@@ -3868,15 +3894,18 @@ function changeCloseTZ(newKey) {
   if (endEl) endEl.dataset.inputTimezone = newKey;
   setIncidentEndHint('dtm_end_tz_hint', newKey, false);
   renderTZSelector('closeTZSelector', newKey, 'changeCloseTZ(this.value)');
+  updateCriticalDowntime();
 }
 
 function confirmCloseIncident() {
   const id = document.getElementById('dtm_inc_ref').value;
   const inc = incidents.find(i => i.id === id);
   if (!inc) return;
+  updateCriticalDowntime();
 
   const downtimeHoursInput = document.getElementById('dtm_hours');
   const downtimeMinutesInput = document.getElementById('dtm_mins');
+  const criticalDowntime = String(inc.severity || '').toLowerCase() === 'critical';
   const h = downtimeHoursInput.value === '' ? 0 : Number(downtimeHoursInput.value);
   const m = downtimeMinutesInput.value === '' ? 0 : Number(downtimeMinutesInput.value);
   const mttrH = parseInt(document.getElementById('dtm_mttr_hours').value) || 0;
@@ -3889,7 +3918,7 @@ function confirmCloseIncident() {
 
   if (!endTimeRaw) { showToast('Please select the incident end date & time', 'error'); return; }
   if (!Number.isFinite(h) || !Number.isFinite(m) || !Number.isInteger(h) || !Number.isInteger(m)
-    || h < 0 || h > 999 || m < 0 || m > 59) {
+    || h < 0 || (!criticalDowntime && h > 999) || m < 0 || m > 59) {
     showToast('Please enter a valid downtime (zero is allowed)', 'error'); return;
   }
   if (!rca) { showToast('Please enter the Root Cause Analysis', 'error'); return; }
@@ -4941,7 +4970,8 @@ function updateStats() {
   if (slSub) slSub.textContent = breachCount > 0 ? 'open incidents breached' : 'all within SLA';
 
   // Aggregate all completed incidents across every customer using the shared predicate.
-  var missedMttrCount = countMissedMttr(incidents);
+  var dashboardMttrIncidents = incidents.filter(function (inc) { return !isCustomer360HistorianIncident(inc); });
+  var missedMttrCount = countMissedMttr(dashboardMttrIncidents);
   var missedMttrEl = document.getElementById('statMissedMttr');
   var missedMttrSub = document.getElementById('statMissedMttrSub');
   if (missedMttrEl) missedMttrEl.textContent = missedMttrCount;
@@ -4966,7 +4996,7 @@ function updateStats() {
   if (mtSub) mtSub.textContent = withDT.length + ' incident' + (withDT.length !== 1 ? 's' : '') + ' measured';
 
   // Resolution rate
-  var resRate = data.length > 0 ? Math.round(closed / data.length * 100) : 0;
+  var resRate = data.length > 0 ? Math.round(closed / data.length * 1000) / 10 : 0;
   var rrEl = document.getElementById('statResRate');
   var rrSub = document.getElementById('statResRateSub');
   if (rrEl) rrEl.textContent = resRate + '%';
@@ -7495,6 +7525,14 @@ function populateEditForm(inc) {
   // Always populate report fields regardless of status
   set('dp_f_dtH', inc.downtimeH || 0);
   set('dp_f_dtM', inc.downtimeM || 0);
+  var critical = String(inc.severity || '').toLowerCase() === 'critical';
+  ['dp_f_dtH', 'dp_f_dtM'].forEach(function (id) {
+    var field = document.getElementById(id);
+    field.readOnly = critical;
+    field.style.opacity = critical ? '.7' : '1';
+    field.style.cursor = critical ? 'not-allowed' : '';
+  });
+  if (critical && editEndEl && editEndEl.value) updateCriticalEditDowntime();
   set('dp_f_mttr_h', inc.mttrH || 0);
   set('dp_f_mttr_m', inc.mttrM || 0);
   set('dp_f_rca', inc.rca || '');
@@ -7505,6 +7543,21 @@ function populateEditForm(inc) {
 
   // If user has selected a non-IST timezone, convert the displayed datetimes
   updateDetailFooter(true);
+}
+
+function updateCriticalEditDowntime() {
+  const inc = incidents.find(function (item) { return item.id === detailCurrentId; });
+  if (!inc || String(inc.severity || '').toLowerCase() !== 'critical') return;
+  const startEl = document.getElementById('dp_f_start_dt');
+  const endEl = document.getElementById('dp_f_end_dt');
+  if (!startEl || !startEl.value || !endEl || !endEl.value) return;
+  const editTimezone = selectedTZ || inc.timezone || 'IST';
+  const startDate = wallClockToDate(startEl.value, editTimezone);
+  const endDate = wallClockToDate(endEl.value, endEl.dataset.inputTimezone || editTimezone);
+  if (!startDate || !endDate) return;
+  const totalMinutes = Math.max(0, Math.round((endDate.getTime() - startDate.getTime()) / 60000));
+  document.getElementById('dp_f_dtH').value = Math.floor(totalMinutes / 60);
+  document.getElementById('dp_f_dtM').value = totalMinutes % 60;
 }
 
 function updateDetailFooter(isEditing) {
@@ -7571,6 +7624,7 @@ function saveDetailEdit() {
   const getVal = id => { const el = document.getElementById(id); return el ? el.value : ''; };
   var startDTval = getVal('dp_f_start_dt');
   convertIncidentEndFromIST('dp_f_end_dt', 'dp_end_tz_hint');
+  updateCriticalEditDowntime();
   var endDTval = getVal('dp_f_end_dt');
   const startDb = toMysqlDatetime(startDTval || date);
   const endDb = endDTval ? toMysqlDatetime(endDTval) : '';
@@ -8731,6 +8785,7 @@ function changeEditTZ(newKey) {
   if (endEl) endEl.dataset.inputTimezone = newKey;
   setIncidentEndHint('dp_end_tz_hint', newKey, false);
   renderTZSelector('editTZSelector', newKey, 'changeEditTZ(this.value)');
+  updateCriticalEditDowntime();
 }
 
 // changeReportTZ removed — report uses the timezone saved with the incident

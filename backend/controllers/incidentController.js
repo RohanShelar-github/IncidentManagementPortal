@@ -406,7 +406,8 @@ const updateIncident = async (req, res) => {
     const b = req.body;
     const canonicalBody = { ...b };
     const timezoneTouched = b.timezone !== undefined || b.source_timezone !== undefined;
-    if (timezoneTouched && b.date_time_opened === undefined && b.startDT === undefined && b.date_created === undefined && b.date === undefined) {
+    const endDateTouched = b.date_time_closed !== undefined || b.endDT !== undefined || b.closed_at !== undefined;
+    if ((timezoneTouched || endDateTouched) && b.date_time_opened === undefined && b.startDT === undefined && b.date_created === undefined && b.date === undefined) {
       canonicalBody.date_time_opened = current.date_time_opened || current.start_dt;
     }
     if (timezoneTouched && b.date_time_closed === undefined && b.endDT === undefined && b.closed_at === undefined) {
@@ -424,6 +425,17 @@ const updateIncident = async (req, res) => {
     if (b.project_area !== undefined) add('project_area', b.project_area || null);
     if (b.severity !== undefined) add('severity', normalizeSeverity(b.severity));
     const normalizedStatus = b.status !== undefined ? normalizeStatus(b.status) : undefined;
+    const hasEndDateUpdate = endDateTouched;
+    const isCriticalDowntimeCalculation = normalizeSeverity(b.severity ?? current.severity) === 'critical'
+      && hasEndDateUpdate && canonical.closed_at_utc;
+    if (isCriticalDowntimeCalculation) {
+      const openedAt = canonical.opened_at_utc ? new Date(canonical.opened_at_utc.replace(' ', 'T') + 'Z') : null;
+      const closedAt = canonical.closed_at_utc ? new Date(canonical.closed_at_utc.replace(' ', 'T') + 'Z') : null;
+      if (!openedAt || !closedAt || Number.isNaN(openedAt.getTime()) || Number.isNaN(closedAt.getTime()) || closedAt < openedAt) {
+        return res.status(400).json({ success: false, message: 'Critical incident end time must be on or after its created time' });
+      }
+      canonical.downtime_mins = Math.round((closedAt.getTime() - openedAt.getTime()) / 60000);
+    }
     if (b.status !== undefined) add('status', normalizedStatus);
     if (b.engineer !== undefined) add('assigned_to', await resolveUserId(b.engineer));
     if (b.case_owner !== undefined) add('case_owner', b.case_owner || null);
@@ -452,7 +464,7 @@ const updateIncident = async (req, res) => {
       add('incident_report_status', reportStatus || null);
     }
 
-    const downtimeTouched = ['downtime_mins', 'downtime_minutes_total', 'downtime_h', 'downtimeH', 'downtime_m', 'downtimeM', 'downtimeStr', 'downtime_str']
+    const downtimeTouched = isCriticalDowntimeCalculation || ['downtime_mins', 'downtime_minutes_total', 'downtime_h', 'downtimeH', 'downtime_m', 'downtimeM', 'downtimeStr', 'downtime_str']
       .some((key) => b[key] !== undefined);
     if (downtimeTouched) {
       const duration = minutesToHM(canonical.downtime_mins);

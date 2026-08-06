@@ -1849,11 +1849,11 @@
 <div id="editTZSelector"></div>
 </div>
 </div>
-<input id="dp_f_start_dt" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box" type="datetime-local"/>
+<input id="dp_f_start_dt" onchange="updateCriticalEditDowntime()" oninput="updateCriticalEditDowntime()" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box" type="datetime-local"/>
 </div>
 <div>
 <label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">📅 Incident End</label>
-<input id="dp_f_end_dt" onchange="convertIncidentEndFromIST('dp_f_end_dt','dp_end_tz_hint')" oninput="markIncidentEndAsIST('dp_f_end_dt','dp_end_tz_hint')" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box" type="datetime-local"/>
+<input id="dp_f_end_dt" onchange="convertIncidentEndFromIST('dp_f_end_dt','dp_end_tz_hint');updateCriticalEditDowntime()" oninput="markIncidentEndAsIST('dp_f_end_dt','dp_end_tz_hint');updateCriticalEditDowntime()" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box" type="datetime-local"/>
 <div id="dp_end_tz_hint" style="font-size:9px;color:var(--text-muted);margin-top:5px;font-family:var(--font-mono)">Enter end time in IST</div>
 </div>
 </div>
@@ -2109,7 +2109,7 @@
 <div id="closeTZSelector"></div>
 </div>
 </div>
-<input id="dtm_end_time" onchange="convertIncidentEndFromIST('dtm_end_time','dtm_end_tz_hint')" oninput="markIncidentEndAsIST('dtm_end_time','dtm_end_tz_hint')" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:14px;font-family:inherit;outline:none;box-sizing:border-box" type="datetime-local"/>
+<input id="dtm_end_time" onchange="convertIncidentEndFromIST('dtm_end_time','dtm_end_tz_hint');updateCriticalDowntime()" oninput="markIncidentEndAsIST('dtm_end_time','dtm_end_tz_hint');updateCriticalDowntime()" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:14px;font-family:inherit;outline:none;box-sizing:border-box" type="datetime-local"/>
 <div id="dtm_end_tz_hint" style="font-size:10px;color:var(--text-muted);margin:5px 0 16px;font-family:var(--font-mono)">Enter end time in IST</div>
 </div>
 <div style="margin-bottom:16px">

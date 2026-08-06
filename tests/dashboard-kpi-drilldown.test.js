@@ -25,3 +25,9 @@ test('SLA drill-down uses the live active-breach calculation', () => {
   assert.match(frontend, /getIncidentSlaHours\(inc\) \* 3600000/);
   assert.match(frontend, /sla: 'SLA-Breached Active Incidents'/);
 });
+
+test('dashboard Missed MTTR count and drill-down exclude Historian-area incidents', () => {
+  assert.match(frontend, /dashboardMttrIncidents = incidents\.filter\(function \(inc\) \{ return !isCustomer360HistorianIncident\(inc\); \}\)/);
+  assert.match(frontend, /countMissedMttr\(dashboardMttrIncidents\)/);
+  assert.match(frontend, /metric === 'mttr' && !customerName && !reportingCategory && isCustomer360HistorianIncident\(inc\)/);
+});
