@@ -663,6 +663,20 @@ function getIncidentSlaHours(inc) {
   return { Critical: 1, High: 4, Medium: 12, Normal: 24 }[inc && inc.severity] || 24;
 }
 
+function isCriticalSeverity(inc) {
+  return String((inc && inc.severity) || '').toLowerCase() === 'critical';
+}
+
+function getCriticalOnlyReportValue(inc, value) {
+  return isCriticalSeverity(inc) ? value : '—';
+}
+
+function getCriticalReportLabels(inc) {
+  return isCriticalSeverity(inc)
+    ? { sla: 'Critical SLA', mttr: 'Critical MTTR' }
+    : { sla: 'Total Downtime', mttr: 'Mean Time to Resolve (MTTR)' };
+}
+
 function getIncidentTimestamp(inc, fields) {
   for (var index = 0; index < fields.length; index++) {
     var value = inc && inc[fields[index]];
@@ -703,6 +717,7 @@ function getIncidentOpenedTimestamp(inc) {
 // strictly exceeds its applicable SLA resolution target.
 function isMissedMttr(inc) {
   var status = String((inc && inc.status) || '').toLowerCase();
+  if (String((inc && inc.severity) || '').toLowerCase() !== 'critical') return false;
   if (status !== 'closed' && status !== 'resolved') return false;
 
   var createdMs = getIncidentTimestamp(inc, ['date_time_opened', 'startDT', 'date_created']);
@@ -773,6 +788,7 @@ function isActiveIncident(inc) {
 
 function isActiveSlaBreached(inc) {
   if (!isActiveIncident(inc)) return false;
+  if (String((inc && inc.severity) || '').toLowerCase() !== 'critical') return false;
   var openedAt = getIncidentOpenedTimestamp(inc);
   return Number.isFinite(openedAt) && (Date.now() - openedAt) > getIncidentSlaHours(inc) * 3600000;
 }
@@ -833,7 +849,6 @@ function openMetricDrillDown(metric, customerName, reportingCategory) {
         + '<td class="id-cell">' + escapeMetricHtml(inc.id) + '</td>'
         + '<td class="title-cell">' + escapeMetricHtml(inc.title || inc.summary || '—') + '</td>'
         + '<td>' + escapeMetricHtml(inc.customer || '—') + '</td>'
-        + '<td>' + escapeMetricHtml(inc.priority || severity) + '</td>'
         + '<td><span class="badge badge-' + escapeMetricHtml(severity.toLowerCase()) + '">' + escapeMetricHtml(severity) + '</span></td>'
         + '<td><span class="badge badge-' + escapeMetricHtml(status.toLowerCase().replace(/ /g, '-').replace(/&/g, '')) + '">' + escapeMetricHtml(status) + '</span></td>'
         + '<td class="metric-date-cell">' + escapeMetricHtml(created) + '</td>'
@@ -1379,8 +1394,8 @@ function renderC360MetricSection(statsRowId, metricsRowId, values, category) {
       { label: 'Total Incidents', value: values.total, color: 'var(--accent)' },
       { label: 'Open', value: values.open, color: 'var(--warning)' },
       { label: 'Closed', value: values.closed, color: 'var(--success)' },
-      { label: 'SLA Breaches', value: values.breached, color: values.breached ? 'var(--danger)' : 'var(--success)' },
-      { metric: 'mttr', label: 'Missed MTTR Count', value: values.missedMttr, color: values.missedMttr ? 'var(--danger)' : 'var(--success)' },
+      { label: 'Critical SLA Breach', value: values.breached, color: values.breached ? 'var(--danger)' : 'var(--success)' },
+      { metric: 'mttr', label: 'Critical Missed MTTR', value: values.missedMttr, color: values.missedMttr ? 'var(--danger)' : 'var(--success)' },
       { metric: 'mttd', label: 'Missed MTTD Count', value: values.missedMttd, color: values.missedMttd ? 'var(--danger)' : 'var(--success)' }
     ];
     statsRow.innerHTML = stats.map(function (stat) {
@@ -1996,6 +2011,8 @@ function applyCurrentUserProfile(user) {
     location: user.location || '', bio: user.bio || '',
     lastActive: user.lastActive || 'Just now'
   };
+  var aiLauncher = document.getElementById('aiChatLauncher');
+  if (aiLauncher) aiLauncher.style.display = 'block';
   if (currentUserProfile.name) currentUserName = currentUserProfile.name;
   ['sidebarUserName', 'profileUserLabel', 'profileDdName', 'profileModalName'].forEach(function (id) {
     var el = document.getElementById(id); if (el) el.textContent = currentUserName;
@@ -4967,17 +4984,19 @@ function updateStats() {
   var slEl = document.getElementById('statSLABreach');
   var slSub = document.getElementById('statSLABreachSub');
   if (slEl) slEl.textContent = breachCount;
-  if (slSub) slSub.textContent = breachCount > 0 ? 'open incidents breached' : 'all within SLA';
+  if (slSub) slSub.textContent = breachCount > 0 ? 'open critical incidents breached' : 'all critical incidents within SLA';
 
-  // Aggregate all completed incidents across every customer using the shared predicate.
-  var dashboardMttrIncidents = incidents.filter(function (inc) { return !isCustomer360HistorianIncident(inc); });
+  // Aggregate only Critical incidents so the KPI and drill-down stay aligned.
+  var dashboardMttrIncidents = incidents.filter(function (inc) {
+    return String((inc && inc.severity) || '').toLowerCase() === 'critical' && !isCustomer360HistorianIncident(inc);
+  });
   var missedMttrCount = countMissedMttr(dashboardMttrIncidents);
   var missedMttrEl = document.getElementById('statMissedMttr');
   var missedMttrSub = document.getElementById('statMissedMttrSub');
   if (missedMttrEl) missedMttrEl.textContent = missedMttrCount;
   if (missedMttrSub) missedMttrSub.textContent = missedMttrCount === 1
-    ? 'resolved incident exceeded target'
-    : 'resolved incidents exceeded target';
+    ? '1 closed critical incident measured'
+    : missedMttrCount + ' closed critical incidents measured';
 
   var missedMttdCount = countMissedMttd(incidents);
   var missedMttdEl = document.getElementById('statMissedMttd');
@@ -6790,7 +6809,7 @@ function _buildXLSX(data, filename, downloadNow) {
         ? inc.downtimeH + 'h' + (inc.downtimeM > 0 ? ' ' + inc.downtimeM + 'm' : '')
         : inc.downtimeM > 0 ? inc.downtimeM + 'm' : '—');
     const mttdStr2 = inc.mttdStr || (inc.mttdH > 0 ? inc.mttdH + 'h' + (inc.mttdM > 0 ? ' ' + inc.mttdM + 'm' : '') : inc.mttdM > 0 ? inc.mttdM + 'm' : '—');
-    const mttrStr2 = inc.mttrStr || (inc.mttrH > 0 ? inc.mttrH + 'h' + (inc.mttrM > 0 ? ' ' + inc.mttrM + 'm' : '') : inc.mttrM > 0 ? inc.mttrM + 'm' : '—');
+    const mttrStr2 = getCriticalOnlyReportValue(inc, inc.mttrStr || (inc.mttrH > 0 ? inc.mttrH + 'h' + (inc.mttrM > 0 ? ' ' + inc.mttrM + 'm' : '') : inc.mttrM > 0 ? inc.mttrM + 'm' : '—'));
     // Start time: stored in IST as datetime-local string
     const istOff = getTZOffset('IST');
     const rawStart = inc.startDT || (inc.date + 'T09:00');
@@ -7012,7 +7031,8 @@ function viewIncidentReport(id) {
   _q('ir_engineer', inc.engineer);
   const irAreaEl = document.getElementById('ir_area'); if (irAreaEl) irAreaEl.textContent = inc.area || '—';
   const irMttdEl = document.getElementById('ir_mttd'); if (irMttdEl) irMttdEl.textContent = inc.mttdStr || (inc.mttdH > 0 ? inc.mttdH + 'h' + (inc.mttdM > 0 ? ' ' + inc.mttdM + 'm' : '') : inc.mttdM > 0 ? inc.mttdM + 'm' : '—');
-  const irMttrEl = document.getElementById('ir_mttr'); if (irMttrEl) irMttrEl.textContent = inc.mttrStr || (inc.mttrH > 0 ? inc.mttrH + 'h' + (inc.mttrM > 0 ? ' ' + inc.mttrM + 'm' : '') : inc.mttrM > 0 ? inc.mttrM + 'm' : '—');
+  const irMttrEl = document.getElementById('ir_mttr'); if (irMttrEl) irMttrEl.textContent = getCriticalOnlyReportValue(inc, inc.mttrStr || (inc.mttrH > 0 ? inc.mttrH + 'h' + (inc.mttrM > 0 ? ' ' + inc.mttrM + 'm' : '') : inc.mttrM > 0 ? inc.mttrM + 'm' : '—'));
+  const reportLabels = getCriticalReportLabels(inc);
   document.getElementById('ir_date').textContent = new Date(inc.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
   document.getElementById('ir_severity').innerHTML = `<span class="badge badge-${inc.severity.toLowerCase()}">${inc.severity}</span>`;
   document.getElementById('ir_status').innerHTML = `<span class="badge">${inc.status}</span>`;
@@ -7025,7 +7045,10 @@ function viewIncidentReport(id) {
   document.getElementById('ir_end_time').textContent = inc.downtimeEnd ? fmt(new Date(inc.downtimeEnd)) : fmt(endDate);
   const dtH = inc.downtimeH !== undefined ? inc.downtimeH : Math.floor(slaHours);
   const dtM = inc.downtimeM !== undefined ? inc.downtimeM : Math.round((slaHours % 1) * 60);
-  document.getElementById('ir_downtime').textContent = inc.downtimeStr || (dtH > 0 ? `${dtH}h ${dtM > 0 ? dtM + 'm' : ''}`.trim() : `${dtM}m`);
+  const downtimeEl = document.getElementById('ir_downtime');
+  if (downtimeEl) downtimeEl.textContent = inc.downtimeStr || (dtH > 0 ? `${dtH}h ${dtM > 0 ? dtM + 'm' : ''}`.trim() : `${dtM}m`);
+  const downtimeLabelEl = document.querySelector('#ir_downtime')?.previousElementSibling;
+  if (downtimeLabelEl) downtimeLabelEl.textContent = reportLabels.sla;
   const rcaMap = {
     Critical: 'Critical system failure due to infrastructure misconfiguration or security breach. Full forensic analysis conducted.',
     High: 'Service degradation caused by application-level error or upstream dependency failure. Identified during incident triage.',
@@ -7108,7 +7131,7 @@ function exportIncidentPDF() {
   const sfCase = inc.sfCase || '—';
   const area = inc.area || '—';
   const mttd = inc.mttdStr || (inc.mttdH > 0 ? inc.mttdH + 'h' + (inc.mttdM > 0 ? ' ' + inc.mttdM + 'm' : '') : inc.mttdM > 0 ? inc.mttdM + 'm' : '—');
-  const mttr = inc.mttrStr || (inc.mttrH > 0 ? inc.mttrH + 'h' + (inc.mttrM > 0 ? ' ' + inc.mttrM + 'm' : '') : inc.mttrM > 0 ? inc.mttrM + 'm' : '—');
+  const mttr = getCriticalOnlyReportValue(inc, inc.mttrStr || (inc.mttrH > 0 ? inc.mttrH + 'h' + (inc.mttrM > 0 ? ' ' + inc.mttrM + 'm' : '') : inc.mttrM > 0 ? inc.mttrM + 'm' : '—'));
 
   // Timeline — use inc.timezone (set during create/edit) for all time display
   const pdfTZ = inc.timezone || 'IST';
@@ -7198,10 +7221,10 @@ function exportIncidentPDF() {
   parts.push('<div class="field"><div class="field-lbl">Start Time (' + pdfTZ + ')</div><div class="field-val">' + startTime + '</div></div>');
   parts.push('<div class="field"><div class="field-lbl">End Time (' + pdfTZ + ')</div><div class="field-val">' + endTime + '</div></div>');
   parts.push('</div>');
-  parts.push('<div class="downtime-box"><div class="downtime-val">' + downtime + '</div><div class="downtime-lbl">Total Downtime</div></div>');
+  parts.push('<div class="downtime-box"><div class="downtime-val">' + downtime + '</div><div class="downtime-lbl">' + (isCriticalSeverity(inc) ? 'Critical SLA' : 'Total Downtime') + '</div></div>');
   parts.push('<div class="grid2" style="margin-top:12px">');
   parts.push('<div class="field"><div class="field-lbl">Mean Time to Detect (MTTD)</div><div class="field-val" style="font-weight:700;color:#2563eb">' + mttd + '</div></div>');
-  parts.push('<div class="field"><div class="field-lbl">Mean Time to Resolve (MTTR)</div><div class="field-val" style="font-weight:700;color:#16a34a">' + mttr + '</div></div>');
+  parts.push('<div class="field"><div class="field-lbl">' + (isCriticalSeverity(inc) ? 'Critical MTTR' : 'Mean Time to Resolve (MTTR)') + '</div><div class="field-val" style="font-weight:700;color:#16a34a">' + mttr + '</div></div>');
   parts.push('</div>');
   parts.push('<h2>Root Cause Analysis (RCA)</h2>');
   parts.push('<div class="desc-box">' + rca + '</div>');
@@ -7976,6 +7999,8 @@ function doLogout() {
 function doLogoutConfirmed(reason) {
   stopSessionInactivityTracking();
   stopNotificationPolling();
+  var aiLauncher = document.getElementById('aiChatLauncher'); if (aiLauncher) aiLauncher.style.display = 'none';
+  var aiPanel = document.getElementById('aiChatPanel'); if (aiPanel) { aiPanel.classList.remove('open'); aiPanel.setAttribute('aria-hidden', 'true'); }
   setLoginUrl();
   const portal = document.getElementById('portalApp');
   portal.style.transition = 'opacity .3s ease';
@@ -8789,6 +8814,158 @@ function changeEditTZ(newKey) {
 }
 
 // changeReportTZ removed — report uses the timezone saved with the incident
+
+// ─── READ-ONLY INCIDENT COPILOT ──────────────────────────────
+var aiChatHistory = [];
+var aiLauncherDrag = null;
+var suppressAiLauncherClick = false;
+
+function clampAiLauncherPosition(left, top, launcher) {
+  var margin = 8;
+  return {
+    left: Math.max(margin, Math.min(left, window.innerWidth - launcher.offsetWidth - margin)),
+    top: Math.max(margin, Math.min(top, window.innerHeight - launcher.offsetHeight - margin))
+  };
+}
+
+function saveAiLauncherPosition(launcher) {
+  try {
+    localStorage.setItem('aocAiLauncherPosition', JSON.stringify({
+      left: parseFloat(launcher.style.left), top: parseFloat(launcher.style.top)
+    }));
+  } catch (_) { /* Position persistence is optional. */ }
+}
+
+function restoreAiLauncherPosition() {
+  var launcher = document.getElementById('aiChatLauncher');
+  if (!launcher) return;
+  try {
+    var saved = JSON.parse(localStorage.getItem('aocAiLauncherPosition') || 'null');
+    if (!saved || !Number.isFinite(saved.left) || !Number.isFinite(saved.top)) return;
+    var position = clampAiLauncherPosition(saved.left, saved.top, launcher);
+    launcher.style.left = position.left + 'px'; launcher.style.top = position.top + 'px';
+    launcher.style.right = 'auto'; launcher.style.bottom = 'auto';
+  } catch (_) { /* Keep the default bottom-right position. */ }
+}
+
+function startAiLauncherDrag(event) {
+  if (event.button !== undefined && event.button !== 0) return;
+  var launcher = event.currentTarget;
+  var rect = launcher.getBoundingClientRect();
+  aiLauncherDrag = { launcher: launcher, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, left: rect.left, top: rect.top, moved: false };
+  launcher.setPointerCapture?.(event.pointerId);
+  launcher.classList.add('dragging');
+  window.addEventListener('pointermove', moveAiLauncher);
+  window.addEventListener('pointerup', stopAiLauncherDrag, { once: true });
+  window.addEventListener('pointercancel', stopAiLauncherDrag, { once: true });
+}
+
+function moveAiLauncher(event) {
+  if (!aiLauncherDrag || event.pointerId !== aiLauncherDrag.pointerId) return;
+  var dx = event.clientX - aiLauncherDrag.startX;
+  var dy = event.clientY - aiLauncherDrag.startY;
+  if (!aiLauncherDrag.moved && Math.hypot(dx, dy) < 4) return;
+  aiLauncherDrag.moved = true;
+  var position = clampAiLauncherPosition(aiLauncherDrag.left + dx, aiLauncherDrag.top + dy, aiLauncherDrag.launcher);
+  aiLauncherDrag.launcher.style.left = position.left + 'px'; aiLauncherDrag.launcher.style.top = position.top + 'px';
+  aiLauncherDrag.launcher.style.right = 'auto'; aiLauncherDrag.launcher.style.bottom = 'auto';
+  event.preventDefault();
+}
+
+function stopAiLauncherDrag(event) {
+  if (!aiLauncherDrag || (event.pointerId !== undefined && event.pointerId !== aiLauncherDrag.pointerId)) return;
+  var drag = aiLauncherDrag;
+  aiLauncherDrag = null;
+  drag.launcher.classList.remove('dragging');
+  window.removeEventListener('pointermove', moveAiLauncher);
+  if (drag.moved) { suppressAiLauncherClick = true; saveAiLauncherPosition(drag.launcher); }
+}
+
+function handleAiLauncherClick(event) {
+  if (suppressAiLauncherClick) { suppressAiLauncherClick = false; event.preventDefault(); return; }
+  toggleAiChat();
+}
+
+window.addEventListener('resize', function () {
+  var launcher = document.getElementById('aiChatLauncher');
+  if (!launcher || !launcher.style.left) return;
+  var position = clampAiLauncherPosition(parseFloat(launcher.style.left), parseFloat(launcher.style.top), launcher);
+  launcher.style.left = position.left + 'px'; launcher.style.top = position.top + 'px';
+  saveAiLauncherPosition(launcher);
+});
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', restoreAiLauncherPosition);
+else restoreAiLauncherPosition();
+
+function toggleAiChat(forceOpen) {
+  var panel = document.getElementById('aiChatPanel');
+  if (!panel) return;
+  var open = forceOpen === undefined ? !panel.classList.contains('open') : Boolean(forceOpen);
+  panel.classList.toggle('open', open);
+  panel.setAttribute('aria-hidden', open ? 'false' : 'true');
+  if (open) setTimeout(function () { document.getElementById('aiChatInput')?.focus(); }, 0);
+}
+
+function appendAiChatMessage(role, content, isError) {
+  var messages = document.getElementById('aiChatMessages');
+  var bubble = document.createElement('div');
+  bubble.className = 'ai-chat-message ' + role + (isError ? ' error' : '');
+  bubble.textContent = content;
+  if (role === 'assistant') {
+    var ids = Array.from(new Set(String(content).match(/INC-\d+/g) || [])).slice(0, 8);
+    if (ids.length) {
+      var links = document.createElement('div'); links.className = 'ai-chat-incident-links';
+      ids.forEach(function (id) {
+        var button = document.createElement('button'); button.textContent = 'Open ' + id;
+        button.onclick = function () { toggleAiChat(false); openDetailPanel(id); };
+        links.appendChild(button);
+      });
+      bubble.appendChild(links);
+    }
+  }
+  messages.appendChild(bubble);
+  messages.scrollTop = messages.scrollHeight;
+  return bubble;
+}
+
+function askAiSuggestion(button) {
+  var input = document.getElementById('aiChatInput');
+  input.value = button.textContent;
+  sendAiChatMessage();
+}
+
+function handleAiChatKey(event) {
+  if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendAiChatMessage(); }
+}
+
+function sendAiChatMessage() {
+  var input = document.getElementById('aiChatInput');
+  var send = document.getElementById('aiChatSend');
+  var message = String(input?.value || '').trim();
+  if (!message || send.disabled) return;
+  var token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) { appendAiChatMessage('assistant', 'Please sign in before using Incident Copilot.', true); return; }
+  appendAiChatMessage('user', message);
+  input.value = ''; send.disabled = true; send.textContent = '...';
+  var pending = appendAiChatMessage('assistant', 'Reviewing incident data...');
+  fetch(window.APP_CONFIG.API_BASE_URL + '/ai/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+    body: JSON.stringify({ message: message, history: aiChatHistory.slice(-8) })
+  }).then(function (response) {
+    return response.json().catch(function () { return {}; }).then(function (data) {
+      if (!response.ok || !data.success) throw new Error(data.message || 'AI request failed');
+      return data.data.answer;
+    });
+  }).then(function (answer) {
+    pending.remove();
+    appendAiChatMessage('assistant', answer);
+    aiChatHistory.push({ role: 'user', content: message }, { role: 'assistant', content: answer });
+    aiChatHistory = aiChatHistory.slice(-8);
+  }).catch(function (error) {
+    pending.remove(); appendAiChatMessage('assistant', error.message || 'Incident Copilot is unavailable.', true);
+  }).finally(function () { send.disabled = false; send.textContent = 'Send'; input.focus(); });
+}
 
 function updateReportTimestamps(incId, tzKey) {
   var inc = incidents.find(function (i) { return i.id === incId; });

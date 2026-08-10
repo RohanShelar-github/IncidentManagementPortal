@@ -235,7 +235,7 @@
 <!-- Severity heatmap-style bars -->
 <div class="chart-card">
 <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:4px">Severity Breakdown</div>
-<div style="font-size:12px;color:var(--text-muted);margin-bottom:20px">Live incident distribution across priority levels</div>
+<div style="font-size:12px;color:var(--text-muted);margin-bottom:20px">Live incident distribution across severity levels</div>
 <div id="homeSeverityBars"></div>
 </div>
 <!-- Status donut mini -->
@@ -458,7 +458,7 @@
 <div class="chart-header">
 <div>
 <div class="chart-title">Resolution Timeline</div>
-<div class="chart-sub">Avg hours to resolve by priority</div>
+<div class="chart-sub">Avg hours to resolve by severity</div>
 </div>
 </div>
 <div class="chart-container" style="height:200px">
@@ -1585,7 +1585,7 @@
 <table class="metric-drilldown-table">
 <thead>
 <tr>
-<th>Incident ID</th><th>Title / Summary</th><th>Customer</th><th>Priority</th><th>Severity</th><th>Status</th>
+<th>Incident ID</th><th>Title / Summary</th><th>Customer</th><th>Severity</th><th>Status</th>
 <th>Created Date/Time</th><th>Resolved Date/Time</th><th>SLA Target</th><th id="metricActualHeader">Actual Value</th><th>Breach Duration</th>
 </tr>
 </thead>
@@ -2237,5 +2237,21 @@
 <div id="c360PickerList" style="overflow-y:auto;flex:1;display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
 </div>
 </div>
+<button id="aiChatLauncher" class="ai-chat-launcher" onclick="handleAiLauncherClick(event)" onpointerdown="startAiLauncherDrag(event)" aria-label="Open Incident Copilot" title="Drag to move · Click to open Incident Copilot">
+<svg class="ai-chat-launcher-icon" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+<path class="ai-bot-antenna" d="M32 15V9"/><circle class="ai-bot-antenna-tip" cx="32" cy="7" r="3"/>
+<rect class="ai-bot-head" x="13" y="16" width="38" height="34" rx="13"/>
+<path class="ai-bot-ear" d="M13 27H9a4 4 0 0 0-4 4v7a4 4 0 0 0 4 4h4M51 27h4a4 4 0 0 1 4 4v7a4 4 0 0 1-4 4h-4"/>
+<rect class="ai-bot-face" x="18" y="22" width="28" height="22" rx="8"/>
+<circle class="ai-bot-eye" cx="26" cy="31" r="2.5"/><circle class="ai-bot-eye" cx="38" cy="31" r="2.5"/>
+<path class="ai-bot-smile" d="M26 37c3.5 3 8.5 3 12 0"/>
+</svg>
+</button>
+<section id="aiChatPanel" class="ai-chat-panel" aria-label="Incident Copilot" aria-hidden="true">
+<header class="ai-chat-header"><div><strong>Incident Copilot</strong><span>Read-only AI assistant</span></div><button onclick="toggleAiChat(false)" aria-label="Close Incident Copilot">&times;</button></header>
+<div id="aiChatMessages" class="ai-chat-messages"><div class="ai-chat-message assistant">Ask me to summarize incidents, find recent issues, explain metrics, or compare resolutions.</div></div>
+<div class="ai-chat-suggestions"><button onclick="askAiSuggestion(this)">Show open Critical incidents</button><button onclick="askAiSuggestion(this)">Summarize recent incidents</button></div>
+<footer class="ai-chat-compose"><textarea id="aiChatInput" rows="2" maxlength="2000" placeholder="Ask about incidents..." onkeydown="handleAiChatKey(event)"></textarea><button id="aiChatSend" onclick="sendAiChatMessage()">Send</button></footer>
+</section>
 <script src="./js/reportingMetrics.js"></script><script src="./js/incidentReportExcel.js"></script><script src="./js/app.js"></script><script src="./config/config.js"></script></body>
 </html>

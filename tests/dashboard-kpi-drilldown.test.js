@@ -21,13 +21,21 @@ test('Open drill-down includes only active incidents under current dashboard fil
 
 test('SLA drill-down uses the live active-breach calculation', () => {
   assert.match(frontend, /function isActiveSlaBreached\(inc\)/);
+  assert.match(frontend, /String\(\(inc && inc\.severity\) \|\| ''\)\.toLowerCase\(\) !== 'critical'/);
   assert.match(frontend, /getIncidentOpenedTimestamp\(inc\)/);
   assert.match(frontend, /getIncidentSlaHours\(inc\) \* 3600000/);
   assert.match(frontend, /sla: 'SLA-Breached Active Incidents'/);
 });
 
+test('metric drill-down no longer renders a legacy classification column', () => {
+  assert.doesNotMatch(frontend, /inc\.(?:classLevel) \|\| severity/);
+  assert.match(html, /<th>Incident ID<\/th><th>Title \/ Summary<\/th><th>Customer<\/th><th>Severity<\/th><th>Status<\/th>/);
+});
+
 test('dashboard Missed MTTR count and drill-down exclude Historian-area incidents', () => {
-  assert.match(frontend, /dashboardMttrIncidents = incidents\.filter\(function \(inc\) \{ return !isCustomer360HistorianIncident\(inc\); \}\)/);
+  assert.match(frontend, /dashboardMttrIncidents = incidents\.filter\(function \(inc\) \{/);
+  assert.match(frontend, /String\(\(inc && inc\.severity\) \|\| ''\)\.toLowerCase\(\) === 'critical'/);
+  assert.match(frontend, /!isCustomer360HistorianIncident\(inc\)/);
   assert.match(frontend, /countMissedMttr\(dashboardMttrIncidents\)/);
   assert.match(frontend, /metric === 'mttr' && !customerName && !reportingCategory && isCustomer360HistorianIncident\(inc\)/);
 });

@@ -9,9 +9,11 @@ const incidentRoutes = require('./routes/incidentRoutes');
 const masterDataRoutes = require('./routes/masterDataRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const roleRoutes = require('./routes/roleRoutes');
+const aiRoutes = require('./routes/aiRoutes');
 const { startUiServer } = require('../server-ui');
 const pool = require('./config/database');
 const { configured: emailConfigured } = require('./services/emailService');
+const { configured: aiConfigured } = require('./services/aiService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -46,6 +48,7 @@ app.use('/api/incidents', incidentRoutes);
 app.use('/api/master-data', masterDataRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/roles', roleRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Health check endpoint
 app.get('/api/health', async (req, res) => {
@@ -57,6 +60,7 @@ app.get('/api/health', async (req, res) => {
       databaseName: db[0].database_name,
       databaseTime: db[0].database_time,
       emailConfigured: emailConfigured(),
+      aiConfigured: aiConfigured(),
       timestamp: new Date().toISOString(),
       message: 'Incident Management Backend is running'
     });
