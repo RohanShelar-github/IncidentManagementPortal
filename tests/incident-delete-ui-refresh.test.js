@@ -58,3 +58,10 @@ test('open incident delete action is visible to every role', () => {
   assert.match(rendering, /\$\{i\.status !== 'Closed' \|\| currentRole === 'admin' \? `<button[^`]*deleteIncident/);
   assert.doesNotMatch(rendering, /hasPermission\('manage_users'\)[^\n]*deleteIncident/);
 });
+
+test('bulk delete action is available for selected incidents', () => {
+  assert.match(fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8'), /id="bulkDeleteBtn"[^>]*onclick="bulkDeleteSelectedIncidents\(\)"/);
+  assert.match(frontend, /async function bulkDeleteSelectedIncidents\(\)/);
+  assert.match(frontend, /bulkDeleteBtn/);
+  assert.match(frontend, /Only administrators can delete selected closed incidents/);
+});

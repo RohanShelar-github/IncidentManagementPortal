@@ -3260,7 +3260,9 @@ var selectedIncidents = new Set();
 function updateBulkBar() {
   const bar = document.getElementById('bulkBar');
   const count = document.getElementById('bulkCount');
+  const deleteBtn = document.getElementById('bulkDeleteBtn');
   if (count) count.textContent = selectedIncidents.size + ' selected';
+  if (deleteBtn) deleteBtn.textContent = selectedIncidents.size ? `🗑 Delete Selected (${selectedIncidents.size})` : '🗑 Delete Selected';
   if (bar) bar.classList.toggle('visible', selectedIncidents.size > 0);
 }
 
@@ -3309,6 +3311,94 @@ function executeBulkAction(field, value) {
   renderIncidentTable();
   updateStats();
   showToast(selectedIncidents.size + ' incidents updated', 'success');
+}
+
+async function bulkDeleteSelectedIncidents() {
+  if (!selectedIncidents.size) return;
+  const ids = Array.from(selectedIncidents);
+  const closedSelected = ids.filter(function (id) {
+    const inc = incidents.find(function (item) { return item.id === id; });
+    return inc && String(inc.status || '').toLowerCase() === 'closed';
+  });
+  if (closedSelected.length && String(currentRole || '').toLowerCase() !== 'admin') {
+    showToast('Only administrators can delete selected closed incidents.', 'error');
+    return;
+  }
+
+  const confirmed = await showConfirm({
+    icon: '🗑',
+    title: 'Delete selected incidents?',
+    msg: `You are about to delete ${ids.length} incident${ids.length !== 1 ? 's' : ''}. This action cannot be undone.`,
+    ok: 'Delete Selected',
+    danger: true
+  });
+  if (!confirmed) return;
+
+  const token = window.APP_CONFIG && window.APP_CONFIG.ENABLE_BACKEND
+    ? sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY)
+    : null;
+  if (window.APP_CONFIG && window.APP_CONFIG.ENABLE_BACKEND && !token) {
+    showToast('Not authenticated. Please login first.', 'error');
+    return;
+  }
+
+  let deletedCount = 0;
+  let failedCount = 0;
+
+  for (const id of ids) {
+    const inc = incidents.find(function (item) { return item.id === id; });
+    if (!inc) { failedCount++; continue; }
+
+    if (window.APP_CONFIG && window.APP_CONFIG.ENABLE_BACKEND) {
+      try {
+        const response = await fetch(window.APP_CONFIG.API_BASE_URL + '/incidents/' + encodeURIComponent(id), {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          }
+        });
+        const data = await response.json().catch(function () { return {}; });
+        if (!response.ok || !data.success) { failedCount++; continue; }
+      } catch (error) {
+        console.error('Bulk delete incident error:', error);
+        failedCount++;
+        continue;
+      }
+    } else {
+      activityLog.unshift({
+        type: 'critical',
+        msg: currentUserName + ' deleted ' + id + ' — ' + inc.title.substring(0, 45),
+        time: 'just now · ' + inc.customer,
+        incId: id
+      });
+      if (activityLog.length > 50) activityLog.pop();
+    }
+
+    removeDeletedIncidentFromUi(id);
+    deletedCount++;
+  }
+
+  ['bulkSevMenu', 'bulkStatMenu', 'bulkExportMenu'].forEach(function (menuId) {
+    var menu = document.getElementById(menuId);
+    if (menu) menu.style.display = 'none';
+  });
+
+  if (deletedCount) {
+    addAudit('🗑', 'Bulk Delete', deletedCount + ' incidents deleted');
+    addNotification('success', '<strong>' + deletedCount + ' incidents</strong> deleted.');
+    showToast('Deleted ' + deletedCount + ' incident' + (deletedCount !== 1 ? 's' : ''), 'success');
+  }
+  if (failedCount) {
+    showToast('Could not delete ' + failedCount + ' selected incident' + (failedCount !== 1 ? 's' : ''), 'error');
+  }
+
+  clearBulkSelection();
+  renderIncidentTable();
+  updateStats();
+  if (typeof renderKanban === 'function' && currentIncidentView === 'kanban') renderKanban();
+  renderHomePage();
+  refreshDashboardData();
 }
 
 function exportIncidents(fmt) {
