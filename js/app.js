@@ -3429,7 +3429,7 @@ function exportIncidents(fmt) {
 function openCmdPalette() {
   const el = document.getElementById('cmdPalette');
   if (!el) return;
-  el.style.cssText = 'display:flex;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding-top:80px';
+  applyCmdPaletteTheme(el, '80px', '6px');
   const inp = document.getElementById('cmdInput');
   if (inp) { inp.value = ''; inp.focus(); }
   runCmdSearch('');
@@ -3440,6 +3440,50 @@ function openGlobalSearch() { openCmdPalette(); }
 function closeCmdPalette() {
   const el = document.getElementById('cmdPalette');
   if (el) el.style.display = 'none';
+}
+
+function applyCmdPaletteTheme(el, topPadding, blurAmount) {
+  const lightMode = document.body.classList.contains('light-mode');
+  const overlayBg = lightMode ? 'rgba(15, 23, 42, 0.28)' : 'rgba(0,0,0,0.75)';
+  const panelBg = lightMode ? 'linear-gradient(180deg, #ffffff 0%, #f6f8fd 100%)' : '#16213e';
+  const border = lightMode ? '1px solid rgba(122, 144, 184, 0.28)' : '1px solid rgba(79,142,247,0.35)';
+  const shadow = lightMode ? '0 32px 80px rgba(15, 23, 42, 0.24), 0 0 0 1px rgba(255,255,255,0.6)' : '0 32px 80px rgba(0,0,0,0.8),0 0 0 1px rgba(255,255,255,0.05)';
+  const rowBg = lightMode ? '#ffffff' : '#16213e';
+  const footerBg = lightMode ? 'rgba(248, 250, 255, 0.96)' : 'rgba(0,0,0,0.2)';
+  const inputColor = lightMode ? 'var(--text)' : '#e0e6ff';
+  const mutedText = lightMode ? 'rgba(74, 80, 112, 0.82)' : 'rgba(255,255,255,0.45)';
+  const resultsBg = lightMode ? '#ffffff' : '#16213e';
+
+  el.style.cssText = `display:flex;position:fixed;inset:0;z-index:99999;background:${overlayBg};backdrop-filter:blur(${blurAmount});align-items:flex-start;justify-content:center;padding-top:${topPadding}`;
+
+  const panel = el.firstElementChild;
+  if (!panel) return;
+  panel.style.background = panelBg;
+  panel.style.border = border;
+  panel.style.boxShadow = shadow;
+
+  const row = panel.children[0];
+  const results = panel.children[1];
+  const footer = panel.children[2];
+  if (row) row.style.background = rowBg;
+  if (results) results.style.background = resultsBg;
+  if (footer) footer.style.background = footerBg;
+
+  const input = document.getElementById('cmdInput');
+  const escKey = row ? row.querySelector('kbd') : null;
+  if (input) input.style.color = inputColor;
+  if (escKey) {
+    escKey.style.background = lightMode ? 'rgba(79, 142, 247, 0.08)' : 'rgba(255,255,255,0.07)';
+    escKey.style.borderColor = lightMode ? 'rgba(122, 144, 184, 0.22)' : 'rgba(255,255,255,0.12)';
+    escKey.style.color = mutedText;
+  }
+  if (footer) {
+    Array.from(footer.querySelectorAll('kbd')).forEach(function (kbd) {
+      kbd.style.background = lightMode ? 'rgba(79, 142, 247, 0.08)' : 'rgba(255,255,255,0.07)';
+      kbd.style.borderColor = lightMode ? 'rgba(122, 144, 184, 0.22)' : 'rgba(255,255,255,0.12)';
+      kbd.style.color = mutedText;
+    });
+  }
 }
 
 function runCmdSearch(q) {
@@ -8302,7 +8346,7 @@ let cmdPaletteOpen = false;
 function openCmdPalette() {
   const el = document.getElementById('cmdPalette');
   if (!el) return;
-  el.style.cssText = 'display:flex;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.75);backdrop-filter:blur(10px);align-items:flex-start;justify-content:center;padding-top:10vh';
+  applyCmdPaletteTheme(el, '10vh', '10px');
   cmdPaletteOpen = true;
   setTimeout(() => { const inp = document.getElementById('cmdInput'); if (inp) { inp.focus(); } }, 80);
   runCmdSearch('');
@@ -8326,7 +8370,7 @@ function runCmdSearch(q) {
     { icon: '◈', label: 'Reports', sub: 'Export PDF & Excel', action: "navigate('reports',document.querySelectorAll('.nav-item')[2])", perm: 'view_reports' },
     { icon: '+', label: 'New Incident', sub: 'Create a new incident', action: "openCreateIncidentModal()", perm: 'create_incidents' },
     { icon: '👥', label: 'User Management', sub: 'Manage users and roles', action: "navigate('users',document.getElementById('usersNav'))", perm: 'manage_users' },
-    { icon: '🎯', label: 'Start Tour', sub: 'Take the guided tour', action: 'startTour()', perm: null },
+    { icon: '??', label: 'Guided Tour', sub: 'Walk through the portal', action: 'startTour()', perm: null },
   ];
   var pages = allPages.filter(function (p) { return !p.perm || hasPermission(p.perm); });
   const pageMatches = pages.filter(p => !q || p.label.toLowerCase().includes(q) || p.sub.toLowerCase().includes(q));
@@ -8338,7 +8382,7 @@ function runCmdSearch(q) {
     html2 += '<div class="cmd-section">Pages & Actions</div>';
     html2 += pageMatches.map(p =>
       `<div class="cmd-item" onclick="closeCmdPalette();${p.action}">
-        <div class="cmd-item-icon" style="background:rgba(79,142,247,0.1)">${p.icon}</div>
+        <div class="cmd-item-icon" style="background:${document.body.classList.contains('light-mode') ? 'rgba(79,142,247,0.14)' : 'rgba(79,142,247,0.1)'}">${p.icon}</div>
         <div class="cmd-item-text">${p.label}<div class="cmd-item-sub">${p.sub}</div></div>
       </div>`
     ).join('');
@@ -8347,7 +8391,7 @@ function runCmdSearch(q) {
     html2 += '<div class="cmd-section">Incidents</div>';
     html2 += incMatches.map(inc =>
       `<div class="cmd-item" onclick="closeCmdPalette();${inc.status === 'Closed' && hasPermission('view_reports') ? `viewIncidentReport('${inc.id}')` : `openDetailPanel('${inc.id}')`}">
-        <div class="cmd-item-icon" style="background:rgba(247,92,124,0.1)">${inc.id}</div>
+        <div class="cmd-item-icon" style="background:${document.body.classList.contains('light-mode') ? 'rgba(247,92,124,0.14)' : 'rgba(247,92,124,0.1)'}">${inc.id}</div>
         <div class="cmd-item-text">${inc.title.substring(0, 50)}<div class="cmd-item-sub">${inc.customer} · ${inc.severity}</div></div>
       </div>`
     ).join('');
@@ -8356,7 +8400,7 @@ function runCmdSearch(q) {
     html2 += '<div class="cmd-section">Customers</div>';
     html2 += custMatches.map(c =>
       `<div class="cmd-item" onclick="closeCmdPalette();openCustomer360('${c}')">
-        <div class="cmd-item-icon" style="background:rgba(45,212,160,0.1)">🏢</div>
+        <div class="cmd-item-icon" style="background:${document.body.classList.contains('light-mode') ? 'rgba(45,212,160,0.14)' : 'rgba(45,212,160,0.1)'}">🏢</div>
         <div class="cmd-item-text">${c}<div class="cmd-item-sub">Customer 360 view</div></div>
       </div>`
     ).join('');
@@ -8399,14 +8443,19 @@ function showTourStep() {
   const tooltip = document.getElementById('tourTooltip');
   var _tt = document.getElementById('tourTitle'); if (_tt) _tt.textContent = step.title;
   var _td = document.getElementById('tourDesc'); if (_td) _td.textContent = step.desc;
-  document.getElementById('tourNextBtn').textContent = tourStep < tourSteps.length - 1 ? 'Next →' : 'Finish 🎉';
+  var _nb = document.getElementById('tourNextBtn');
+  if (_nb) _nb.textContent = tourStep < tourSteps.length - 1 ? 'Next →' : 'Finish 🎉';
   if (!overlay) return;
+  if (tooltip) tooltip.style.display = 'block';
+  if (highlight) highlight.style.display = el ? 'block' : 'none';
   if (el && highlight && tooltip) {
     const r = el.getBoundingClientRect(), pad = 6;
-    highlight.style.cssText = `position:fixed;left:${r.left - pad}px;top:${r.top - pad}px;width:${r.width + pad * 2}px;height:${r.height + pad * 2}px;border-radius:8px;box-shadow:0 0 0 4000px rgba(0,0,0,0.55);z-index:99991;border:2px solid #4f8ef7;pointer-events:none;`;
+    highlight.style.cssText = `display:block;position:fixed;left:${r.left - pad}px;top:${r.top - pad}px;width:${r.width + pad * 2}px;height:${r.height + pad * 2}px;border-radius:8px;box-shadow:0 0 0 4000px rgba(0,0,0,0.55);z-index:99991;border:2px solid #4f8ef7;pointer-events:none;`;
     const tipTop = r.bottom + 12 < window.innerHeight - 160 ? r.bottom + 12 : r.top - 160;
     const tipLeft = Math.min(Math.max(r.left, 10), window.innerWidth - 310);
-    tooltip.style.cssText = `position:fixed;left:${tipLeft}px;top:${tipTop}px;z-index:99992;background:var(--surface);border:1px solid #4f8ef7;border-radius:12px;padding:16px 20px;max-width:280px;box-shadow:0 8px 32px rgba(0,0,0,0.4);pointer-events:all;`;
+    tooltip.style.cssText = `display:block;position:fixed;left:${tipLeft}px;top:${tipTop}px;z-index:99992;background:var(--surface);border:1px solid #4f8ef7;border-radius:12px;padding:16px 20px;max-width:280px;box-shadow:0 8px 32px rgba(0,0,0,0.4);pointer-events:all;`;
+  } else if (tooltip) {
+    tooltip.style.cssText = 'display:block;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:99992;background:var(--surface);border:1px solid #4f8ef7;border-radius:12px;padding:16px 20px;max-width:320px;box-shadow:0 8px 32px rgba(0,0,0,0.4);pointer-events:all;';
   }
   overlay.style.display = 'block';
 }
@@ -8416,6 +8465,10 @@ function skipTour() {
   tourActive = false;
   var _to = document.getElementById('tourOverlay');
   if (_to) _to.style.display = 'none';
+  var _tt = document.getElementById('tourTooltip');
+  if (_tt) _tt.style.display = 'none';
+  var _th = document.getElementById('tourHighlight');
+  if (_th) _th.style.display = 'none';
   if (tourStep >= tourSteps.length - 1) showToast('🎉 Tour complete!', 'success');
 }
 
@@ -8480,6 +8533,10 @@ function showPreSendEmailPreview(inc) {
   const modal = document.getElementById('notifSimModal');
   const content = document.getElementById('notifSimContent');
   if (!modal || !content) return;
+  // Keep the completed incident form in the DOM while the email is reviewed,
+  // but hide it before the preview opens.  This avoids showing two stacked
+  // modals and prevents a brief reappearance of the create form on submit.
+  document.getElementById('incidentModal')?.classList.remove('open');
   const defaultSubject = `[${inc.severity}] New Incident: ${inc.title}`;
   const defaultBody = '';
   content.innerHTML = `
@@ -8511,6 +8568,8 @@ function validEmailList(value, required) {
 function cancelPreSendEmailPreview() {
   pendingIncidentEmail = null;
   document.getElementById('notifSimModal').style.display = 'none';
+  // "Back" is the only path that should return to the completed create form.
+  document.getElementById('incidentModal')?.classList.add('open');
 }
 
 function confirmIncidentEmailAndCreate() {
@@ -8524,6 +8583,7 @@ function confirmIncidentEmailAndCreate() {
   if (!subject) { showToast('Email subject cannot be empty', 'error'); return; }
   pendingIncidentEmail = { to, cc, subject, body };
   document.getElementById('notifSimModal').style.display = 'none';
+  // The incident modal remains hidden while creation and mail delivery run.
   saveIncident();
 }
 

@@ -2226,6 +2226,23 @@
 </div>
 </div>
 </div>
+<!-- ─── GUIDED TOUR OVERLAY ─────────────────────────────── -->
+<div id="tourOverlay" class="tour-overlay" style="display:none" onclick="skipTour()">
+<div id="tourHighlight"></div>
+<div id="tourTooltip" class="tour-tooltip" onclick="event.stopPropagation()" style="display:none">
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:10px">
+<div>
+<div id="tourTitle" style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:4px">Tour</div>
+<div id="tourDesc" style="font-size:13px;color:var(--text-muted);line-height:1.5">Tour description</div>
+</div>
+<button onclick="skipTour()" style="background:transparent;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;line-height:1">×</button>
+</div>
+<div style="display:flex;gap:8px;justify-content:flex-end">
+<button onclick="skipTour()" style="padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer">Skip</button>
+<button id="tourNextBtn" onclick="nextTourStep()" style="padding:8px 12px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;cursor:pointer">Next →</button>
+</div>
+</div>
+</div>
 <!-- ─── CUSTOMER 360 PICKER OVERLAY ─────────────────────── -->
 <div id="c360PickerOverlay" style="display:none;position:fixed;inset:0;z-index:8000;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);align-items:center;justify-content:center">
 <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;width:520px;max-width:95vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,0.5)">
