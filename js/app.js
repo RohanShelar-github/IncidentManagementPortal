@@ -2012,7 +2012,13 @@ function applyCurrentUserProfile(user) {
     lastActive: user.lastActive || 'Just now'
   };
   var aiLauncher = document.getElementById('aiChatLauncher');
-  if (aiLauncher) aiLauncher.style.display = 'block';
+  if (aiLauncher) {
+    // The launcher may have a saved drag position.  Make it measurable before
+    // restoring that position; otherwise offsetWidth/offsetHeight are zero
+    // while it is hidden and the button can be restored off-screen.
+    aiLauncher.style.display = 'block';
+    requestAnimationFrame(function () { restoreAiLauncherPosition(); });
+  }
   if (currentUserProfile.name) currentUserName = currentUserProfile.name;
   ['sidebarUserName', 'profileUserLabel', 'profileDdName', 'profileModalName'].forEach(function (id) {
     var el = document.getElementById(id); if (el) el.textContent = currentUserName;
