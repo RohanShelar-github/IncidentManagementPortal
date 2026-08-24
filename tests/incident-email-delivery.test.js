@@ -26,6 +26,21 @@ test('mail is addressed through server-side environment configuration', () => {
   assert.doesNotMatch(frontend, /MAIL_CLIENT_SECRET|MAIL_OAUTH_REFRESH_TOKEN/);
 });
 
+test('mailbox renders a safely sandboxed rich-email preview', () => {
+  assert.match(frontend, /function mailboxSafeRichHtml/);
+  assert.match(frontend, /script,iframe,object,embed,form,input,button,textarea,select,meta,base,link,style/);
+  assert.match(frontend, /frame\.setAttribute\('sandbox', 'allow-popups'\)/);
+  assert.match(frontend, /allow-popups allow-popups-to-escape-sandbox/);
+  assert.match(frontend, /function openMailboxMessage\(id\)[\s\S]*?frame\.setAttribute\('sandbox', 'allow-popups allow-popups-to-escape-sandbox'\)/);
+  assert.match(frontend, /node\.setAttribute\('target', '_blank'\)/);
+  assert.match(frontend, /\^\(https:\|mailto:\|cid:\|data:image/);
+  assert.match(frontend, /document\.body\.classList\.contains\('light-mode'\)/);
+  assert.match(frontend, /localStorage\.getItem\('mc_theme'\) === 'light'/);
+  assert.match(frontend, /mailboxPreview\.srcdoc = mailboxSafeRichHtml\(activeMailboxRichBody, !isLight\)/);
+  assert.match(frontend, /body,body \*\{color:/);
+  assert.match(frontend, /frame\.srcdoc = mailboxSafeRichHtml/);
+});
+
 test('generated incident email includes operational incident details and escapes XML', () => {
   const previousUrl = process.env.PORTAL_BASE_URL;
   process.env.PORTAL_BASE_URL = 'http://portal.example:5500';
@@ -71,6 +86,141 @@ test('mail configuration never becomes active without OAuth token material', () 
   assert.equal(configured(), false);
   Object.keys(process.env).forEach((key) => { if (!(key in previous)) delete process.env[key]; });
   Object.assign(process.env, previous);
+});
+
+test('Microsoft Graph mail provider uses application authentication and the Graph send endpoint', () => {
+  const service = fs.readFileSync('backend/services/emailService.js', 'utf8');
+  const exampleEnv = fs.readFileSync('backend/.env.example', 'utf8');
+  assert.match(service, /mailProvider\(\) === 'graph'/);
+  assert.match(service, /grant_type: 'client_credentials'/);
+  assert.match(service, /https:\/\/graph\.microsoft\.com\/v1\.0/);
+  assert.match(service, /\/users\/\$\{encodeURIComponent\(from\)\}\/sendMail/);
+  assert.match(exampleEnv, /MAIL_PROVIDER=graph/);
+});
+
+test('shared operations mailbox is exposed through authenticated, role-permission endpoints', () => {
+  const service = fs.readFileSync('backend/services/emailService.js', 'utf8');
+  const routes = fs.readFileSync('backend/routes/mailboxRoutes.js', 'utf8');
+  const controllerSource = fs.readFileSync('backend/controllers/mailboxController.js', 'utf8');
+  const server = fs.readFileSync('backend/server.js', 'utf8');
+  assert.match(service, /mailFolders\/inbox\/messages/);
+  assert.match(routes, /router\.use\(authenticateToken\)/);
+  assert.match(controllerSource, /requireMailboxPermission/);
+  assert.match(controllerSource, /view_mailbox/);
+  assert.match(server, /app\.use\('\/api\/mailbox', mailboxRoutes\)/);
+});
+
+test('mailbox permits authenticated role-based replies and selected attachment downloads', () => {
+  const routes = fs.readFileSync('backend/routes/mailboxRoutes.js', 'utf8');
+  const controller = fs.readFileSync('backend/controllers/mailboxController.js', 'utf8');
+  const mailService = fs.readFileSync('backend/services/emailService.js', 'utf8');
+  assert.match(routes, /router\.post\('\/inbox\/:id\/reply', replyToMailboxMessage\)/);
+  assert.match(routes, /attachments\/:attachmentId\/download/);
+  assert.match(controller, /send_mailbox/);
+  assert.match(mailService, /createReply/);
+  assert.match(mailService, /25 \* 1024 \* 1024/);
+  assert.match(frontend, /downloadMailboxAttachment/);
+  assert.match(frontend, /showMailboxReply/);
+});
+
+test('mailbox composer supports rich reply, reply-all, forward, and bounded attachments', () => {
+  const mailService = fs.readFileSync('backend/services/emailService.js', 'utf8');
+  assert.match(mailService, /createReplyAll/);
+  assert.match(mailService, /createForward/);
+  assert.match(mailService, /fileAttachment/);
+  assert.match(mailService, /normalizeMailboxAttachments/);
+  assert.match(frontend, /mailbox-rich-editor/);
+  assert.match(frontend, /mailboxFilesToPayload/);
+  assert.match(frontend, /showMailboxReply\(message, detail, 'replyAll'\)/);
+  assert.match(frontend, /showMailboxReply\(message, detail, 'forward'\)/);
+  assert.match(frontend, /bodyWrap\.style\.display = 'none'/);
+  assert.match(frontend, /composerObserver/);
+});
+
+test('mailbox message actions use compact Outlook-style reply, reply-all, and forward controls', () => {
+  assert.match(frontend, /function mailboxActionButton/);
+  assert.match(frontend, /mailboxActionButton\('Reply', '↩'/);
+  assert.match(frontend, /mailboxActionButton\('Reply all', '↩↩'/);
+  assert.match(frontend, /mailboxActionButton\('Forward', '↪'/);
+  assert.match(frontend, /showMailboxReply\(message, detail, 'replyAll'\)/);
+});
+
+test('reply all exposes original CC recipients while excluding the shared mailbox itself', () => {
+  const mailService = fs.readFileSync('backend/services/emailService.js', 'utf8');
+  assert.match(mailService, /dto\.replyAllCc/);
+  assert.match(mailService, /message\?\.ccRecipients/);
+  assert.match(mailService, /address\.toLowerCase\(\) !== self/);
+  assert.match(frontend, /message\.replyAllCc/);
+  assert.match(frontend, /Reply all recipients from the original email are included below/);
+});
+
+test('mailbox access is an assignable role permission with an admin-safe default', () => {
+  const roleController = fs.readFileSync('backend/controllers/roleController.js', 'utf8');
+  const migration = fs.readFileSync('backend/sql/016_mailbox_role_permissions.sql', 'utf8');
+  assert.match(roleController, /view_mailbox/);
+  assert.match(roleController, /send_mailbox/);
+  assert.match(migration, /INSERT IGNORE INTO role_permissions/);
+  assert.match(frontend, /view_mailbox: 'View Mailbox'/);
+  assert.match(frontend, /send_mailbox: 'Send Mailbox Replies'/);
+});
+
+test('mailbox deletion is role-controlled and uses Microsoft 365 Deleted Items behavior', () => {
+  const routes = fs.readFileSync('backend/routes/mailboxRoutes.js', 'utf8');
+  const controller = fs.readFileSync('backend/controllers/mailboxController.js', 'utf8');
+  const mailService = fs.readFileSync('backend/services/emailService.js', 'utf8');
+  const migration = fs.readFileSync('backend/sql/017_mailbox_delete_permission.sql', 'utf8');
+  assert.match(routes, /router\.delete\('\/inbox\/:id', deleteMailboxMessage\)/);
+  assert.match(controller, /delete_mailbox/);
+  assert.match(mailService, /async function deleteInboxMessage/);
+  assert.match(migration, /delete_mailbox/);
+  assert.match(frontend, /deleteMailboxMessage/);
+});
+
+test('mailbox supports batch selection deletion and editable reply subjects', () => {
+  assert.match(frontend, /selectedMailboxMessageIds/);
+  assert.match(frontend, /deleteSelectedMailboxMessages/);
+  const bulkDelete = frontend.match(/function deleteSelectedMailboxMessages\(\)[\s\S]*?function renderMailboxList/)?.[0] || '';
+  const singleDelete = frontend.match(/function deleteMailboxMessage\(message, detail\)[\s\S]*?function mailboxActionButton/)?.[0] || '';
+  assert.doesNotMatch(bulkDelete, /window\.confirm/);
+  assert.doesNotMatch(singleDelete, /window\.confirm/);
+  assert.match(bulkDelete, /mailboxMessages = mailboxMessages\.filter/);
+  assert.match(singleDelete, /mailboxMessages = mailboxMessages\.filter/);
+  assert.match(frontend, /toggleMailboxSelectAll/);
+  assert.match(frontend, /subject\.placeholder = 'Subject'/);
+  assert.doesNotMatch(frontend, /subject\.readOnly = true/);
+  const mailService = fs.readFileSync('backend/services/emailService.js', 'utf8');
+  assert.match(mailService, /if \(options\.subject\) updates\.subject/);
+});
+
+test('new mailbox emails create permission-scoped bell notifications and mailbox uses the standard refresh icon', () => {
+  const mailboxController = fs.readFileSync('backend/controllers/mailboxController.js', 'utf8');
+  const notificationService = fs.readFileSync('backend/services/notificationService.js', 'utf8');
+  const markup = fs.readFileSync('index.html', 'utf8');
+  const server = fs.readFileSync('backend/server.js', 'utf8');
+  assert.match(mailboxController, /pollMailboxForNotifications/);
+  assert.match(mailboxController, /setInterval\(pollMailboxForNotifications, 60000\)/);
+  assert.match(notificationService, /function notifyMailboxUsers/);
+  assert.match(notificationService, /rp\.permission_key = 'view_mailbox'/);
+  assert.match(server, /startMailboxNotificationPolling\(\)/);
+  assert.match(markup, /id="mailboxRefreshIcon"/);
+  assert.doesNotMatch(markup, /onclick="loadMailbox\(\)">Refresh/);
+  assert.match(frontend, /n\.type === 'mailbox'/);
+});
+
+test('mailbox converts bounded inline signature images into safe preview data URLs', () => {
+  const mailService = fs.readFileSync('backend/services/emailService.js', 'utf8');
+  assert.match(mailService, /attachments`\)/);
+  assert.match(mailService, /attachment\?\.isInline/);
+  assert.match(mailService, /\^image\\\//);
+  assert.match(mailService, /data:\$\{contentType\};base64/);
+});
+
+test('mailbox refreshes automatically while its page is open', () => {
+  assert.match(frontend, /function startMailboxPolling\(\)/);
+  assert.match(frontend, /loadMailbox\(\{ silent: true \}\)/);
+  assert.match(frontend, /\}, 15000\);/);
+  assert.match(frontend, /if \(page === 'mailbox'\) startMailboxPolling\(\)/);
+  assert.match(frontend, /New mailbox email received:/);
 });
 
 test('frontend reports whether post-creation email was sent, failed, or skipped', () => {
@@ -122,4 +272,10 @@ test('closed email contains resolution metrics and the incident link', () => {
   assert.match(email.html, /Open Incident INC-1001/);
   if (previousUrl === undefined) delete process.env.PORTAL_BASE_URL;
   else process.env.PORTAL_BASE_URL = previousUrl;
+});
+
+test('mailbox compose mode is selected only from the message action icons', () => {
+  const replyComposer = frontend.match(/function showMailboxReply\(message, detail, initialMode\) \{[\s\S]*?function updateMode\(\)/)?.[0] || '';
+  assert.match(replyComposer, /var mode = \{ value: initialMode \|\| 'reply' \}; heading\.append\(label\);/);
+  assert.doesNotMatch(replyComposer, /document\.createElement\('select'\)/);
 });

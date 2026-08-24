@@ -43,7 +43,7 @@ INSERT INTO permissions(permission_key, permission_name) VALUES
 ('view_dashboard','View Dashboard'),('view_incidents','View Incidents'),('create_incidents','Create Incidents'),
 ('edit_incidents','Edit Incidents'),('close_incidents','Close Incidents'),('view_reports','View Reports'),
 ('export_reports','Export Reports'),('view_customer360','View Customer 360'),('manage_users','Manage Users'),
-('manage_roles','Manage Roles'),('assign_roles','Assign Roles'),('manage_data','Manage Data')
+('view_mailbox','View Mailbox'),('send_mailbox','Send Mailbox Replies'),('delete_mailbox','Delete Mailbox Emails'),('manage_roles','Manage Roles'),('assign_roles','Assign Roles'),('manage_data','Manage Data')
 ON DUPLICATE KEY UPDATE permission_name=VALUES(permission_name);
 INSERT IGNORE INTO role_permissions(role_id, permission_key)
 SELECT r.id, p.permission_key FROM roles r CROSS JOIN permissions p WHERE r.role_key='admin';

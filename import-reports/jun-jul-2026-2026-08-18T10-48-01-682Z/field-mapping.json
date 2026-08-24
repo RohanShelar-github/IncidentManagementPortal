@@ -1,0 +1,68 @@
+{
+  "sf_case_no": [
+    "incident_ref",
+    "sf_case_no"
+  ],
+  "Customer": [
+    "customer (exact source text)",
+    "customer_id (case-insensitive existing-master lookup)"
+  ],
+  "Project Area": [
+    "project",
+    "project_area"
+  ],
+  "Area": [
+    "area (exact source text)",
+    "area_id (existing-master lookup)"
+  ],
+  "product_line": [
+    "product_line"
+  ],
+  "Date/Time Opened": [
+    "date_time_opened",
+    "start_dt"
+  ],
+  "Date/Time Closed": [
+    "date_time_closed",
+    "end_dt"
+  ],
+  "Closed Date": [
+    "closed_date"
+  ],
+  "Severity": [
+    "severity (required database enum encoding)",
+    "legacy_raw (exact source spelling)"
+  ],
+  "Internal Status": [
+    "status (required database enum encoding)",
+    "internal_status (exact source spelling)",
+    "legacy_raw"
+  ],
+  "case_owner": [
+    "case_owner"
+  ],
+  "Downtime(Mins)": [
+    "downtime_mins"
+  ],
+  "Mean Time to Detect (MTTD)": [
+    "mttd_minutes"
+  ],
+  "Resolution": [
+    "resolution"
+  ],
+  "Incident Report status": [
+    "incident_report_status"
+  ],
+  "Month": [
+    "legacy_month"
+  ],
+  "Account Name": [
+    "account_name"
+  ],
+  "R&D Tickets": [
+    "rd_tickets"
+  ],
+  "All source columns": [
+    "legacy_raw (exact values and Excel serials)"
+  ]
+}

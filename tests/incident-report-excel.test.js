@@ -72,12 +72,12 @@ test('maps incident values to the template and retains portal-only details', () 
     'Closed',
     'Babai Chatterjee',
     '4m',
-    '21m',
     'Historian process exhausted available memory.',
     'AOC Team',
     '00135421',
     'FNP-1125'
   ].forEach((value) => assert.equal(values.has(value), true, `missing workbook value: ${value}`));
+  assert.equal(values.has('21m'), false, 'MTTR must not be included in generated Excel reports');
 
   assert.match(workbook.sheets[0].xml, /<c r="B9" s="7"><v>46210<\/v><\/c>/);
   assert.match(workbook.sheets[0].xml, /<c r="B15" s="9"><v>21<\/v><\/c>/);

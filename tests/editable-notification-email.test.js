@@ -35,9 +35,15 @@ test('confirmation validates recipients and subject, then submits the optional n
   assert.match(frontend, /Additional message \(optional\)/);
 });
 
-test('preview defaults to the authenticated creator and operations CC', () => {
-  assert.match(frontend, /notificationEmailTo'\)\.value = currentUserProfile\.email/);
-  assert.match(frontend, /notificationEmailCc'\)\.value = 'its24x7@magicsoftware\.com'/);
+test('preview uses editable recipient chips with authenticated creator and operations defaults', () => {
+  assert.match(frontend, /id="notificationEmailToChips"/);
+  assert.match(frontend, /id="notificationEmailCcChips"/);
+  assert.match(frontend, /id="notificationEmailToInput"/);
+  assert.match(frontend, /id="notificationEmailCcInput"/);
+  assert.match(frontend, /function addPreSendRecipient\(group\)/);
+  assert.match(frontend, /function removePreSendRecipient\(group, index\)/);
+  assert.match(frontend, /currentUserProfile\.email \|\| ''/);
+  assert.match(frontend, /'its24x7@magicsoftware\.com'/);
   assert.match(frontend, /const to = \(document\.getElementById\('notificationEmailTo'\)/);
   assert.match(frontend, /const cc = \(document\.getElementById\('notificationEmailCc'\)/);
 });

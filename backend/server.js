@@ -10,6 +10,8 @@ const masterDataRoutes = require('./routes/masterDataRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const roleRoutes = require('./routes/roleRoutes');
 const aiRoutes = require('./routes/aiRoutes');
+const mailboxRoutes = require('./routes/mailboxRoutes');
+const { startMailboxNotificationPolling } = require('./controllers/mailboxController');
 const { startUiServer } = require('../server-ui');
 const pool = require('./config/database');
 const { configured: emailConfigured } = require('./services/emailService');
@@ -49,6 +51,7 @@ app.use('/api/master-data', masterDataRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/mailbox', mailboxRoutes);
 
 // Health check endpoint
 app.get('/api/health', async (req, res) => {
@@ -94,6 +97,7 @@ app.use((err, req, res, next) => {
 
 // Start server
 app.listen(PORT, HOST, () => {
+  startMailboxNotificationPolling();
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║   Incident Management Portal - Backend Server Started     ║

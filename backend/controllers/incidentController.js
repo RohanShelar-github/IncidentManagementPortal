@@ -5,7 +5,7 @@ const {
   resolveDurationMinutes
 } = require('../services/incidentNormalization');
 const { notifyUsers } = require('../services/notificationService');
-const { sendIncidentClosedEmail, sendIncidentCreatedEmail } = require('../services/emailService');
+const { sendIncidentClosedEmail, sendIncidentCreatedEmail, sendCriticalIncidentEmail, htmlEscape } = require('../services/emailService');
 const INCIDENT_NOTIFICATION_CC = 'its24x7@magicsoftware.com';
 const INCIDENT_NOTIFICATION_BCC = 'prachi_palande@magicsoftware.com,nikhil_kawade@magicsoftware.com,shravani_bhosale@magicsoftware.com,jidnyasa_patil@magicsoftware.com';
 
@@ -97,11 +97,11 @@ const resolveUserId = async (nameOrId) => {
 const resolveCustomer = async (nameOrId) => {
   if (!nameOrId) return { id: null, name: null };
   if (/^\d+$/.test(String(nameOrId))) {
-    const [rows] = await pool.query('SELECT id, customer_name FROM customers WHERE id = ? LIMIT 1', [Number(nameOrId)]);
-    return rows.length ? { id: rows[0].id, name: rows[0].customer_name } : { id: null, name: String(nameOrId) };
+    const [rows] = await pool.query('SELECT id, customer_name, timezone FROM customers WHERE id = ? LIMIT 1', [Number(nameOrId)]);
+    return rows.length ? { id: rows[0].id, name: rows[0].customer_name, timezone: rows[0].timezone || null } : { id: null, name: String(nameOrId), timezone: null };
   }
-  const [rows] = await pool.query('SELECT id, customer_name FROM customers WHERE customer_name = ? OR customer_code = ? LIMIT 1', [nameOrId, nameOrId]);
-  return rows.length ? { id: rows[0].id, name: rows[0].customer_name } : { id: null, name: String(nameOrId) };
+  const [rows] = await pool.query('SELECT id, customer_name, timezone FROM customers WHERE customer_name = ? OR customer_code = ? LIMIT 1', [nameOrId, nameOrId]);
+  return rows.length ? { id: rows[0].id, name: rows[0].customer_name, timezone: rows[0].timezone || null } : { id: null, name: String(nameOrId), timezone: null };
 };
 
 const resolveArea = async (nameOrId) => {
@@ -287,7 +287,19 @@ const createIncident = async (req, res) => {
     }
     let email = { sent: false, skipped: true, message: 'Email was not attempted' };
     try {
-      email = await sendIncidentCreatedEmail({
+      const isCritical = normalizeSeverity(b.severity) === 'critical';
+      const notification = b.notification_email || {};
+      if (isCritical) {
+        const body = String(notification.body || criticalEmailBody({ id: incidentRef, title: b.title, description: b.description, customer: resolvedCustomer.name || b.customer, project: b.project, severity: b.severity, area: resolvedArea.name || b.area, start: b.date_time_opened || start, user: req.user.name || req.user.email }));
+        const subject = String(notification.subject || b.title).replace(/[\r\n]+/g, ' ').trim().slice(0, 255);
+        email = await sendCriticalIncidentEmail({ from: process.env.MAIL_FROM, to: notification.to || req.user.email, cc: notification.cc || '', bcc: '', subject, html: criticalEmailHtml({ id: incidentRef, title: b.title, body, customer: resolvedCustomer.name || b.customer, project: b.project, severity: b.severity, area: resolvedArea.name || b.area, start: b.date_time_opened || start, timezone: resolvedCustomer.timezone || b.timezone, engineer: b.engineer, user: req.user.name || req.user.email }), attachments: notification.attachments || [] });
+        if (created.length) {
+          const incidentId = created[0].id;
+          const [thread] = await pool.query('INSERT INTO incident_email_threads (incident_id, customer_name, conversation_id, graph_thread_id, message_id, internet_message_id, subject, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [incidentId, resolvedCustomer.name || b.customer || null, email.conversationId || null, email.conversationId || null, email.messageId || null, email.internetMessageId || null, subject, email.sent ? 'sent' : 'failed', req.user.id]);
+          await pool.query('INSERT INTO incident_email_messages (thread_id, incident_id, direction, action_type, graph_message_id, internet_message_id, subject, sender, recipients, cc_recipients, body_preview, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [thread.insertId, incidentId, 'outbound', 'email_sent', email.messageId || null, email.internetMessageId || null, subject, process.env.MAIL_FROM || null, notification.to || req.user.email, notification.cc || null, body.slice(0, 6000), email.sent ? 'sent' : 'failed', req.user.id]);
+          await pool.query('INSERT INTO activity_logs (incident_id, action_type, action_by, detail) VALUES (?, ?, ?, ?)', [incidentId, 'critical_email_sent', req.user.id, `Critical incident email sent: ${subject}`]);
+        }
+      } else email = await sendIncidentCreatedEmail({
         id: incidentRef, title: b.title, severity: b.severity, status: b.status || 'New',
         customer: resolvedCustomer.name || b.customer, project: b.project, area: resolvedArea.name || b.area,
         engineer: b.engineer, startDT: start, date_time_opened: b.date_time_opened || start,
@@ -338,6 +350,60 @@ const getIncidents = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
+
+function criticalEmailBody({ id, title, description, customer, project, severity, area, start, user }) {
+  return `Hi Team,\n\nWe have received a critical incident: ${title}.\n\nIssue Reported:\n${description || 'Not provided'}\n\nOur team is currently investigating the issue and has assigned it the highest priority.\n\nCurrent Status: Investigation in Progress\n\nIncident Number: ${id}\nCustomer: ${customer || 'Not provided'}\nEnvironment / Project: ${project || 'Not provided'}\nSeverity: ${severity || 'Critical'}\nArea: ${area || 'Not provided'}\nCreation Date/Time: ${start || 'Not provided'}\n\nWe will provide further updates as soon as more information becomes available.\n\nThanks & Regards,\n${user || 'AOC Operations Team'}`;
+}
+
+function criticalEmailHtml({ id, title, body, customer, project, severity, area, start, timezone, engineer, user }) {
+  const sections = String(body || '').split(/\r?\n\s*\r?\n/).filter(Boolean).map(section => section.trim());
+  const updateIndex = sections.findIndex(section => /^We will provide further updates/i.test(section));
+  const paragraphs = (values) => values.map(section => `<p style="margin:0 0 16px;white-space:pre-wrap">${htmlEscape(section)}</p>`).join('');
+  const intro = paragraphs(updateIndex < 0 ? sections : sections.slice(0, updateIndex));
+  const closing = paragraphs(updateIndex < 0 ? [] : sections.slice(updateIndex));
+  const row = (label, value) => `<tr><td style="padding:10px 14px;width:38%;border-bottom:1px solid #e5e7eb;color:#64748b;font-size:13px;font-weight:600">${htmlEscape(label)}</td><td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#0f172a;font-size:13px;font-weight:600">${htmlEscape(value || 'Not provided')}</td></tr>`;
+  const created = `${start || 'Not provided'}${timezone ? ` ${timezone}` : ''}`;
+  return `<!doctype html><html><body style="margin:0;padding:24px;background:#f3f6fb;font-family:Arial,Helvetica,sans-serif;color:#172033"><div style="max-width:720px;margin:0 auto;background:#ffffff;border:1px solid #dce3ee;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(15,23,42,.08)"><div style="padding:24px 28px;background:#152b5d;color:#ffffff"><div style="font-size:11px;letter-spacing:1.2px;font-weight:700;opacity:.8">AOC 24x7 · INCIDENT MANAGEMENT</div><div style="margin-top:10px;font-size:24px;line-height:1.25;font-weight:700">Critical Incident Notification</div><div style="margin-top:8px;font-size:15px;line-height:1.4;opacity:.95">${htmlEscape(title || 'Untitled incident')}</div></div><div style="padding:22px 28px"><div style="display:inline-block;padding:7px 11px;background:#fff1f2;border:1px solid #fecdd3;border-radius:999px;color:#be123c;font-size:12px;font-weight:700;letter-spacing:.3px">CRITICAL · INVESTIGATION IN PROGRESS</div><div style="margin-top:22px;font-size:14px;line-height:1.6;color:#25334a">${intro}</div><div style="margin-top:22px;border:1px solid #dce3ee;border-radius:8px;overflow:hidden"><div style="padding:11px 14px;background:#f8fafc;border-bottom:1px solid #dce3ee;color:#334155;font-size:12px;font-weight:700;letter-spacing:.6px">INCIDENT SUMMARY</div><table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse">${row('Incident Number', id)}${row('Customer', customer)}${row('Environment / Project', project)}${row('Area / Affected Service', area)}${row('Severity', severity || 'Critical')}${row('Assigned Engineer', engineer)}${row('Created', created)}</table></div><div style="margin-top:22px;font-size:14px;line-height:1.6;color:#25334a">${closing}</div><div style="margin-top:24px;padding-top:18px;border-top:1px solid #e5e7eb;color:#475569;font-size:13px;line-height:1.5">This notification was generated by the AOC 24x7 Incident Management Portal.<br><strong style="color:#172033">${htmlEscape(user || 'AOC Operations Team')}</strong></div></div></div></body></html>`;
+}
+
+async function getCriticalEmailRecipients(req, res) {
+  try {
+    const customer = await resolveCustomer(req.query.customer || req.query.customer_id);
+    const [rows] = await pool.query('SELECT c.customer_name, c.to_recipients, c.cc_recipients, c.is_enabled, c.effective_date, c.updated_at FROM customer_email_recipient_configs c WHERE c.customer_id = ? AND c.is_enabled = 1 AND c.effective_date <= CURDATE() LIMIT 1', [customer.id || 0]);
+    const config = rows[0] || null;
+    res.json({ success: true, data: { configured: Boolean(config), customer: customer.name || req.query.customer || '', to: config?.to_recipients || '', cc: config?.cc_recipients || '', effectiveDate: config?.effective_date || null } });
+  } catch (error) { res.status(500).json({ success: false, message: 'Unable to load critical incident recipient configuration.' }); }
+}
+
+async function getIncidentCommunications(req, res) {
+  try {
+    const [incidents] = await pool.query('SELECT id FROM incidents WHERE incident_ref = ? OR id = ? LIMIT 1', [req.params.id, Number(req.params.id) || 0]);
+    if (!incidents.length) return res.status(404).json({ success: false, message: 'Incident not found.' });
+    const [rows] = await pool.query('SELECT m.*, t.conversation_id FROM incident_email_messages m LEFT JOIN incident_email_threads t ON t.id=m.thread_id WHERE m.incident_id=? ORDER BY m.occurred_at ASC', [incidents[0].id]);
+    res.json({ success: true, data: rows });
+  } catch (error) { res.status(500).json({ success: false, message: 'Unable to load incident communications.' }); }
+}
+
+async function sendDeferredIncidentEmail(req, res) {
+  try {
+    const [rows] = await pool.query(incidentSelect + ' WHERE i.incident_ref = ? LIMIT 1', [req.params.id]);
+    if (!rows.length) return res.status(404).json({ success: false, message: 'Incident not found.' });
+    const incident = mapIncident(rows[0]);
+    const draft = req.body || {};
+    if (!draft.to || !draft.subject) return res.status(400).json({ success: false, message: 'Email To and subject are required.' });
+    let email;
+    if (normalizeSeverity(incident.severity) === 'critical') {
+      const body = String(draft.body || criticalEmailBody({ id: incident.id, title: incident.title, description: incident.description, customer: incident.customer, project: incident.project, severity: incident.severity, area: incident.area, start: incident.date_time_opened, user: req.user.name || req.user.email }));
+      email = await sendCriticalIncidentEmail({ from: process.env.MAIL_FROM, to: draft.to, cc: draft.cc || '', bcc: '', subject: draft.subject, html: `<div style="font-family:Arial,sans-serif;white-space:pre-wrap;line-height:1.55">${htmlEscape(body)}</div>`, attachments: draft.attachments || [] });
+      if (email.sent) {
+        const [thread] = await pool.query('INSERT INTO incident_email_threads (incident_id, customer_name, conversation_id, graph_thread_id, message_id, internet_message_id, subject, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [incident.db_id, incident.customer || null, email.conversationId || null, email.conversationId || null, email.messageId || null, email.internetMessageId || null, draft.subject, 'sent', req.user.id]);
+        await pool.query('INSERT INTO incident_email_messages (thread_id, incident_id, direction, action_type, graph_message_id, internet_message_id, subject, sender, recipients, cc_recipients, body_preview, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [thread.insertId, incident.db_id, 'outbound', 'email_sent', email.messageId || null, email.internetMessageId || null, draft.subject, process.env.MAIL_FROM || null, draft.to, draft.cc || null, body.slice(0, 6000), 'sent', req.user.id]);
+      }
+    } else email = await sendIncidentCreatedEmail({ ...incident, emailTo: draft.to, emailCc: draft.cc || '', emailSubject: draft.subject, emailBody: draft.body || '' });
+    if (!email.sent) return res.status(502).json({ success: false, message: email.message || 'Email could not be sent.', data: email });
+    res.json({ success: true, data: email });
+  } catch (error) { console.error('Deferred incident email error:', error.message); res.status(502).json({ success: false, message: error.message || 'Email could not be sent.' }); }
+}
 
 const getActivityLog = async (req, res) => {
   try {
@@ -425,7 +491,18 @@ const updateIncident = async (req, res) => {
     if (b.project_area !== undefined) add('project_area', b.project_area || null);
     if (b.severity !== undefined) add('severity', normalizeSeverity(b.severity));
     const normalizedStatus = b.status !== undefined ? normalizeStatus(b.status) : undefined;
+    const isClosingTransition = normalizedStatus === 'closed' && normalizeStatus(current.status) !== 'closed';
+    if (isClosingTransition) {
+      const rootCause = String(b.rca ?? current.rca ?? '').trim();
+      const resolution = String(b.resolution ?? current.resolution ?? '').trim();
+      const resolvedBy = String(b.resolved_by ?? b.resolvedBy ?? current.resolved_by ?? '').trim();
+      if (!rootCause || !resolution || !resolvedBy) {
+        return res.status(400).json({ success: false, message: 'Root Cause Analysis, Resolution Steps, and Resolved By are required before closing an incident' });
+      }
+    }
     const hasEndDateUpdate = endDateTouched;
+    const hasManualDowntime = ['downtime_mins', 'downtime_minutes_total', 'downtime_h', 'downtimeH', 'downtime_m', 'downtimeM', 'downtimeStr', 'downtime_str']
+      .some((key) => b[key] !== undefined);
     const isCriticalDowntimeCalculation = normalizeSeverity(b.severity ?? current.severity) === 'critical'
       && hasEndDateUpdate && canonical.closed_at_utc;
     if (isCriticalDowntimeCalculation) {
@@ -434,7 +511,9 @@ const updateIncident = async (req, res) => {
       if (!openedAt || !closedAt || Number.isNaN(openedAt.getTime()) || Number.isNaN(closedAt.getTime()) || closedAt < openedAt) {
         return res.status(400).json({ success: false, message: 'Critical incident end time must be on or after its created time' });
       }
-      canonical.downtime_mins = Math.round((closedAt.getTime() - openedAt.getTime()) / 60000);
+      // Use the calculated duration as the default, but preserve an explicitly
+      // supplied downtime correction from the operator.
+      if (!hasManualDowntime) canonical.downtime_mins = Math.round((closedAt.getTime() - openedAt.getTime()) / 60000);
     }
     if (b.status !== undefined) add('status', normalizedStatus);
     if (b.engineer !== undefined) add('assigned_to', await resolveUserId(b.engineer));
@@ -464,8 +543,7 @@ const updateIncident = async (req, res) => {
       add('incident_report_status', reportStatus || null);
     }
 
-    const downtimeTouched = isCriticalDowntimeCalculation || ['downtime_mins', 'downtime_minutes_total', 'downtime_h', 'downtimeH', 'downtime_m', 'downtimeM', 'downtimeStr', 'downtime_str']
-      .some((key) => b[key] !== undefined);
+    const downtimeTouched = isCriticalDowntimeCalculation || hasManualDowntime;
     if (downtimeTouched) {
       const duration = minutesToHM(canonical.downtime_mins);
       add('downtime_hours', duration.hours);
@@ -638,5 +716,8 @@ module.exports = {
   deleteIncident,
   getDashboardStats,
   addComment,
+  getCriticalEmailRecipients,
+  getIncidentCommunications,
+  sendDeferredIncidentEmail,
   _test: { mapIncident }
 };

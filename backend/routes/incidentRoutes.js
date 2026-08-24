@@ -8,7 +8,9 @@ const {
   updateIncident,
   deleteIncident,
   getDashboardStats,
-  addComment
+  addComment,
+  getCriticalEmailRecipients,
+  getIncidentCommunications
 } = require('../controllers/incidentController');
 const { authenticateToken } = require('../middleware/auth');
 
@@ -26,9 +28,11 @@ router.get('/stats/dashboard', getDashboardStats);
 
 // GET /api/incidents/activity-log - Get persistent incident activity
 router.get('/activity-log', getActivityLog);
+router.get('/critical-email-recipients', getCriticalEmailRecipients);
 
 // GET /api/incidents/:id - Get incident by ID
 router.get('/:id', getIncidentById);
+router.get('/:id/communications', getIncidentCommunications);
 
 // PUT /api/incidents/:id - Update incident
 router.put('/:id', updateIncident);

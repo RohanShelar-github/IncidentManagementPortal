@@ -134,15 +134,9 @@
       incident.sfCase || incident.sf_case || incident.sf_case_no || incident.legacy_case_number
     );
     var mttd = normalizeText(incident.mttdStr || incident.mttd_str);
-    var mttr = normalizeText(incident.mttrStr || incident.mttr_str);
     if (!mttd) {
       var mttdMinutes = Number(incident.mttd_minutes ?? incident.mttdMinutes);
       if (Number.isFinite(mttdMinutes) && mttdMinutes >= 0) mttd = Math.round(mttdMinutes) + 'm';
-    }
-    if (!mttr) {
-      var mttrHours = Number(incident.mttrH ?? incident.mttr_h) || 0;
-      var mttrMinutes = Number(incident.mttrM ?? incident.mttr_m) || 0;
-      if (mttrHours || mttrMinutes) mttr = (mttrHours ? mttrHours + 'h ' : '') + (mttrMinutes ? mttrMinutes + 'm' : '');
     }
     return {
       reportId: reportIdentifier(incident),
@@ -171,7 +165,6 @@
       engineer: normalizeText(incident.engineer),
       area: normalizeText(incident.area),
       mttd: mttd || 'Not recorded',
-      mttr: mttr || 'Not recorded',
       resolvedBy: resolvedBy,
       sfCase: sfCase,
       rdTickets: normalizeText(incident.rd_tickets || incident.rdTickets),
@@ -292,7 +285,7 @@
     ];
     var portalHeaders = [
       'Portal Incident ID', 'Customer', 'Project', 'Product Line', 'Status', 'Assigned Engineer',
-      'Area', 'Timezone', 'MTTD', 'MTTR', 'Root Cause Analysis', 'Resolved By',
+      'Area', 'Timezone', 'MTTD', 'Root Cause Analysis', 'Resolved By',
       'Salesforce Case No.', 'R&D Tickets'
     ];
     var sampleValues = [
@@ -303,11 +296,11 @@
     ];
     var portalValues = [
       model.internalId, model.customer, model.project, model.productLine, model.status, model.engineer,
-      model.area, model.timezone, model.mttd, model.mttr, model.rca, model.resolvedBy,
+      model.area, model.timezone, model.mttd, model.rca, model.resolvedBy,
       model.sfCase, model.rdTickets
     ];
     var widths = [12, 10, 36, 18, 16, 18, 28, 22, 18, 12, 42, 42, 24, 22, 22]
-      .concat([16, 18, 24, 18, 18, 22, 16, 12, 12, 12, 42, 20, 20, 18]);
+      .concat([16, 18, 24, 18, 18, 22, 16, 12, 12, 42, 20, 20, 18]);
     var rows = [];
     var lastColumn = columnName(widths.length - 1);
     var groupCells = [];

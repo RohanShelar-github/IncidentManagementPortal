@@ -2,6 +2,12 @@
 
 const nodemailer = require('nodemailer');
 const DEFAULT_EWS_URL = 'https://outlook.office365.com/EWS/Exchange.asmx';
+const GRAPH_ROOT = 'https://graph.microsoft.com/v1.0';
+let graphTokenCache = null;
+
+function mailProvider() {
+  return String(process.env.MAIL_PROVIDER || '').trim().toLowerCase();
+}
 
 function xmlEscape(value) {
   return String(value ?? '')
@@ -17,13 +23,33 @@ function htmlEscape(value) {
 
 function configured() {
   if (String(process.env.MAIL_ENABLED || '').toLowerCase() !== 'true') return false;
-  if (String(process.env.MAIL_PROVIDER || '').toLowerCase() === 'smtp') {
+  if (mailProvider() === 'smtp') {
     return Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_USER
       && process.env.SMTP_APP_PASSWORD && process.env.MAIL_FROM && process.env.MAIL_TO);
+  }
+  if (mailProvider() === 'graph') {
+    return Boolean(process.env.MAIL_TENANT_ID && process.env.MAIL_CLIENT_ID
+      && process.env.MAIL_CLIENT_SECRET && process.env.MAIL_FROM && process.env.MAIL_TO);
   }
   return Boolean(process.env.MAIL_TENANT_ID && process.env.MAIL_CLIENT_ID
       && process.env.MAIL_CLIENT_SECRET && process.env.MAIL_FROM
       && process.env.MAIL_TO && (process.env.MAIL_OAUTH_REFRESH_TOKEN || process.env.MAIL_OAUTH_ACCESS_TOKEN));
+}
+
+async function getGraphAccessToken() {
+  if (graphTokenCache && graphTokenCache.expiresAt > Date.now() + 60000) return graphTokenCache.token;
+  const tokenUrl = `https://login.microsoftonline.com/${encodeURIComponent(process.env.MAIL_TENANT_ID)}/oauth2/v2.0/token`;
+  const body = new URLSearchParams({
+    client_id: process.env.MAIL_CLIENT_ID,
+    client_secret: process.env.MAIL_CLIENT_SECRET,
+    grant_type: 'client_credentials',
+    scope: 'https://graph.microsoft.com/.default'
+  });
+  const response = await fetch(tokenUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body, signal: AbortSignal.timeout(30000) });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.access_token) throw new Error(data.error_description || data.error || `Microsoft Graph token request failed (${response.status})`);
+  graphTokenCache = { token: data.access_token, expiresAt: Date.now() + Math.max(60, Number(data.expires_in || 3600) - 60) * 1000 };
+  return graphTokenCache.token;
 }
 
 async function getAccessToken() {
@@ -101,6 +127,218 @@ function cleanAddressList(value, fallback) {
   return addresses.join(',');
 }
 
+function graphRecipients(addresses) {
+  return String(addresses || '').split(',').map((address) => address.trim()).filter(Boolean)
+    .map((address) => ({ emailAddress: { address } }));
+}
+
+async function sendWithMicrosoftGraph({ from, to, cc, bcc, subject, html }) {
+  const token = await getGraphAccessToken();
+  const response = await fetch(`${GRAPH_ROOT}/users/${encodeURIComponent(from)}/sendMail`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: {
+        subject,
+        body: { contentType: 'HTML', content: html },
+        toRecipients: graphRecipients(to),
+        ...(cc ? { ccRecipients: graphRecipients(cc) } : {}),
+        ...(bcc ? { bccRecipients: graphRecipients(bcc) } : {})
+      },
+      saveToSentItems: true
+    }),
+    signal: AbortSignal.timeout(30000)
+  });
+  if (response.status === 202) return { sent: true, to, cc };
+  const data = await response.json().catch(() => ({}));
+  throw new Error(data?.error?.message || `Microsoft Graph send failed (${response.status})`);
+}
+
+// A draft is deliberately created before sending so the Graph conversation and
+// message identifiers can be retained against the originating incident.
+async function sendCriticalIncidentEmail({ from, to, cc, bcc, subject, html, attachments = [] }) {
+  if (!configured()) return { sent: false, skipped: true, message: 'Email delivery is not configured' };
+  if (mailProvider() !== 'graph') return sendIncidentCreatedEmail({ id: '', title: subject, emailTo: to, emailCc: cc, emailBcc: bcc, emailSubject: subject, emailBody: html });
+  const token = await getGraphAccessToken();
+  const base = `${GRAPH_ROOT}/users/${encodeURIComponent(from)}/messages`;
+  const request = async (path, method, body) => {
+    const response = await fetch(base + path, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(30000) });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data?.error?.message || `Microsoft Graph send failed (${response.status})`);
+    return data;
+  };
+  const draft = await request('', 'POST', { subject, body: { contentType: 'HTML', content: html }, toRecipients: graphRecipients(to), ...(cc ? { ccRecipients: graphRecipients(cc) } : {}), ...(bcc ? { bccRecipients: graphRecipients(bcc) } : {}) });
+  for (const attachment of normalizeMailboxAttachments(attachments)) await request(`/${encodeURIComponent(draft.id)}/attachments`, 'POST', { '@odata.type': '#microsoft.graph.fileAttachment', name: attachment.name, contentType: attachment.contentType, contentBytes: attachment.contentBytes });
+  await request(`/${encodeURIComponent(draft.id)}/send`, 'POST');
+  return { sent: true, to, cc, messageId: draft.id, conversationId: draft.conversationId || '', internetMessageId: draft.internetMessageId || '', status: 'sent' };
+}
+
+function inboundMailboxAddress() {
+  return String(process.env.MAIL_INBOX_ADDRESS || process.env.MAIL_FROM || '').trim();
+}
+
+function mailboxDto(message, includeBody, attachments = []) {
+  const sender = message?.from?.emailAddress || {};
+  const dto = {
+    id: String(message?.id || ''), subject: String(message?.subject || '(No subject)'),
+    from: String(sender.address || ''), fromName: String(sender.name || sender.address || 'Unknown sender'),
+    receivedAt: message?.receivedDateTime || null, isRead: Boolean(message?.isRead),
+    preview: String(message?.bodyPreview || ''), hasAttachments: Boolean(message?.hasAttachments),
+    conversationId: String(message?.conversationId || ''), internetMessageId: String(message?.internetMessageId || '')
+  };
+  if (includeBody) {
+    dto.body = String(message?.body?.content || '');
+    dto.attachments = attachments;
+    const self = inboundMailboxAddress().toLowerCase();
+    const senderAddress = String(sender.address || '').toLowerCase();
+    const replyAllCc = [...(message?.toRecipients || []), ...(message?.ccRecipients || [])]
+      .map((recipient) => String(recipient?.emailAddress?.address || '').trim())
+      .filter((address, index, list) => address && address.toLowerCase() !== self && address.toLowerCase() !== senderAddress && list.findIndex((value) => value.toLowerCase() === address.toLowerCase()) === index);
+    dto.replyAllCc = replyAllCc.join(', ');
+  }
+  return dto;
+}
+
+function validMailboxId(value) {
+  return /^[A-Za-z0-9_+\-=/]+$/.test(String(value || ''));
+}
+
+function attachmentDto(attachment) {
+  return {
+    id: String(attachment?.id || ''), name: String(attachment?.name || 'attachment'),
+    contentType: String(attachment?.contentType || 'application/octet-stream'),
+    size: Number(attachment?.size || 0), isInline: Boolean(attachment?.isInline)
+  };
+}
+
+async function graphInboxRequest(path) {
+  const mailbox = inboundMailboxAddress();
+  if (!mailbox) throw new Error('Microsoft Graph inbox address is not configured');
+  const token = await getGraphAccessToken();
+  const response = await fetch(`${GRAPH_ROOT}/users/${encodeURIComponent(mailbox)}${path}`, {
+    headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30000)
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error?.message || `Microsoft Graph inbox request failed (${response.status})`);
+  return data;
+}
+
+async function graphInboxJsonRequest(path, method, body) {
+  const mailbox = inboundMailboxAddress();
+  if (!mailbox) throw new Error('Microsoft Graph inbox address is not configured');
+  const token = await getGraphAccessToken();
+  const response = await fetch(`${GRAPH_ROOT}/users/${encodeURIComponent(mailbox)}${path}`, {
+    method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(30000)
+  });
+  if (response.ok) return response.status === 204 || response.status === 202 ? {} : response.json().catch(() => ({}));
+  const data = await response.json().catch(() => ({}));
+  throw new Error(data?.error?.message || `Microsoft Graph mailbox request failed (${response.status})`);
+}
+
+async function listInboxMessages(limit = 50) {
+  const query = new URLSearchParams({ '$top': String(Math.min(Math.max(Number(limit) || 50, 1), 100)), '$select': 'id,subject,from,receivedDateTime,isRead,bodyPreview,hasAttachments,conversationId,internetMessageId', '$orderby': 'receivedDateTime DESC' });
+  const data = await graphInboxRequest(`/mailFolders/inbox/messages?${query}`);
+  return Array.isArray(data.value) ? data.value.map((message) => mailboxDto(message, false)) : [];
+}
+
+async function getInboxMessage(id) {
+  if (!validMailboxId(id)) throw new Error('Invalid mailbox message identifier');
+  const query = new URLSearchParams({ '$select': 'id,subject,from,toRecipients,ccRecipients,receivedDateTime,isRead,bodyPreview,hasAttachments,body,conversationId,internetMessageId' });
+  const data = await graphInboxRequest(`/messages/${encodeURIComponent(id)}?${query}`);
+  let attachmentValues = [];
+  if (data?.body?.content && /cid:/i.test(data.body.content)) {
+    // Graph cannot $select fileAttachment-only fields (contentId/contentBytes) from the
+    // polymorphic attachment collection, so load this one message's attachments here.
+    const attachments = await graphInboxRequest(`/messages/${encodeURIComponent(id)}/attachments`);
+    attachmentValues = Array.isArray(attachments.value) ? attachments.value : [];
+    const inlineImages = new Map();
+    for (const attachment of attachments.value || []) {
+      const contentId = String(attachment?.contentId || '').replace(/^<|>$/g, '');
+      const contentType = String(attachment?.contentType || '').toLowerCase();
+      // Inline signature images are kept bounded; ordinary attachments are never exposed here.
+      if (attachment?.isInline && contentId && /^image\//.test(contentType) && Number(attachment?.size || 0) <= 1_500_000) {
+        const contentBytes = String(attachment?.contentBytes || '');
+        if (!contentBytes || contentBytes.length > 2_000_000) continue;
+        inlineImages.set(contentId, `data:${contentType};base64,${contentBytes}`);
+      }
+    }
+    data.body.content = data.body.content.replace(/cid:([^"'\s>]+)/gi, (match, contentId) => inlineImages.get(String(contentId).replace(/^<|>$/g, '')) || match);
+  } else if (data.hasAttachments) {
+    const attachments = await graphInboxRequest(`/messages/${encodeURIComponent(id)}/attachments`);
+    attachmentValues = Array.isArray(attachments.value) ? attachments.value : [];
+  }
+  return mailboxDto(data, true, attachmentValues.filter((attachment) => !attachment?.isInline).map(attachmentDto));
+}
+
+async function replyToInboxMessage(id, comment) {
+  if (!validMailboxId(id)) throw new Error('Invalid mailbox message identifier');
+  const options = typeof comment === 'object' && comment ? comment : { html: comment };
+  const mode = ['reply', 'replyAll', 'forward'].includes(options.mode) ? options.mode : 'reply';
+  const html = sanitizeMailboxReplyHtml(options.html);
+  if (!html || html.length > 100000) throw new Error('Message must contain between 1 and 100,000 characters');
+  const cc = cleanAddressList(options.cc, '');
+  const bcc = cleanAddressList(options.bcc, '');
+  const to = cleanAddressList(options.to, '');
+  if (mode === 'forward' && !to) throw new Error('A recipient is required when forwarding an email');
+  const action = mode === 'replyAll' ? 'createReplyAll' : mode === 'forward' ? 'createForward' : 'createReply';
+  const draft = await graphInboxJsonRequest(`/messages/${encodeURIComponent(id)}/${action}`, 'POST', {});
+  if (!draft?.id || !validMailboxId(draft.id)) throw new Error('Microsoft 365 could not create the mail draft');
+  const updates = { body: { contentType: 'HTML', content: html } };
+  if (mode === 'forward') updates.toRecipients = graphRecipients(to);
+  if (cc) updates.ccRecipients = graphRecipients(cc);
+  if (bcc) updates.bccRecipients = graphRecipients(bcc);
+  if (options.subject) updates.subject = String(options.subject).replace(/[\r\n]+/g, ' ').trim().slice(0, 255);
+  await graphInboxJsonRequest(`/messages/${encodeURIComponent(draft.id)}`, 'PATCH', updates);
+  const attachments = normalizeMailboxAttachments(options.attachments);
+  for (const attachment of attachments) {
+    await graphInboxJsonRequest(`/messages/${encodeURIComponent(draft.id)}/attachments`, 'POST', {
+      '@odata.type': '#microsoft.graph.fileAttachment', name: attachment.name,
+      contentType: attachment.contentType, contentBytes: attachment.contentBytes
+    });
+  }
+  await graphInboxJsonRequest(`/messages/${encodeURIComponent(draft.id)}/send`, 'POST');
+  return { sent: true };
+}
+
+function sanitizeMailboxReplyHtml(value) {
+  return String(value || '').trim()
+    .replace(/<(script|style|iframe|object|embed|form)[^>]*>[\s\S]*?<\/\1>/gi, '')
+    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/(href|src)\s*=\s*(["']?)\s*javascript:/gi, '$1=$2')
+    .slice(0, 100000);
+}
+
+function normalizeMailboxAttachments(value) {
+  const attachments = Array.isArray(value) ? value : [];
+  if (attachments.length > 10) throw new Error('A maximum of 10 attachments can be sent at once');
+  let total = 0;
+  return attachments.map((attachment) => {
+    const name = String(attachment?.name || 'attachment').replace(/[\\/:*?"<>|\r\n]/g, '_').slice(0, 255);
+    const contentType = String(attachment?.contentType || 'application/octet-stream').slice(0, 100);
+    const contentBytes = String(attachment?.contentBytes || '');
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(contentBytes) || contentBytes.length > 3_500_000) throw new Error(`Attachment ${name} is invalid or exceeds 2.5 MB`);
+    total += contentBytes.length;
+    if (total > 8_000_000) throw new Error('Total attachments exceed the 6 MB send limit');
+    return { name, contentType, contentBytes };
+  });
+}
+
+async function getInboxAttachment(messageId, attachmentId) {
+  if (!validMailboxId(messageId) || !validMailboxId(attachmentId)) throw new Error('Invalid mailbox attachment identifier');
+  const attachment = await graphInboxRequest(`/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`);
+  const size = Number(attachment?.size || 0);
+  const bytes = String(attachment?.contentBytes || '');
+  if (!bytes || size > 25 * 1024 * 1024) throw new Error('This attachment is unavailable or exceeds the 25 MB download limit');
+  return { name: String(attachment?.name || 'attachment').replace(/[\\/:*?"<>|\r\n]/g, '_'), contentType: String(attachment?.contentType || 'application/octet-stream'), data: Buffer.from(bytes, 'base64') };
+}
+
+async function deleteInboxMessage(id) {
+  if (!validMailboxId(id)) throw new Error('Invalid mailbox message identifier');
+  await graphInboxJsonRequest(`/messages/${encodeURIComponent(id)}`, 'DELETE');
+  return { deleted: true };
+}
+
 async function sendIncidentCreatedEmail(incident) {
   if (!configured()) return { sent: false, skipped: true, message: 'Email delivery is not configured' };
   const defaults = incidentEmail(incident);
@@ -116,7 +354,7 @@ async function sendIncidentCreatedEmail(incident) {
   const cc = cleanAddressList(incident.emailCc, process.env.MAIL_CC);
   const bcc = cleanAddressList(incident.emailBcc, process.env.MAIL_BCC);
   if (!to || !content.subject || !content.body) throw new Error('Email To, subject, and body are required');
-  if (String(process.env.MAIL_PROVIDER || '').toLowerCase() === 'smtp') {
+  if (mailProvider() === 'smtp') {
     const secure = String(process.env.SMTP_SECURE || '').toLowerCase() === 'true';
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
@@ -139,6 +377,7 @@ async function sendIncidentCreatedEmail(incident) {
     });
     return { sent: true, to, cc, messageId: result.messageId };
   }
+  if (mailProvider() === 'graph') return sendWithMicrosoftGraph({ from: process.env.MAIL_FROM, to, cc, bcc, subject: content.subject, html: defaults.html });
   const token = await getAccessToken();
   const from = process.env.MAIL_FROM;
   const envelope = `<?xml version="1.0" encoding="utf-8"?>
@@ -171,4 +410,4 @@ async function sendIncidentClosedEmail(incident) {
   return sendIncidentCreatedEmail({ ...incident, emailType: 'closed' });
 }
 
-module.exports = { cleanAddressList, configured, getAccessToken, htmlEscape, incidentEmail, sendIncidentClosedEmail, sendIncidentCreatedEmail, xmlEscape };
+module.exports = { cleanAddressList, configured, deleteInboxMessage, getAccessToken, getGraphAccessToken, getInboxAttachment, getInboxMessage, graphRecipients, htmlEscape, incidentEmail, inboundMailboxAddress, listInboxMessages, replyToInboxMessage, sendCriticalIncidentEmail, sendIncidentClosedEmail, sendIncidentCreatedEmail, xmlEscape };

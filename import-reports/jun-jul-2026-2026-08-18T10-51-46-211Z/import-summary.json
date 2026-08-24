@@ -1,0 +1,11 @@
+{
+  "mode": "EXECUTE",
+  "workbook": "C:\\Users\\in-its-ga1\\Documents\\Cloud Incidents from Jun'26 to Jul'26.xlsx",
+  "source_sha256": "e1b96eac153502b4612d23e4e5de6f2048f9d33f2626ba55ac75bf8cc5683d02",
+  "source_count": 70,
+  "valid_count": 70,
+  "duplicate_count": 0,
+  "failed_count": 0,
+  "imported_count": 70,
+  "committed": true
+}

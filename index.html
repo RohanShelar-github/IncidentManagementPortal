@@ -77,6 +77,7 @@
 <div class="nav-item" id="incidentsNav" onclick="navigate('incidents', this)">
 <span class="nav-icon">⚠</span><span class="nav-label"> Incidents</span>
 </div>
+<div class="nav-item" id="mailboxNav" onclick="navigate('mailbox', this)"><span class="nav-icon">✉</span><span class="nav-label"> Mailbox</span></div>
 <div class="nav-section">Reporting</div>
 <div class="nav-item" id="reportsNav" onclick="navigate('reports', this)">
 <span class="nav-icon">◈</span><span class="nav-label"> Reports</span>
@@ -196,7 +197,7 @@
 </div>
 <!-- ── QUICK ACTION CARDS ── -->
 <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:14px">Quick Actions</div>
-<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:32px">
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:32px">
 <div class="home-action-card" id="homeCardDashboard" onclick="navigate('dashboard',document.getElementById('dashNav'))" style="--accent:#4f8ef7">
 <div class="home-action-icon" style="background:rgba(79,142,247,0.12);border-color:rgba(79,142,247,0.2)">
 <svg fill="none" height="22" stroke="#4f8ef7" stroke-width="1.8" viewbox="0 0 24 24" width="22"><rect height="7" rx="1" width="7" x="3" y="3"></rect><rect height="7" rx="1" width="7" x="14" y="3"></rect><rect height="7" rx="1" width="7" x="3" y="14"></rect><rect height="7" rx="1" width="7" x="14" y="14"></rect></svg>
@@ -220,6 +221,14 @@
 <div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-bottom:4px">Reports</div>
 <div style="font-size:12px;color:var(--text-muted)">PDF &amp; Excel export</div>
 <div class="home-action-arrow">→</div>
+</div>
+<div class="home-action-card" id="homeCardMailbox" onclick="navigate('mailbox',document.getElementById('mailboxNav'))" style="--accent:#8b5cf6">
+<div class="home-action-icon" style="background:rgba(139,92,246,0.12);border-color:rgba(139,92,246,0.2)">
+<svg fill="none" height="22" stroke="#8b5cf6" stroke-width="1.8" viewbox="0 0 24 24" width="22"><rect height="16" rx="2" width="20" x="2" y="4"></rect><path d="M3 6l9 7 9-7"></path></svg>
+</div>
+<div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-bottom:4px">Mailbox</div>
+<div style="font-size:12px;color:var(--text-muted)">Inbox &amp; replies</div>
+<div class="home-action-arrow">&rarr;</div>
 </div>
 <div class="home-action-card" id="homeCardCreate" onclick="openCreateIncidentModal()" style="--accent:#f7b94f">
 <div class="home-action-icon" style="background:rgba(247,185,79,0.12);border-color:rgba(247,185,79,0.2)">
@@ -632,6 +641,10 @@
 </div>
 </div>
 <!-- ─── INCIDENTS ─────────────────────────────────────── -->
+<div class="page" id="page-mailbox">
+<div class="page-header"><div><div class="breadcrumb"><span class="breadcrumb-item" onclick="navigate('dashboard', document.getElementById('dashNav'))">Home</span><span class="breadcrumb-sep">›</span><span class="breadcrumb-item active">Mailbox</span></div><div class="page-header-title">Operations Mailbox</div><div class="page-header-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>Microsoft 365 inbox and reply workspace for the AOC service mailbox</span><span style="color:var(--text-muted)">-</span><span id="mailboxLastUpdated" style="color:var(--text-muted)">Last updated just now</span><span id="mailboxRefreshBtn" onclick="refreshPageContent(event,'mailbox')" onmouseout="this.style.color='var(--text-muted)';this.style.background='transparent'" onmouseover="this.style.color='var(--accent)';this.style.background='rgba(79,142,247,0.12)'" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--text-muted);transition:color .2s,background .2s;flex-shrink:0" title="Refresh"><svg fill="none" height="13" id="mailboxRefreshIcon" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" style="transition:transform .7s ease" viewbox="0 0 24 24" width="13"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg></span></div></div></div>
+<div class="mailbox-layout"><section class="mailbox-list-card"><div class="mailbox-list-head"><div class="mailbox-list-title"><input id="mailboxSelectAll" type="checkbox" aria-label="Select all emails" onchange="toggleMailboxSelectAll(this.checked)"/><strong>Inbox</strong></div><div class="mailbox-list-actions"><button id="mailboxBulkDeleteBtn" class="btn btn-danger btn-sm" onclick="deleteSelectedMailboxMessages()" style="display:none">Delete selected</button><span id="mailboxCount" class="mailbox-count">Loading…</span></div></div><div id="mailboxList" class="mailbox-list"><div class="mailbox-empty">Loading messages…</div></div></section><section class="mailbox-message-card" id="mailboxDetail"><div class="mailbox-empty">Select an email to read it here.</div></section></div>
+</div>
 <div class="page" id="page-incidents">
 <div class="page-header">
 <div>
@@ -1247,6 +1260,17 @@
 <label class="form-label required">Incident Title</label>
 <input id="f_title" placeholder="Brief description of the incident" type="text"/>
 </div>
+<div class="form-group form-full">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+<label class="form-label required" style="margin:0">Incident Start Date &amp; Time</label>
+<div style="display:flex;align-items:center;gap:6px">
+<span style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">Timezone:</span>
+<div id="createTZSelector"></div>
+</div>
+</div>
+<input id="f_date" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box" type="datetime-local"/>
+<div id="f_date_tz_hint" style="font-size:10px;color:var(--text-muted);margin-top:4px;font-family:var(--font-mono)">Input timezone: IST</div>
+</div>
 <div class="form-group">
 <label class="form-label required">Customer</label>
 <select id="f_customer"><option value="">Select customer</option></select>
@@ -1290,17 +1314,6 @@
 <div class="form-group">
 <label class="form-label">R&amp;D Ticket</label>
 <input id="f_rd_tickets" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="e.g. FNP-1125" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s" type="text"/>
-</div>
-<div class="form-group">
-<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-<label class="form-label required" style="margin:0">Incident Start Date &amp; Time</label>
-<div style="display:flex;align-items:center;gap:6px">
-<span style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">Timezone:</span>
-<div id="createTZSelector"></div>
-</div>
-</div>
-<input id="f_date" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box" type="datetime-local"/>
-<div id="f_date_tz_hint" style="font-size:10px;color:var(--text-muted);margin-top:4px;font-family:var(--font-mono)">Input timezone: IST</div>
 </div>
 <div class="form-group">
 <label class="form-label">Mean Time to Detect (MTTD)</label>
@@ -1546,6 +1559,15 @@
             </label>
 <label class="perm-check" onclick="togglePerm(this)">
 <input type="checkbox" value="view_customer360"/> View Customer 360
+            </label>
+<label class="perm-check" onclick="togglePerm(this)">
+<input type="checkbox" value="view_mailbox"/> View Mailbox
+            </label>
+<label class="perm-check" onclick="togglePerm(this)">
+<input type="checkbox" value="send_mailbox"/> Send Mailbox Replies
+            </label>
+<label class="perm-check" onclick="togglePerm(this)">
+<input type="checkbox" value="delete_mailbox"/> Delete Mailbox Emails
             </label>
 <label class="perm-check" onclick="togglePerm(this)">
 <input type="checkbox" value="manage_users"/> Manage Users
@@ -1834,6 +1856,7 @@
 </div>
 </div>
 <input id="dp_f_start_dt" onchange="updateCriticalEditDowntime()" oninput="updateCriticalEditDowntime()" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box" type="datetime-local"/>
+<div id="dp_start_tz_hint" style="font-size:9px;color:var(--text-muted);margin-top:5px;font-family:var(--font-mono)">Incident timezone: IST</div>
 </div>
 <div>
 <label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">📅 Incident End</label>

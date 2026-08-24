@@ -695,6 +695,50 @@
 
   .nav-icon { font-size: 16px; width: 20px; text-align: center; }
 
+  .mailbox-layout { display:grid; grid-template-columns:minmax(310px, .8fr) minmax(500px, 1.7fr); gap:18px; height:calc(100dvh - 210px); min-height:480px; max-height:760px; }
+  #page-mailbox.active { display:flex; flex-direction:column; height:calc(100dvh - 152px); overflow:hidden; }
+  #page-mailbox > .page-header { flex:0 0 auto; }
+  #page-mailbox .mailbox-layout { flex:1 1 auto; height:auto; min-height:0; max-height:none; }
+  .mailbox-list-card, .mailbox-message-card { min-height:0; background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden; box-shadow:0 12px 35px rgba(0,0,0,.12); }
+  .mailbox-list-card { display:flex; flex-direction:column; }
+  .mailbox-message-card { display:flex; flex-direction:column; overflow:hidden; }
+  .mailbox-list-head { display:flex; align-items:center; justify-content:space-between; padding:17px 18px; border-bottom:1px solid var(--border); background:linear-gradient(110deg,rgba(79,142,247,.13),transparent); }
+  .mailbox-list-title, .mailbox-list-actions { display:flex; align-items:center; gap:9px; } .mailbox-list-title input, .mailbox-row-check { accent-color:var(--accent); cursor:pointer; }
+  .mailbox-count { font:11px var(--font-mono); color:var(--accent); padding:4px 8px; background:rgba(79,142,247,.12); border-radius:99px; }
+  .mailbox-list { min-height:0; flex:1; overflow-y:auto; overscroll-behavior:contain; scrollbar-gutter:stable; }
+  .mailbox-row { padding:15px 17px; border-bottom:1px solid var(--border); cursor:pointer; transition:background .16s, border-color .16s; border-left:3px solid transparent; }
+  .mailbox-row-check { float:left; margin:2px 9px 0 0; }
+  .mailbox-row:hover { background:var(--surface2); } .mailbox-row.active { background:rgba(79,142,247,.11); border-left-color:var(--accent); }
+  .mailbox-row.unread .mailbox-subject { font-weight:800; color:var(--text); } .mailbox-row.unread .mailbox-from::before { content:'•'; color:var(--accent); margin-right:6px; font-size:15px; vertical-align:-1px; }
+  .mailbox-from, .mailbox-meta { font-size:11px; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mailbox-subject { margin:6px 0; font-size:13px; color:var(--text2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mailbox-empty { color:var(--text-muted); padding:36px 28px; text-align:center; font-size:13px; }
+  .mailbox-detail-head { flex:0 0 auto; padding:25px 28px 20px; border-bottom:1px solid var(--border); background:linear-gradient(110deg,rgba(93,81,230,.14),transparent 65%); }
+  .mailbox-detail-subject { font-size:20px; font-weight:800; margin-bottom:14px; line-height:1.3; }
+  .mailbox-detail-meta { color:var(--text-muted); font-size:12px; line-height:1.75; white-space:pre-line; }
+  .mailbox-reply-button { margin-top:16px; }
+  .mailbox-delete-button { margin:16px 0 0 8px; }
+  .mailbox-message-actions { display:flex; align-items:center; gap:4px; margin-top:15px; }
+  .mailbox-icon-action { min-width:34px; height:32px; padding:0 7px; color:var(--accent2); background:transparent; border:1px solid transparent; border-radius:7px; cursor:pointer; font:20px/1 Arial,sans-serif; letter-spacing:-5px; transition:background .15s,color .15s,border-color .15s; }
+  .mailbox-icon-action:hover { color:var(--accent); background:rgba(79,142,247,.1); border-color:rgba(79,142,247,.3); } .mailbox-icon-action.danger { color:var(--danger); letter-spacing:0; font-size:19px; } .mailbox-icon-action.danger:hover { background:rgba(247,92,124,.1); border-color:rgba(247,92,124,.3); }
+  .mailbox-attachments { margin-top:18px; padding-top:15px; border-top:1px solid var(--border); }
+  .mailbox-attachments-title, .mailbox-reply-label { font:11px var(--font-mono); letter-spacing:.5px; text-transform:uppercase; color:var(--text-muted); margin-bottom:9px; }
+  .mailbox-attachment { display:inline-flex; align-items:center; gap:10px; max-width:100%; margin:0 8px 7px 0; padding:8px 11px; color:var(--text); background:var(--surface2); border:1px solid var(--border); border-radius:8px; cursor:pointer; text-align:left; }
+  .mailbox-attachment:hover { border-color:var(--accent); color:var(--accent); } .mailbox-attachment span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:260px; } .mailbox-attachment small { color:var(--text-muted); white-space:nowrap; }
+  .mailbox-reply { flex:1 1 auto; min-height:0; margin:20px 28px 28px; padding:18px; overflow-y:auto; border:1px solid var(--border); border-radius:10px; background:var(--surface2); }
+  .mailbox-reply textarea { display:block; width:100%; min-height:110px; resize:vertical; margin:0; } .mailbox-reply-actions { position:sticky; bottom:0; display:flex; justify-content:flex-end; gap:8px; margin-top:10px; padding-top:10px; background:var(--surface2); }
+  .mailbox-compose { display:grid; gap:9px; } .mailbox-compose-head { display:flex; align-items:center; justify-content:space-between; gap:12px; } .mailbox-compose-head .mailbox-reply-label { margin:0; }
+  .mailbox-compose-input { width:100%; min-height:34px; padding:7px 10px; color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:7px; font:12px var(--font); }
+  .mailbox-compose-input[readonly] { opacity:.78; background:var(--surface2); } .mailbox-recipient-help { font-size:11px; color:var(--text-muted); margin-top:-3px; }
+  .mailbox-compose-toolbar { display:flex; flex-wrap:wrap; gap:5px; padding:7px; background:var(--surface); border:1px solid var(--border); border-bottom:0; border-radius:8px 8px 0 0; }
+  .mailbox-tool { min-width:30px; padding:4px 7px; color:var(--text2); background:transparent; border:1px solid transparent; border-radius:5px; cursor:pointer; font-size:11px; } .mailbox-tool:hover { color:var(--accent); border-color:var(--border); background:var(--surface2); }
+  .mailbox-rich-editor { min-height:150px; padding:13px; color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:0 0 8px 8px; outline:none; line-height:1.55; overflow:auto; } .mailbox-rich-editor:empty::before { content:attr(data-placeholder); color:var(--text-muted); pointer-events:none; }
+  .mailbox-compose-attachments { display:flex; align-items:center; gap:10px; flex-wrap:wrap; } .mailbox-compose-attachments input { position:absolute; width:1px; height:1px; opacity:0; overflow:hidden; } .mailbox-attach-button { padding:6px 9px; color:var(--text2); background:var(--surface); border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:12px; } .mailbox-attach-button:hover { color:var(--accent); border-color:var(--accent); } .mailbox-file-names { color:var(--text-muted); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:420px; }
+  .mailbox-detail-body-wrap { display:flex; flex:1 1 auto; min-height:0; padding:22px 28px 28px; overflow:hidden; background:linear-gradient(180deg,rgba(255,255,255,.012),transparent); }
+  .mailbox-rich-frame { flex:1 1 auto; min-height:0; width:100%; height:auto; max-height:none; border:1px solid var(--border); border-radius:10px; background:var(--surface); display:block; }
+  .mailbox-detail-body { padding:20px 22px; white-space:pre-wrap; color:var(--text); line-height:1.75; font-size:13px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; min-height:220px; }
+  @media (max-width:900px) { #page-mailbox.active { display:block; height:auto; overflow:visible; } .mailbox-layout { grid-template-columns:1fr; height:auto; min-height:0; max-height:none; } .mailbox-list-card, .mailbox-message-card { max-height:none; } .mailbox-list { max-height:330px; } }
+
   .sidebar-footer {
     margin-top: auto;
     padding: 16px;
@@ -1200,6 +1244,17 @@
     max-width: 95vw;
     max-height: 90vh;
     overflow-y: auto;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+    animation: modalIn .25s ease;
+  }
+
+  /* Profile uses modal-box rather than modal. Keep it visually equivalent so
+     its content never appears to float over the page background. */
+  .modal-box {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border2);
+    border-radius: 16px;
     box-shadow: 0 24px 80px rgba(0,0,0,0.5);
     animation: modalIn .25s ease;
   }
@@ -1785,6 +1840,21 @@
   }
   body.light-mode .sidebar { background: #fff; }
   body.light-mode .topbar  { background: rgba(255,255,255,0.95); }
+  body.light-mode #profileModal {
+    background: rgba(27, 38, 62, 0.32);
+    backdrop-filter: blur(6px);
+  }
+  body.light-mode #profileModal .modal-box {
+    background: #fff;
+    border-color: #d7ddec;
+    box-shadow: 0 24px 70px rgba(31, 42, 68, 0.24);
+  }
+  body.light-mode #profileModal .modal-header {
+    background: linear-gradient(135deg, #fbfcff, #f2f5ff);
+  }
+  body.light-mode #profileModal .modal-footer {
+    background: #fafbfe;
+  }
 
 
   /* ─── CUSTOMER HEALTH GRID ──────────────────────────── */
