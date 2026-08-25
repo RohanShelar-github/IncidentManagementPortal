@@ -1,0 +1,241 @@
+{
+  "generated_at": "2026-08-25T12:57:15.123Z",
+  "matched": [
+    {
+      "source_name": "National Gypsum",
+      "customer_id": 3,
+      "customer_name": "NGC",
+      "jira_project_code": "NATGYP"
+    },
+    {
+      "source_name": "California Coast Credit Union",
+      "customer_id": 15,
+      "customer_name": "CCCU",
+      "jira_project_code": "CCCU"
+    },
+    {
+      "source_name": "VB Cosmetics",
+      "customer_id": 16,
+      "customer_name": "VB Cosmetics",
+      "jira_project_code": "VBCOS"
+    },
+    {
+      "source_name": "Choctaw Nation",
+      "customer_id": 24,
+      "customer_name": "Choctaw Nation",
+      "jira_project_code": "CN"
+    },
+    {
+      "source_name": "TileBar",
+      "customer_id": 1,
+      "customer_name": "TileBar",
+      "jira_project_code": "TIL"
+    },
+    {
+      "source_name": "MayerElectric",
+      "customer_id": 14,
+      "customer_name": "Mayer Electric",
+      "jira_project_code": "MAYER"
+    },
+    {
+      "source_name": "Intrado",
+      "customer_id": 17,
+      "customer_name": "Intrado",
+      "jira_project_code": "IN"
+    },
+    {
+      "source_name": "SMC",
+      "customer_id": 13,
+      "customer_name": "SMC",
+      "jira_project_code": "SMC"
+    },
+    {
+      "source_name": "Christie Digital",
+      "customer_id": 12,
+      "customer_name": "Christie Digital",
+      "jira_project_code": "CD"
+    },
+    {
+      "source_name": "Toridoll",
+      "customer_id": 20,
+      "customer_name": "TORIDOLL",
+      "jira_project_code": "TOR"
+    },
+    {
+      "source_name": "TCP",
+      "customer_id": 10,
+      "customer_name": "TCP - Shields Harper",
+      "jira_project_code": "TCP"
+    },
+    {
+      "source_name": "BWC",
+      "customer_id": 11,
+      "customer_name": "BWC",
+      "jira_project_code": "BWC"
+    },
+    {
+      "source_name": "Ramat-Gan Municipality",
+      "customer_id": 5,
+      "customer_name": "Ramat-Gan Municipality",
+      "jira_project_code": "RGM"
+    },
+    {
+      "source_name": "Prettl Holding",
+      "customer_id": 19,
+      "customer_name": "Prettl",
+      "jira_project_code": "PRT"
+    },
+    {
+      "source_name": "MSE US",
+      "customer_id": 23,
+      "customer_name": "MSE US",
+      "jira_project_code": "MSEUS"
+    },
+    {
+      "source_name": "Ives Bank",
+      "customer_id": 8,
+      "customer_name": "Ives Bank",
+      "jira_project_code": "IB"
+    },
+    {
+      "source_name": "Georg Jos. Kaes GmbH",
+      "customer_id": 18,
+      "customer_name": "Georg Jos. Kaes GmbH",
+      "jira_project_code": "GJKG"
+    },
+    {
+      "source_name": "San Diego Airport",
+      "customer_id": 6,
+      "customer_name": "San Diego Airport",
+      "jira_project_code": "SDA"
+    }
+  ],
+  "updated": [
+    {
+      "customer_id": 3,
+      "customer_name": "NGC",
+      "previous_jira_project_code": null,
+      "new_jira_project_code": "NATGYP"
+    },
+    {
+      "customer_id": 15,
+      "customer_name": "CCCU",
+      "previous_jira_project_code": null,
+      "new_jira_project_code": "CCCU"
+    },
+    {
+      "customer_id": 16,
+      "customer_name": "VB Cosmetics",
+      "previous_jira_project_code": null,
+      "new_jira_project_code": "VBCOS"
+    },
+    {
+      "customer_id": 24,
+      "customer_name": "Choctaw Nation",
+      "previous_jira_project_code": null,
+      "new_jira_project_code": "CN"
+    },
+    {
+      "customer_id": 1,
+      "customer_name": "TileBar",
+      "previous_jira_project_code": null,
+      "new_jira_project_code": "TIL"
+    },
+    {
+      "customer_id": 14,
+      "customer_name": "Mayer Electric",
+      "previous_jira_project_code": null,
+      "new_jira_project_code": "MAYER"
+    },
+    {
+      "customer_id": 17,
+      "customer_name": "Intrado",
+      "previous_jira_project_code": null,
+      "new_jira_project_code": "IN"
+    },
+    {
+      "customer_id": 13,
+      "customer_name": "SMC",
+      "previous_jira_project_code": null,
+      "new_jira_project_code": "SMC"
+    },
+    {
+      "customer_id": 12,
+      "customer_name": "Christie Digital",
+      "previous_jira_project_code": null,
+      "new_jira_project_code": "CD"
+    },
+    {
+      "customer_id": 20,
+      "customer_name": "TORIDOLL",
+      "previous_jira_project_code": null,
+      "new_jira_project_code": "TOR"
+    },
+    {
+      "customer_id": 10,
+      "customer_name": "TCP - Shields Harper",
+      "previous_jira_project_code": null,
+      "new_jira_project_code": "TCP"
+    },
+    {
+      "customer_id": 11,
+      "customer_name": "BWC",
+      "previous_jira_project_code": null,
+      "new_jira_project_code": "BWC"
+    },
+    {
+      "customer_id": 5,
+      "customer_name": "Ramat-Gan Municipality",
+      "previous_jira_project_code": null,
+      "new_jira_project_code": "RGM"
+    },
+    {
+      "customer_id": 19,
+      "customer_name": "Prettl",
+      "previous_jira_project_code": null,
+      "new_jira_project_code": "PRT"
+    },
+    {
+      "customer_id": 23,
+      "customer_name": "MSE US",
+      "previous_jira_project_code": null,
+      "new_jira_project_code": "MSEUS"
+    },
+    {
+      "customer_id": 8,
+      "customer_name": "Ives Bank",
+      "previous_jira_project_code": null,
+      "new_jira_project_code": "IB"
+    },
+    {
+      "customer_id": 18,
+      "customer_name": "Georg Jos. Kaes GmbH",
+      "previous_jira_project_code": null,
+      "new_jira_project_code": "GJKG"
+    },
+    {
+      "customer_id": 6,
+      "customer_name": "San Diego Airport",
+      "previous_jira_project_code": null,
+      "new_jira_project_code": "SDA"
+    }
+  ],
+  "unchanged": [],
+  "not_found": [
+    {
+      "source_name": "CSO-MIS",
+      "jira_project_code": "CSOMIS"
+    }
+  ],
+  "ambiguous": [],
+  "errors": [],
+  "summary": {
+    "source_mappings": 19,
+    "customers_matched": 18,
+    "customers_updated": 18,
+    "already_correct": 0,
+    "customers_not_found": 1,
+    "ambiguous_matches": 0,
+    "errors": 0
+  }
+}

@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS customers (
   customer_branch VARCHAR(255) NULL,
   region VARCHAR(100) NULL,
   timezone VARCHAR(64) NULL,
+  jira_project_code VARCHAR(50) NULL,
   inbound_csm_name VARCHAR(255) NULL,
   outbound_csm_name VARCHAR(255) NULL,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
