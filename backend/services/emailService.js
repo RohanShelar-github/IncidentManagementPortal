@@ -1,6 +1,7 @@
 'use strict';
 
 const nodemailer = require('nodemailer');
+const { classifyOperationsMessage, isJiraCustomerTicketSubject, jiraSubjectPrefix, normalizedOperationsCategory } = require('./operationsMailClassificationService');
 const DEFAULT_EWS_URL = 'https://outlook.office365.com/EWS/Exchange.asmx';
 const GRAPH_ROOT = 'https://graph.microsoft.com/v1.0';
 let graphTokenCache = null;
@@ -184,8 +185,11 @@ function mailboxDto(message, includeBody, attachments = []) {
     from: String(sender.address || ''), fromName: String(sender.name || sender.address || 'Unknown sender'),
     receivedAt: message?.receivedDateTime || null, isRead: Boolean(message?.isRead),
     preview: String(message?.bodyPreview || ''), hasAttachments: Boolean(message?.hasAttachments),
-    conversationId: String(message?.conversationId || ''), internetMessageId: String(message?.internetMessageId || '')
+    conversationId: String(message?.conversationId || ''), internetMessageId: String(message?.internetMessageId || ''),
+    to: (message?.toRecipients || []).map((recipient) => String(recipient?.emailAddress?.address || '')).filter(Boolean).join(', '),
+    sentAt: message?.sentDateTime || null
   };
+  Object.assign(dto, classifyOperationsMessage(dto));
   if (includeBody) {
     dto.body = String(message?.body?.content || '');
     dto.attachments = attachments;
@@ -211,12 +215,12 @@ function attachmentDto(attachment) {
   };
 }
 
-async function graphInboxRequest(path) {
+async function graphInboxRequest(path, extraHeaders = {}) {
   const mailbox = inboundMailboxAddress();
   if (!mailbox) throw new Error('Microsoft Graph inbox address is not configured');
   const token = await getGraphAccessToken();
   const response = await fetch(`${GRAPH_ROOT}/users/${encodeURIComponent(mailbox)}${path}`, {
-    headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30000)
+    headers: { Authorization: `Bearer ${token}`, ...extraHeaders }, signal: AbortSignal.timeout(30000)
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data?.error?.message || `Microsoft Graph inbox request failed (${response.status})`);
@@ -236,10 +240,46 @@ async function graphInboxJsonRequest(path, method, body) {
   throw new Error(data?.error?.message || `Microsoft Graph mailbox request failed (${response.status})`);
 }
 
-async function listInboxMessages(limit = 50) {
-  const query = new URLSearchParams({ '$top': String(Math.min(Math.max(Number(limit) || 50, 1), 100)), '$select': 'id,subject,from,receivedDateTime,isRead,bodyPreview,hasAttachments,conversationId,internetMessageId', '$orderby': 'receivedDateTime DESC' });
-  const data = await graphInboxRequest(`/mailFolders/inbox/messages?${query}`);
-  return Array.isArray(data.value) ? data.value.map((message) => mailboxDto(message, false)) : [];
+function mailboxCategoryGraphFilter(category) {
+  if (category === 'coralogix') return "from/emailAddress/address eq 'alerts@coralogix.com'";
+  if (category === 'azure') return "from/emailAddress/address eq 'azure-noreply@microsoft.com'";
+  if (category === 'jira') return `startswith(subject,'${jiraSubjectPrefix().replace(/'/g, "''")}')`;
+  return '';
+}
+
+async function listMailboxFolderMessages(folder, limit = 50, category = 'all') {
+  const selectedCategory = normalizedOperationsCategory(category);
+  const query = new URLSearchParams({ '$top': String(Math.min(Math.max(Number(limit) || 50, 1), 100)), '$select': 'id,subject,from,toRecipients,receivedDateTime,sentDateTime,isRead,bodyPreview,hasAttachments,conversationId,internetMessageId', '$orderby': folder === 'sentitems' ? 'sentDateTime DESC' : 'receivedDateTime DESC' });
+  // Microsoft Graph rejects some sender-filter + receivedDateTime-sort combinations
+  // ("InefficientFilter"), while the matching unread-count call succeeds.  Fetch the
+  // page in its normal order and apply the same deterministic classification locally.
+  // This keeps category lists and their badges aligned instead of showing a badge with
+  // an empty/erroring list.
+  const data = await graphInboxRequest(`/mailFolders/${folder}/messages?${query}`);
+  const messages = Array.isArray(data.value) ? data.value.map((message) => mailboxDto(message, false)) : [];
+  return selectedCategory === 'all' || folder !== 'inbox' ? messages : messages.filter((message) => message.category === selectedCategory);
+}
+
+async function listInboxMessages(limit = 50, category = 'all') {
+  return listMailboxFolderMessages('inbox', limit, category);
+}
+
+async function listSentMessages(limit = 50) {
+  return listMailboxFolderMessages('sentitems', limit, 'sent');
+}
+
+async function countUnreadMailboxMessages(category) {
+  const selectedCategory = normalizedOperationsCategory(category);
+  const filter = [mailboxCategoryGraphFilter(selectedCategory), 'isRead eq false'].filter(Boolean).join(' and ');
+  const query = new URLSearchParams({ '$top': '1', '$count': 'true', '$select': 'id', '$filter': filter });
+  const data = await graphInboxRequest(`/mailFolders/inbox/messages?${query}`, { ConsistencyLevel: 'eventual' });
+  return Number(data?.['@odata.count'] || 0);
+}
+
+async function getOperationsMailboxCounts() {
+  const categories = ['coralogix', 'azure', 'jira'];
+  const values = await Promise.all(categories.map(async (category) => [category, await countUnreadMailboxMessages(category)]));
+  return Object.fromEntries(values);
 }
 
 async function getInboxMessage(id) {
@@ -292,6 +332,36 @@ async function replyToInboxMessage(id, comment) {
   await graphInboxJsonRequest(`/messages/${encodeURIComponent(draft.id)}`, 'PATCH', updates);
   const attachments = normalizeMailboxAttachments(options.attachments);
   for (const attachment of attachments) {
+    await graphInboxJsonRequest(`/messages/${encodeURIComponent(draft.id)}/attachments`, 'POST', {
+      '@odata.type': '#microsoft.graph.fileAttachment', name: attachment.name,
+      contentType: attachment.contentType, contentBytes: attachment.contentBytes
+    });
+  }
+  await graphInboxJsonRequest(`/messages/${encodeURIComponent(draft.id)}/send`, 'POST');
+  return { sent: true };
+}
+
+async function markInboxMessageRead(id) {
+  if (!validMailboxId(id)) throw new Error('Invalid mailbox message identifier');
+  await graphInboxJsonRequest(`/messages/${encodeURIComponent(id)}`, 'PATCH', { isRead: true });
+  return { read: true };
+}
+
+async function sendNewMailboxMessage(options) {
+  const to = cleanAddressList(options?.to, '');
+  const cc = cleanAddressList(options?.cc, '');
+  const bcc = cleanAddressList(options?.bcc, '');
+  const subject = String(options?.subject || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 255);
+  const html = sanitizeMailboxReplyHtml(options?.html);
+  if (!to) throw new Error('At least one To recipient is required');
+  if (!subject) throw new Error('Email subject is required');
+  if (!html || html.length > 100000) throw new Error('Message must contain between 1 and 100,000 characters');
+  const draft = await graphInboxJsonRequest('/messages', 'POST', {
+    subject, body: { contentType: 'HTML', content: html }, toRecipients: graphRecipients(to),
+    ...(cc ? { ccRecipients: graphRecipients(cc) } : {}), ...(bcc ? { bccRecipients: graphRecipients(bcc) } : {})
+  });
+  if (!draft?.id || !validMailboxId(draft.id)) throw new Error('Microsoft 365 could not create the mail draft');
+  for (const attachment of normalizeMailboxAttachments(options?.attachments)) {
     await graphInboxJsonRequest(`/messages/${encodeURIComponent(draft.id)}/attachments`, 'POST', {
       '@odata.type': '#microsoft.graph.fileAttachment', name: attachment.name,
       contentType: attachment.contentType, contentBytes: attachment.contentBytes
@@ -410,4 +480,4 @@ async function sendIncidentClosedEmail(incident) {
   return sendIncidentCreatedEmail({ ...incident, emailType: 'closed' });
 }
 
-module.exports = { cleanAddressList, configured, deleteInboxMessage, getAccessToken, getGraphAccessToken, getInboxAttachment, getInboxMessage, graphRecipients, htmlEscape, incidentEmail, inboundMailboxAddress, listInboxMessages, replyToInboxMessage, sendCriticalIncidentEmail, sendIncidentClosedEmail, sendIncidentCreatedEmail, xmlEscape };
+module.exports = { cleanAddressList, configured, countUnreadMailboxMessages, deleteInboxMessage, getAccessToken, getGraphAccessToken, getInboxAttachment, getInboxMessage, getOperationsMailboxCounts, graphRecipients, htmlEscape, incidentEmail, inboundMailboxAddress, listInboxMessages, listSentMessages, markInboxMessageRead, replyToInboxMessage, sendCriticalIncidentEmail, sendIncidentClosedEmail, sendIncidentCreatedEmail, sendNewMailboxMessage, xmlEscape };

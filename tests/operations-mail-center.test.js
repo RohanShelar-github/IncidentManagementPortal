@@ -1,0 +1,32 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+
+const { classifyOperationsMessage, extractJiraIssueKey, isJiraCustomerTicketSubject } = require('../backend/services/operationsMailClassificationService');
+
+test('Operations source classification uses structured sender addresses before Jira subject matching', () => {
+  assert.equal(classifyOperationsMessage({ from: 'ALERTS@CORALOGIX.COM', subject: 'A new support issue OPS-7 was reported by the customer' }).category, 'coralogix');
+  assert.equal(classifyOperationsMessage({ from: 'azure-noreply@microsoft.com', subject: 'A new support issue OPS-8 was reported by the customer' }).category, 'azure');
+  assert.equal(classifyOperationsMessage({ from: 'notifications@example.com', subject: 'A new support issue CSO-1234 was reported by the customer' }).category, 'jira');
+  assert.equal(classifyOperationsMessage({ from: 'notifications@example.com', subject: 'Coralogix mentioned in a normal email' }).category, 'other');
+});
+
+test('Jira customer ticket classification and issue extraction remain conservative', () => {
+  assert.equal(isJiraCustomerTicketSubject('A new support issue CSO-1234 was reported by the customer'), true);
+  assert.equal(isJiraCustomerTicketSubject('A new support issue CSO-1234 was updated'), false);
+  assert.equal(extractJiraIssueKey('A new support issue CSO-1234 was reported by the customer'), 'CSO-1234');
+  assert.equal(extractJiraIssueKey('No key here'), '');
+});
+
+test('Operations endpoints reuse the protected mailbox routes for counts, Sent Items, read state, and new mail', () => {
+  const routes = fs.readFileSync('backend/routes/mailboxRoutes.js', 'utf8');
+  const controller = fs.readFileSync('backend/controllers/mailboxController.js', 'utf8');
+  const service = fs.readFileSync('backend/services/emailService.js', 'utf8');
+  assert.match(routes, /router\.get\('\/sent', listSentMailbox\)/);
+  assert.match(routes, /router\.get\('\/operations-counts', getMailboxOperationsCounts\)/);
+  assert.match(routes, /router\.post\('\/send', sendNewMailbox\)/);
+  assert.match(routes, /router\.patch\('\/inbox\/:id\/read', markMailboxMessageRead\)/);
+  assert.match(controller, /requireMailboxPermission\(req, res, 'send_mailbox'\)/);
+  assert.match(service, /async function sendNewMailboxMessage/);
+  assert.match(service, /saveToSentItems/);
+});

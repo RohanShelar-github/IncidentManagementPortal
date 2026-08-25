@@ -160,8 +160,8 @@ test('mailbox access is an assignable role permission with an admin-safe default
   assert.match(roleController, /view_mailbox/);
   assert.match(roleController, /send_mailbox/);
   assert.match(migration, /INSERT IGNORE INTO role_permissions/);
-  assert.match(frontend, /view_mailbox: 'View Mailbox'/);
-  assert.match(frontend, /send_mailbox: 'Send Mailbox Replies'/);
+  assert.match(frontend, /view_mailbox: 'View Operations'/);
+  assert.match(frontend, /send_mailbox: 'Send Operations Mail'/);
 });
 
 test('mailbox deletion is role-controlled and uses Microsoft 365 Deleted Items behavior', () => {

@@ -3,6 +3,7 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 require('dotenv').config();
 require('dotenv').config({ path: require('path').join(__dirname, '.env.local'), override: true });
+require('./config/security').assertSecurityConfiguration();
 
 const authRoutes = require('./routes/authRoutes');
 const incidentRoutes = require('./routes/incidentRoutes');

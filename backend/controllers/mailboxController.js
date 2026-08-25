@@ -1,8 +1,8 @@
 'use strict';
 
 const pool = require('../config/database');
-const { deleteInboxMessage, getInboxAttachment, getInboxMessage, listInboxMessages, replyToInboxMessage } = require('../services/emailService');
-const { notifyMailboxUsers } = require('../services/notificationService');
+const { deleteInboxMessage, getInboxAttachment, getInboxMessage, getOperationsMailboxCounts, listInboxMessages, listSentMessages, markInboxMessageRead, replyToInboxMessage, sendNewMailboxMessage } = require('../services/emailService');
+const { markMailboxNotificationsRead, notifyMailboxUsers } = require('../services/notificationService');
 
 let knownMailboxMessageIds = null;
 let mailboxPollTimer = null;
@@ -18,11 +18,29 @@ async function requireMailboxPermission(req, res, permission) {
 async function listMailbox(req, res) {
   if (!await requireMailboxPermission(req, res, 'view_mailbox')) return;
   try {
-    const messages = await listInboxMessages(req.query.limit);
+    const messages = await listInboxMessages(req.query.limit, req.query.category);
     res.json({ success: true, data: messages });
   } catch (error) {
     console.error('Mailbox list error:', error.message);
     res.status(502).json({ success: false, message: 'Unable to load the Microsoft 365 mailbox.' });
+  }
+}
+
+async function listSentMailbox(req, res) {
+  if (!await requireMailboxPermission(req, res, 'view_mailbox')) return;
+  try { res.json({ success: true, data: await listSentMessages(req.query.limit) }); }
+  catch (error) {
+    console.error('Sent mailbox list error:', error.message);
+    res.status(502).json({ success: false, message: 'Unable to load Microsoft 365 Sent Items.' });
+  }
+}
+
+async function getMailboxOperationsCounts(req, res) {
+  if (!await requireMailboxPermission(req, res, 'view_mailbox')) return;
+  try { res.json({ success: true, data: await getOperationsMailboxCounts() }); }
+  catch (error) {
+    console.error('Mailbox counts error:', error.message);
+    res.status(502).json({ success: false, message: 'Unable to load Operations unread counts.' });
   }
 }
 
@@ -39,6 +57,22 @@ async function replyToMailboxMessage(req, res) {
   if (!await requireMailboxPermission(req, res, 'send_mailbox')) return;
   try { res.json({ success: true, data: await replyToInboxMessage(req.params.id, req.body) }); }
   catch (error) { res.status(400).json({ success: false, message: error.message || 'Unable to send reply.' }); }
+}
+
+async function sendNewMailbox(req, res) {
+  if (!await requireMailboxPermission(req, res, 'send_mailbox')) return;
+  try { res.json({ success: true, data: await sendNewMailboxMessage(req.body) }); }
+  catch (error) { res.status(400).json({ success: false, message: error.message || 'Unable to send email.' }); }
+}
+
+async function markMailboxMessageRead(req, res) {
+  if (!await requireMailboxPermission(req, res, 'view_mailbox')) return;
+  try {
+    const data = await markInboxMessageRead(req.params.id);
+    await markMailboxNotificationsRead(req.params.id);
+    res.json({ success: true, data });
+  }
+  catch (error) { res.status(400).json({ success: false, message: error.message || 'Unable to mark email as read.' }); }
 }
 
 async function downloadMailboxAttachment(req, res) {
@@ -65,7 +99,9 @@ async function pollMailboxForNotifications() {
     if (knownMailboxMessageIds) {
       const newMessages = messages.filter((message) => !knownMailboxMessageIds.has(message.id));
       for (const message of newMessages) {
-        await notifyMailboxUsers({ fromName: message.fromName || message.from, subject: message.subject });
+        // Old/read messages are never alerts. This also prevents a polling
+        // restart from producing popups for mail that was already opened.
+        if (!message.isRead) await notifyMailboxUsers({ fromName: message.fromName || message.from, subject: message.subject, mailboxMessageId: message.id });
         // Conversation ID is Graph's authoritative thread key.  Messages which
         // do not belong to a critical-incident conversation remain mailbox-only.
         if (message.conversationId) {
@@ -89,4 +125,4 @@ function startMailboxNotificationPolling() {
   mailboxPollTimer = setInterval(pollMailboxForNotifications, 60000);
 }
 
-module.exports = { deleteMailboxMessage, downloadMailboxAttachment, getMailboxMessage, listMailbox, replyToMailboxMessage, startMailboxNotificationPolling };
+module.exports = { deleteMailboxMessage, downloadMailboxAttachment, getMailboxMessage, getMailboxOperationsCounts, listMailbox, listSentMailbox, markMailboxMessageRead, replyToMailboxMessage, sendNewMailbox, startMailboxNotificationPolling };

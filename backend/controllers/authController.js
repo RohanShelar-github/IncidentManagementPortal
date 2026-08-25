@@ -1,6 +1,36 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const pool = require('../config/database');
+const { jwtSecret } = require('../config/security');
+
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_FAILURES = 5;
+const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
+const loginAttempts = new Map();
+
+function loginAttemptKey(req, email) {
+  return `${String(req.ip || req.socket?.remoteAddress || 'unknown').slice(0, 128)}:${String(email || '').trim().toLowerCase()}`;
+}
+
+function canAttemptLogin(key) {
+  const attempt = loginAttempts.get(key);
+  if (!attempt) return true;
+  const now = Date.now();
+  if (attempt.lockedUntil > now) return false;
+  if (now - attempt.firstFailure > LOGIN_WINDOW_MS) { loginAttempts.delete(key); return true; }
+  return true;
+}
+
+function recordFailedLogin(key) {
+  const now = Date.now();
+  const previous = loginAttempts.get(key);
+  const attempt = !previous || now - previous.firstFailure > LOGIN_WINDOW_MS ? { firstFailure: now, count: 0, lockedUntil: 0 } : previous;
+  attempt.count += 1;
+  if (attempt.count >= LOGIN_MAX_FAILURES) attempt.lockedUntil = now + LOGIN_LOCKOUT_MS;
+  loginAttempts.set(key, attempt);
+}
+
+function clearFailedLogins(key) { loginAttempts.delete(key); }
 
 function userDto(user) {
   const name = user.full_name || user.name || user.email;
@@ -23,18 +53,22 @@ function userDto(user) {
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Email and password are required' });
-    }
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const attemptKey = loginAttemptKey(req, normalizedEmail);
+    const invalidCredentials = () => res.status(401).json({ success: false, message: 'Invalid email or password' });
+    if (!normalizedEmail || !password) return invalidCredentials();
+    if (!canAttemptLogin(attemptKey)) return res.status(429).json({ success: false, message: 'Too many login attempts. Please try again later.' });
 
-    const [users] = await pool.query('SELECT * FROM users WHERE email = ?', [email.toLowerCase()]);
+    const [users] = await pool.query('SELECT id, email, full_name, role, phone, department, location, bio, is_active, password FROM users WHERE email = ? LIMIT 1', [normalizedEmail]);
     if (users.length === 0) {
-      return res.status(401).json({ success: false, message: 'No account found with this email address' });
+      recordFailedLogin(attemptKey);
+      return invalidCredentials();
     }
 
     const user = users[0];
     if (!user.is_active) {
-      return res.status(403).json({ success: false, message: 'This user account is inactive' });
+      recordFailedLogin(attemptKey);
+      return invalidCredentials();
     }
     const storedPassword = String(user.password || '');
     const passwordOk = storedPassword.startsWith('$2')
@@ -42,14 +76,26 @@ const login = async (req, res) => {
       : storedPassword === password;
 
     if (!passwordOk) {
-      return res.status(401).json({ success: false, message: 'Incorrect password. Please try again' });
+      recordFailedLogin(attemptKey);
+      return invalidCredentials();
     }
 
+    // Preserve the user's actual password while eliminating legacy plaintext
+    // storage the next time that user successfully authenticates.
+    if (!storedPassword.startsWith('$2')) {
+      try {
+        const passwordHash = await bcrypt.hash(password, 12);
+        await pool.query('UPDATE users SET password = ? WHERE id = ? AND password = ?', [passwordHash, user.id, storedPassword]);
+      } catch (upgradeError) {
+        console.error('Legacy password hash upgrade failed for user:', user.id);
+      }
+    }
+    clearFailedLogins(attemptKey);
     const dto = userDto(user);
     const token = jwt.sign(
       { id: dto.id, email: dto.email, name: dto.name, role: dto.role },
-      process.env.JWT_SECRET || 'your-secret-key-change-this-in-production-2024',
-      { expiresIn: process.env.JWT_EXPIRY || '7d' }
+      jwtSecret(),
+      { expiresIn: process.env.JWT_EXPIRY || '8h' }
     );
 
     return res.status(200).json({ success: true, message: 'Login successful', token, user: dto });
@@ -61,6 +107,9 @@ const login = async (req, res) => {
 
 const getAllUsers = async (req, res) => {
   try {
+    if (String(req.user.role || '').toLowerCase() !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Only administrators can view user accounts' });
+    }
     const [users] = await pool.query(`
       SELECT u.id, u.email, u.full_name, u.role, u.is_active, u.created_at,
              COUNT(i.id) AS incidents

@@ -1,4 +1,9 @@
-require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+const dotenv = require('dotenv');
+const environmentDir = require('path').join(__dirname, '..');
+dotenv.config({ path: require('path').join(environmentDir, '.env') });
+// Local development secrets intentionally live outside source control. Load
+// them after .env so a migration uses the same database as the running app.
+dotenv.config({ path: require('path').join(environmentDir, '.env.local'), override: true });
 const fs = require('fs');
 const path = require('path');
 const mysql = require('mysql2/promise');

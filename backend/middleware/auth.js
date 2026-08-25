@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const pool = require('../config/database');
+const { jwtSecret } = require('../config/security');
 
 const authenticateToken = (req, res, next) => {
   // Get token from header
@@ -13,7 +14,7 @@ const authenticateToken = (req, res, next) => {
     });
   }
 
-  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-this-in-production-2024', async (err, user) => {
+  jwt.verify(token, jwtSecret(), async (err, user) => {
     if (err) {
       return res.status(403).json({
         success: false,

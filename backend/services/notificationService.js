@@ -44,8 +44,10 @@ async function notifyUsers({ actorId, message, type = 'info', incidentRef = null
   }
 }
 
-async function notifyMailboxUsers({ fromName, subject }) {
+async function notifyMailboxUsers({ fromName, subject, mailboxMessageId }) {
   try {
+    const messageId = String(mailboxMessageId || '').trim();
+    if (!messageId) return false;
     const [users] = await pool.query(`SELECT DISTINCT u.id
       FROM users u JOIN roles r ON r.role_key = u.role
       JOIN role_permissions rp ON rp.role_id = r.id
@@ -53,8 +55,8 @@ async function notifyMailboxUsers({ fromName, subject }) {
     if (!users.length) return true;
     const sender = String(fromName || 'Unknown sender').replace(/[\r\n]+/g, ' ').trim().slice(0, 160);
     const title = String(subject || '(No subject)').replace(/[\r\n]+/g, ' ').trim().slice(0, 255);
-    await pool.query('INSERT INTO notifications (message, user_id, type, incident_ref, is_mention, actor_id) VALUES ?', [
-      users.map((user) => [`New mailbox email from ${sender}: ${title}`, user.id, 'mailbox', null, 0, null])
+    await pool.query('INSERT INTO notifications (message, user_id, type, incident_ref, is_mention, actor_id, mailbox_message_id) VALUES ?', [
+      users.map((user) => [`New mailbox email from ${sender}: ${title}`, user.id, 'mailbox', null, 0, null, messageId])
     ]);
     return true;
   } catch (error) {
@@ -63,9 +65,23 @@ async function notifyMailboxUsers({ fromName, subject }) {
   }
 }
 
+// Read status belongs to the shared Microsoft 365 mailbox, not to one portal
+// user. Once anyone opens a message, its notification must no longer pop up
+// for another signed-in user.
+async function markMailboxNotificationsRead(mailboxMessageId) {
+  const messageId = String(mailboxMessageId || '').trim();
+  if (!messageId) return 0;
+  const [result] = await pool.query(
+    "UPDATE notifications SET is_read = 1 WHERE type = 'mailbox' AND mailbox_message_id = ? AND is_read = 0",
+    [messageId]
+  );
+  return Number(result.affectedRows) || 0;
+}
+
 module.exports = {
   notifyUsers,
   notifyMailboxUsers,
+  markMailboxNotificationsRead,
   containsMention,
   purgeExpiredNotifications,
   NOTIFICATION_RETENTION_HOURS,
