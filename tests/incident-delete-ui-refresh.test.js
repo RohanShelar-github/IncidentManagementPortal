@@ -51,11 +51,11 @@ test('backend allows authenticated deletion of open incidents but reserves close
   assert.match(deletion, /return res\.status\(403\)/);
 });
 
-test('open incident delete action is visible to every role', () => {
+test('open incident delete action is available only to roles with incident delete permission', () => {
   const renderStart = frontend.indexOf('function renderIncidentTable()');
   const renderEnd = frontend.indexOf('function renderPagination()', renderStart);
   const rendering = frontend.slice(renderStart, renderEnd);
-  assert.match(rendering, /\$\{i\.status !== 'Closed' \|\| currentRole === 'admin' \? `<button[^`]*deleteIncident/);
+  assert.match(rendering, /hasPermission\('delete_incidents'\) && \(i\.status !== 'Closed' \|\| currentRole === 'admin'\)/);
   assert.doesNotMatch(rendering, /hasPermission\('manage_users'\)[^\n]*deleteIncident/);
 });
 

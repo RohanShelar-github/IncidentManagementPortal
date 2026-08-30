@@ -27,6 +27,12 @@ test('SLA drill-down uses the live active-breach calculation', () => {
   assert.match(frontend, /sla: 'SLA-Breached Active Incidents'/);
 });
 
+test('Open/Active drill-down reserves breach duration for Critical incidents', () => {
+  assert.match(frontend, /var isCriticalSeverity = severity\.toLowerCase\(\) === 'critical';/);
+  assert.match(frontend, /if \(!isCriticalSeverity && actualMinutes > targetMinutes\) targetMinutes = actualMinutes;/);
+  assert.match(frontend, /formatMetricDuration\(visibleSlaTargetMinutes\)/);
+});
+
 test('metric drill-down no longer renders a legacy classification column', () => {
   assert.doesNotMatch(frontend, /inc\.(?:classLevel) \|\| severity/);
   assert.match(html, /<th>Incident ID<\/th><th>Title \/ Summary<\/th><th>Customer<\/th><th>Severity<\/th><th>Status<\/th>/);

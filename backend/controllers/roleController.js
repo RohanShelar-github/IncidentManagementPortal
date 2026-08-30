@@ -1,6 +1,6 @@
 const pool = require('../config/database');
 
-const PERMISSIONS = ['view_dashboard','view_incidents','create_incidents','edit_incidents','close_incidents','view_reports','export_reports','view_customer360','view_mailbox','send_mailbox','delete_mailbox','manage_users','manage_roles','assign_roles','manage_data'];
+const PERMISSIONS = ['view_dashboard','view_incidents','create_incidents','edit_incidents','close_incidents','delete_incidents','view_reports','export_reports','view_customer360','view_mailbox','send_mailbox','delete_mailbox','manage_users','manage_roles','assign_roles','manage_data'];
 
 function requireAdmin(req, res) {
   if (String(req.user.role || '').toLowerCase() !== 'admin') {

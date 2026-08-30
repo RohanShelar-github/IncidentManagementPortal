@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS role_permissions (
 
 INSERT INTO permissions(permission_key, permission_name) VALUES
 ('view_dashboard','View Dashboard'),('view_incidents','View Incidents'),('create_incidents','Create Incidents'),
-('edit_incidents','Edit Incidents'),('close_incidents','Close Incidents'),('view_reports','View Reports'),
+('edit_incidents','Edit Incidents'),('close_incidents','Close Incidents'),('delete_incidents','Delete Incidents'),('view_reports','View Reports'),
 ('export_reports','Export Reports'),('view_customer360','View Customer 360'),('manage_users','Manage Users'),
 ('view_mailbox','View Mailbox'),('send_mailbox','Send Mailbox Replies'),('delete_mailbox','Delete Mailbox Emails'),('manage_roles','Manage Roles'),('assign_roles','Assign Roles'),('manage_data','Manage Data')
 ON DUPLICATE KEY UPDATE permission_name = VALUES(permission_name);

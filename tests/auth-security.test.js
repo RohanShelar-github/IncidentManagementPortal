@@ -24,8 +24,11 @@ test('login responses do not enumerate accounts and rate limit repeated failures
   assert.doesNotMatch(auth, /Incorrect password\. Please try again/);
 });
 
-test('user list is admin-only and password-bearing rows are not returned by API DTOs', () => {
+test('user management data is admin-only, while incident creators receive a limited assignee directory', () => {
   assert.match(auth, /Only administrators can view user accounts/);
+  assert.match(auth, /hasRolePermission\(req\.user\.role, 'create_incidents'\)/);
+  assert.match(auth, /SELECT id, full_name, role, is_active/);
+  assert.match(auth, /users\.map\(assigneeDto\)/);
   assert.match(auth, /SELECT u\.id, u\.email, u\.full_name, u\.role, u\.is_active, u\.created_at/);
   assert.doesNotMatch(auth, /return \{[\s\S]{0,400}password:/);
 });

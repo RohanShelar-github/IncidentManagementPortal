@@ -22,6 +22,20 @@ function htmlEscape(value) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+function safeIncidentEmailHtml(value) {
+  return String(value || '').slice(0, 500000)
+    .replace(/<\/?(?:script|style|iframe|object)[^>]*>/gi, '')
+    .replace(/\son\w+\s*=\s*(['"]).*?\1/gi, '')
+    .replace(/<(?!\/?(?:b|strong|i|em|u|font|div|p|br|ul|ol|li|img)\b)[^>]*>/gi, '')
+    .replace(/<(font)\b[^>]*size\s*=\s*['"]?([1-7])['"]?[^>]*>/gi, '<$1 size="$2">')
+    .replace(/<(font)\b[^>]*>/gi, '<$1>')
+    .replace(/<img\b([^>]*)>/gi, (_, attributes) => {
+      const source = String(attributes).match(/\bsrc\s*=\s*(['"])(data:image\/(?:png|jpeg|webp|gif);base64,[^'"]+)\1/i);
+      const alt = String(attributes).match(/\balt\s*=\s*(['"])([^'"]{0,160})\1/i);
+      return source ? `<img src="${source[2]}"${alt ? ` alt="${htmlEscape(alt[2])}"` : ''} style="display:block;max-width:100%;height:auto;margin:12px 0">` : '';
+    });
+}
+
 function configured() {
   if (String(process.env.MAIL_ENABLED || '').toLowerCase() !== 'true') return false;
   if (mailProvider() === 'smtp') {
@@ -115,7 +129,8 @@ function incidentEmail(incident) {
     ['Incident Start', `${incident.startDT || incident.date_time_opened || 'Not provided'} ${incident.timezone || 'IST'}`],
     ...(isClosed ? [['Downtime', incident.downtime || '0m'], ['MTTR', incident.mttr || 'Not recorded'], ['Resolved By', incident.resolvedBy || 'Not recorded'], ['Closed At', `${incident.closedAt || 'Not provided'} ${incident.timezone || 'IST'}`]] : [])
   ].map(([label, value]) => `<tr><td style="padding:8px 12px;color:#64748b;font-size:13px;border-bottom:1px solid #e2e8f0">${htmlEscape(label)}</td><td style="padding:8px 12px;color:#0f172a;font-size:13px;font-weight:600;border-bottom:1px solid #e2e8f0">${htmlEscape(value)}</td></tr>`).join('');
-  const html = `<!doctype html><html><body style="margin:0;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a"><div style="max-width:680px;margin:24px auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden"><div style="background:#172554;padding:24px;color:#fff"><div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;opacity:.8">AOC 24×7 Incident Management</div><h1 style="font-size:22px;margin:8px 0 0">Incident ${isClosed ? 'Closed' : 'Created'}</h1></div><div style="padding:24px"><div data-additional-message></div><div style="font-size:18px;font-weight:700;margin-bottom:6px">${htmlEscape(incident.title || 'Untitled incident')}</div><div style="display:inline-block;background:${isClosed ? '#dcfce7' : '#fee2e2'};color:${isClosed ? '#166534' : '#991b1b'};border-radius:999px;padding:5px 10px;font-size:12px;font-weight:700;margin-bottom:18px">${htmlEscape(isClosed ? 'Closed' : (incident.severity || 'Incident'))}</div><table role="presentation" style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0">${details}</table><div style="margin-top:20px"><div style="font-size:13px;font-weight:700;color:#334155;margin-bottom:7px">${isClosed ? 'Resolution' : 'Description'}</div><div style="background:#f8fafc;border-left:4px solid #3b82f6;padding:12px 14px;white-space:pre-wrap;font-size:13px;line-height:1.5">${htmlEscape(isClosed ? (incident.resolution || 'Not provided') : (incident.description || 'Not provided'))}</div></div>${incidentUrl ? `<div style="margin-top:24px;text-align:center"><a href="${htmlEscape(incidentUrl)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700;font-size:14px">Open Incident ${htmlEscape(incident.id)}</a><div style="font-size:11px;color:#64748b;margin-top:9px">Sign in when prompted; the incident will open automatically.</div></div>` : ''}</div></div></body></html>`;
+  const descriptionHtml = safeIncidentEmailHtml(isClosed ? (incident.resolution || 'Not provided') : (incident.description || 'Not provided'));
+  const html = `<!doctype html><html><body style="margin:0;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a"><div style="max-width:680px;margin:24px auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden"><div style="background:#172554;padding:24px;color:#fff"><div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;opacity:.8">AOC 24×7 Incident Management</div><h1 style="font-size:22px;margin:8px 0 0">Incident ${isClosed ? 'Closed' : 'Created'}</h1></div><div style="padding:24px"><div data-additional-message></div><div style="font-size:18px;font-weight:700;margin-bottom:6px">${htmlEscape(incident.title || 'Untitled incident')}</div><div style="display:inline-block;background:${isClosed ? '#dcfce7' : '#fee2e2'};color:${isClosed ? '#166534' : '#991b1b'};border-radius:999px;padding:5px 10px;font-size:12px;font-weight:700;margin-bottom:18px">${htmlEscape(isClosed ? 'Closed' : (incident.severity || 'Incident'))}</div><table role="presentation" style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0">${details}</table><div style="margin-top:20px"><div style="font-size:13px;font-weight:700;color:#334155;margin-bottom:7px">${isClosed ? 'Resolution' : 'Description'}</div><div style="background:#f8fafc;border-left:4px solid #3b82f6;padding:12px 14px;font-size:13px;line-height:1.5">${descriptionHtml}</div></div>${incidentUrl ? `<div style="margin-top:24px;text-align:center"><a href="${htmlEscape(incidentUrl)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700;font-size:14px">Open Incident ${htmlEscape(incident.id)}</a><div style="font-size:11px;color:#64748b;margin-top:9px">Sign in when prompted; the incident will open automatically.</div></div>` : ''}</div></div></body></html>`;
   return { subject, body, html, incidentUrl };
 }
 
@@ -261,11 +276,28 @@ async function listMailboxFolderMessages(folder, limit = 50, category = 'all') {
 }
 
 async function listInboxMessages(limit = 50, category = 'all') {
-  return listMailboxFolderMessages('inbox', limit, category);
+  const inbox = await listMailboxFolderMessages('inbox', limit, category);
+  // Include only Sent Items that belong to an inbox conversation already in
+  // this bounded page. This gives the UI a complete two-way thread without
+  // turning the incoming category views into a second Sent Items list.
+  const conversationIds = new Set(inbox.map((message) => message.conversationId).filter(Boolean));
+  if (!conversationIds.size) return inbox.map((message) => ({ ...message, mailboxSource: 'inbox' }));
+  const inboxWithSource = inbox.map((message) => ({ ...message, mailboxSource: 'inbox' }));
+  try {
+    const sent = await listMailboxFolderMessages('sentitems', limit, 'sent');
+    return [...inboxWithSource,
+      ...sent.filter((message) => conversationIds.has(message.conversationId)).map((message) => ({ ...message, mailboxSource: 'sent' }))];
+  } catch (error) {
+    // A Sent Items permission/folder issue must never hide incoming Operations
+    // mail. The Inbox is the authoritative source for this view; users can
+    // still open Sent Items separately while the administrator resolves Graph.
+    console.warn('Mailbox Sent Items thread enrichment skipped:', error.message);
+    return inboxWithSource;
+  }
 }
 
 async function listSentMessages(limit = 50) {
-  return listMailboxFolderMessages('sentitems', limit, 'sent');
+  return (await listMailboxFolderMessages('sentitems', limit, 'sent')).map((message) => ({ ...message, mailboxSource: 'sent' }));
 }
 
 async function countUnreadMailboxMessages(category) {
@@ -418,7 +450,7 @@ async function sendIncidentCreatedEmail(incident) {
     body: String(incident.emailBody || defaults.body).trim().slice(0, 20000)
   };
   if (incident.emailBody) {
-    defaults.html = defaults.html.replace('<div data-additional-message></div>', `<div style="margin:0 0 18px;padding:12px 14px;background:#eff6ff;border-left:4px solid #3b82f6;color:#334155;white-space:pre-wrap;font-size:13px">${htmlEscape(content.body)}</div>`);
+    defaults.html = defaults.html.replace('<div data-additional-message></div>', `<div style="margin:0 0 18px;padding:12px 14px;background:#eff6ff;border-left:4px solid #3b82f6;color:#334155;font-size:13px;line-height:1.55">${safeIncidentEmailHtml(content.body)}</div>`);
   }
   const to = cleanAddressList(incident.emailTo, process.env.MAIL_TO);
   const cc = cleanAddressList(incident.emailCc, process.env.MAIL_CC);

@@ -1274,6 +1274,7 @@
 <div class="form-group">
 <label class="form-label required">Customer</label>
 <select id="f_customer"><option value="">Select customer</option></select>
+<div id="f_operations_email_hint" style="display:none;margin-top:7px;font-size:10px;color:var(--text-muted);line-height:1.4"></div>
 </div>
 <div class="form-group">
 <label class="form-label required">Project / Service</label>
@@ -1326,7 +1327,10 @@
 </div>
 <div class="form-group form-full">
 <label class="form-label required">Description</label>
-<textarea id="f_desc" placeholder="Detailed description of the incident, impact, and steps to reproduce…" rows="3"></textarea>
+<div role="toolbar" aria-label="Description formatting" style="display:flex;align-items:center;gap:4px;padding:6px 8px;border:1px solid var(--border);border-bottom:0;border-radius:7px 7px 0 0;background:var(--surface-2)">
+<button type="button" class="btn btn-sm" title="Bold" onclick="formatIncidentDescription('bold')"><b>B</b></button><button type="button" class="btn btn-sm" title="Italic" onclick="formatIncidentDescription('italic')"><i>I</i></button><button type="button" class="btn btn-sm" title="Underline" onclick="formatIncidentDescription('underline')"><u>U</u></button><span style="width:1px;height:20px;background:var(--border);margin:0 3px"></span><button type="button" class="btn btn-sm" title="Decrease text size" onclick="formatIncidentDescription('fontSize', 2)">A−</button><button type="button" class="btn btn-sm" title="Increase text size" onclick="formatIncidentDescription('fontSize', 5)">A+</button><span style="width:1px;height:20px;background:var(--border);margin:0 3px"></span><button type="button" class="btn btn-sm" title="Insert image" onclick="chooseIncidentDescriptionImage()">Image</button><button type="button" class="btn btn-sm" title="Resize selected image to 35%" onclick="resizeSelectedIncidentImage(35)">S</button><button type="button" class="btn btn-sm" title="Resize selected image to 65%" onclick="resizeSelectedIncidentImage(65)">M</button><button type="button" class="btn btn-sm" title="Resize selected image to full width" onclick="resizeSelectedIncidentImage(100)">L</button><button type="button" class="btn btn-sm" title="Crop selected image" onclick="cropSelectedIncidentImage()">Crop</button><input id="f_desc_image_input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none" onchange="insertIncidentDescriptionImage(this.files[0]);this.value=''"/>
+</div>
+<div id="f_desc" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Detailed description of the incident, impact, and steps to reproduce…" onfocus="activateIncidentDescriptionEditor('f_desc')" onpaste="activateIncidentDescriptionEditor('f_desc');handleIncidentDescriptionPaste(event)" onclick="activateIncidentDescriptionEditor('f_desc');selectIncidentDescriptionImage(event)" style="min-height:88px;box-sizing:border-box;resize:vertical;overflow:auto;border:1px solid var(--border);border-radius:0 0 7px 7px;padding:10px 12px;background:var(--surface);color:var(--text);line-height:1.5"></div>
 </div>
 <div>
 <label class="form-label">Area <span style="color:var(--danger)">*</span></label>
@@ -1550,6 +1554,9 @@
             </label>
 <label class="perm-check" onclick="togglePerm(this)">
 <input type="checkbox" value="close_incidents"/> Close Incidents
+            </label>
+<label class="perm-check" onclick="togglePerm(this)">
+<input type="checkbox" value="delete_incidents"/> Delete Incidents
             </label>
 <label class="perm-check" onclick="togglePerm(this)">
 <input type="checkbox" value="view_reports"/> View Reports
@@ -2295,5 +2302,5 @@
 <div class="ai-chat-suggestions"><button onclick="askAiSuggestion(this)">Show open Critical incidents</button><button onclick="askAiSuggestion(this)">Summarize recent incidents</button></div>
 <footer class="ai-chat-compose"><textarea id="aiChatInput" rows="2" maxlength="2000" placeholder="Ask about incidents..." onkeydown="handleAiChatKey(event)"></textarea><button id="aiChatSend" onclick="sendAiChatMessage()">Send</button></footer>
 </section>
-<script src="./js/reportingMetrics.js"></script><script src="./js/incidentReportExcel.js"></script><script src="./js/app.js"></script><script src="./config/config.js"></script></body>
+<script src="./js/reportingMetrics.js"></script><script src="./js/incidentReportExcel.js"></script><script src="./js/app.js?v=20260826-editor2"></script><script src="./config/config.js"></script></body>
 </html>

@@ -15,8 +15,6 @@ const mailboxRoutes = require('./routes/mailboxRoutes');
 const { startMailboxNotificationPolling } = require('./controllers/mailboxController');
 const { startUiServer } = require('../server-ui');
 const pool = require('./config/database');
-const { configured: emailConfigured } = require('./services/emailService');
-const { configured: aiConfigured } = require('./services/aiService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -57,14 +55,9 @@ app.use('/api/mailbox', mailboxRoutes);
 // Health check endpoint
 app.get('/api/health', async (req, res) => {
   try {
-    const [db] = await pool.query('SELECT DATABASE() AS database_name, NOW() AS database_time');
+    await pool.query('SELECT 1');
     res.json({
       status: 'OK',
-      database: 'connected',
-      databaseName: db[0].database_name,
-      databaseTime: db[0].database_time,
-      emailConfigured: emailConfigured(),
-      aiConfigured: aiConfigured(),
       timestamp: new Date().toISOString(),
       message: 'Incident Management Backend is running'
     });
@@ -72,8 +65,7 @@ app.get('/api/health', async (req, res) => {
     console.error('Health check database error:', error);
     res.status(500).json({
       status: 'ERROR',
-      database: 'disconnected',
-      message: error.message
+      message: 'Service unavailable'
     });
   }
 });

@@ -13,6 +13,14 @@ test('create incident tags advertise database user tagging', () => {
   assert.match(html, /id="f_tag_suggestions"[^>]*bottom:48px/);
 });
 
+test('incident description supports controlled rich-text formatting', () => {
+  assert.match(html, /id="f_desc"[^>]*contenteditable="true"/);
+  assert.match(html, /formatIncidentDescription\('bold'\)/);
+  assert.match(html, /formatIncidentDescription\('italic'\)/);
+  assert.match(html, /formatIncidentDescription\('underline'\)/);
+  assert.match(frontend, /function descriptionEditorValue\(\)/);
+});
+
 test('typing @ filters create-incident tag suggestions by database username', () => {
   assert.match(frontend, /q\.charAt\(0\) === '@'/);
   assert.match(frontend, /users\.filter\(function \(u\)/);

@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS role_permissions (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 INSERT INTO permissions(permission_key, permission_name) VALUES
 ('view_dashboard','View Dashboard'),('view_incidents','View Incidents'),('create_incidents','Create Incidents'),
-('edit_incidents','Edit Incidents'),('close_incidents','Close Incidents'),('view_reports','View Reports'),
+('edit_incidents','Edit Incidents'),('close_incidents','Close Incidents'),('delete_incidents','Delete Incidents'),('view_reports','View Reports'),
 ('export_reports','Export Reports'),('view_customer360','View Customer 360'),('manage_users','Manage Users'),
 ('view_mailbox','View Operations'),('send_mailbox','Send Operations Mail'),('delete_mailbox','Delete Operations Emails'),('manage_roles','Manage Roles'),('assign_roles','Assign Roles'),('manage_data','Manage Data')
 ON DUPLICATE KEY UPDATE permission_name=VALUES(permission_name);

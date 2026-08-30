@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const pool = require('../config/database');
 const { jwtSecret } = require('../config/security');
+const { hasRolePermission } = require('../middleware/permissions');
 
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_MAX_FAILURES = 5;
@@ -46,6 +47,20 @@ function userDto(user) {
     initials: user.initials || String(name || '').split(/\s+/).map(p => p[0] || '').join('').substring(0, 2).toUpperCase(),
     incidents: Number(user.incidents || 0),
     lastActive: user.last_active || 'Not tracked',
+    active: user.is_active === undefined ? true : Boolean(user.is_active)
+  };
+}
+
+// Incident creators only need a display-name directory for assignment.  Keep
+// the full account list (including email and usage details) restricted to
+// administrators who manage user accounts.
+function assigneeDto(user) {
+  const name = user.full_name || user.name || user.email;
+  return {
+    id: user.id,
+    name,
+    role: user.role,
+    initials: user.initials || String(name || '').split(/\s+/).map(p => p[0] || '').join('').substring(0, 2).toUpperCase(),
     active: user.is_active === undefined ? true : Boolean(user.is_active)
   };
 }
@@ -107,9 +122,24 @@ const login = async (req, res) => {
 
 const getAllUsers = async (req, res) => {
   try {
-    if (String(req.user.role || '').toLowerCase() !== 'admin') {
+    const isAdmin = String(req.user.role || '').toLowerCase() === 'admin';
+    const canCreateIncidents = isAdmin || await hasRolePermission(req.user.role, 'create_incidents');
+    if (!canCreateIncidents) {
       return res.status(403).json({ success: false, message: 'Only administrators can view user accounts' });
     }
+
+    // AOC/engineer roles must be able to assign an incident, but must not be
+    // given the administrator's account-management directory.
+    if (!isAdmin) {
+      const [users] = await pool.query(`
+        SELECT id, full_name, role, is_active
+          FROM users
+         WHERE is_active = 1
+         ORDER BY full_name
+      `);
+      return res.status(200).json({ success: true, data: users.map(assigneeDto) });
+    }
+
     const [users] = await pool.query(`
       SELECT u.id, u.email, u.full_name, u.role, u.is_active, u.created_at,
              COUNT(i.id) AS incidents

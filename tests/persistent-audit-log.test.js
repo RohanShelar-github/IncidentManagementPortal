@@ -9,8 +9,8 @@ const routes = fs.readFileSync(path.resolve(__dirname, '..', 'backend', 'routes'
 const html = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8');
 
 test('backend exposes authenticated persistent activity logs before the incident id route', () => {
-  const activityRoute = routes.indexOf("router.get('/activity-log', getActivityLog)");
-  const incidentRoute = routes.indexOf("router.get('/:id', getIncidentById)");
+  const activityRoute = routes.indexOf("router.get('/activity-log', requirePermission('view_incidents'), getActivityLog)");
+  const incidentRoute = routes.indexOf("router.get('/:id', requirePermission('view_incidents'), getIncidentById)");
 
   assert.notEqual(activityRoute, -1);
   assert.ok(activityRoute < incidentRoute);

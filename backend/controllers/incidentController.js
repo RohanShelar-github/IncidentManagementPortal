@@ -81,6 +81,20 @@ const resolveMttdMinutes = (body) => {
   return total > 0 ? total : null;
 };
 
+function sanitizeIncidentDescription(value) {
+  return String(value || '').slice(0, 500000)
+    .replace(/<\/?(?:script|style|iframe|object)[^>]*>/gi, '')
+    .replace(/\son\w+\s*=\s*(['"]).*?\1/gi, '')
+    .replace(/<(?!\/?(?:b|strong|i|em|u|font|div|p|br|ul|ol|li|img)\b)[^>]*>/gi, '')
+    .replace(/<(font)\b[^>]*size\s*=\s*['"]?([1-7])['"]?[^>]*>/gi, '<$1 size="$2">')
+    .replace(/<(font)\b[^>]*>/gi, '<$1>')
+    .replace(/<img\b([^>]*)>/gi, (_, attributes) => {
+      const source = String(attributes).match(/\bsrc\s*=\s*(['"])(data:image\/(?:png|jpeg|webp|gif);base64,[^'"]+)\1/i);
+      const alt = String(attributes).match(/\balt\s*=\s*(['"])([^'"]{0,160})\1/i);
+      return source ? `<img src="${source[2]}"${alt ? ` alt="${alt[2].replace(/[<>&"]/g, '')}"` : ''}>` : '';
+    });
+}
+
 const generateIncidentRef = async () => {
   const [result] = await pool.query("SELECT MAX(CAST(SUBSTRING_INDEX(incident_ref, '-', -1) AS UNSIGNED)) AS max_num FROM incidents WHERE incident_ref LIKE 'INC-%'");
   const maxNum = result[0]?.max_num ? Number(result[0].max_num) : 0;
@@ -236,6 +250,7 @@ const createIncident = async (req, res) => {
     const b = req.body;
     if (!b.title || !b.severity) return res.status(400).json({ success: false, message: 'Title and severity are required' });
 
+    b.description = sanitizeIncidentDescription(b.description);
     const incidentRef = await generateIncidentRef();
     const assignedTo = await resolveUserId(b.engineer);
     const resolvedCustomer = await resolveCustomer(b.customer_id || b.customer);
@@ -284,6 +299,17 @@ const createIncident = async (req, res) => {
     const [created] = await pool.query('SELECT id FROM incidents WHERE incident_ref = ?', [incidentRef]);
     if (created.length) {
       await pool.query('INSERT INTO activity_logs (incident_id, action_type, action_by, detail) VALUES (?, ?, ?, ?)', [created[0].id, 'create', req.user.id, 'Incident created']);
+      const operationsAuditId = Number(b.operations_email_audit_id);
+      if (Number.isInteger(operationsAuditId) && operationsAuditId > 0) {
+        try {
+          await pool.query('UPDATE operations_email_incident_audit SET incident_id = ?, status = ? WHERE id = ? AND requested_by = ? AND incident_id IS NULL', [created[0].id, 'created', operationsAuditId, req.user.id]);
+          await pool.query('INSERT INTO activity_logs (incident_id, action_type, action_by, detail) VALUES (?, ?, ?, ?)', [created[0].id, 'operations_email_incident_created', req.user.id, `Incident created from Operations email audit ${operationsAuditId}`]);
+        } catch (auditError) {
+          // Do not affect the established incident workflow if an optional
+          // Operations audit record cannot be persisted.
+          console.error('Operations email incident audit update failed:', auditError.message);
+        }
+      }
     }
     let email = { sent: false, skipped: true, message: 'Email was not attempted' };
     try {
@@ -352,7 +378,7 @@ const getIncidents = async (req, res) => {
 };
 
 function criticalEmailBody({ id, title, description, customer, project, severity, area, start, user }) {
-  return `Hi Team,\n\nWe have received a critical incident: ${title}.\n\nIssue Reported:\n${description || 'Not provided'}\n\nOur team is currently investigating the issue and has assigned it the highest priority.\n\nCurrent Status: Investigation in Progress\n\nIncident Number: ${id}\nCustomer: ${customer || 'Not provided'}\nEnvironment / Project: ${project || 'Not provided'}\nSeverity: ${severity || 'Critical'}\nArea: ${area || 'Not provided'}\nCreation Date/Time: ${start || 'Not provided'}\n\nWe will provide further updates as soon as more information becomes available.\n\nThanks & Regards,\n${user || 'AOC Operations Team'}`;
+  return `Dear Team,\n\nWe have received the following critical incident:\n${title}.\n\nOur team is currently reviewing it.\n\nWe will provide further updates as soon as more information becomes available.\n\nThanks & Regards,\n${user || 'AOC Operations Team'}`;
 }
 
 function criticalEmailHtml({ id, title, body, customer, project, severity, area, start, timezone, engineer, user }) {
@@ -360,9 +386,13 @@ function criticalEmailHtml({ id, title, body, customer, project, severity, area,
   const updateIndex = sections.findIndex(section => /^We will provide further updates/i.test(section));
   const paragraphs = (values) => values.map(section => `<p style="margin:0 0 16px;white-space:pre-wrap">${htmlEscape(section)}</p>`).join('');
   const intro = paragraphs(updateIndex < 0 ? sections : sections.slice(0, updateIndex));
-  const closing = paragraphs(updateIndex < 0 ? [] : sections.slice(updateIndex));
+  let closing = paragraphs(updateIndex < 0 ? [] : sections.slice(updateIndex));
   const row = (label, value) => `<tr><td style="padding:10px 14px;width:38%;border-bottom:1px solid #e5e7eb;color:#64748b;font-size:13px;font-weight:600">${htmlEscape(label)}</td><td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#0f172a;font-size:13px;font-weight:600">${htmlEscape(value || 'Not provided')}</td></tr>`;
   const created = `${start || 'Not provided'}${timezone ? ` ${timezone}` : ''}`;
+  const portalBaseUrl = String(process.env.PORTAL_BASE_URL || '').replace(/\/$/, '');
+  const incidentUrl = portalBaseUrl && id ? `${portalBaseUrl}/?incident=${encodeURIComponent(id)}#incidents` : '';
+  const openIncident = incidentUrl ? `<div style="margin-top:22px;text-align:center"><a href="${htmlEscape(incidentUrl)}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:8px;font-size:14px;font-weight:700">Open Incident ${htmlEscape(id)}</a><div style="margin-top:9px;color:#64748b;font-size:11px">Sign in when prompted; the incident will open automatically.</div></div>` : '';
+  closing = openIncident + closing;
   return `<!doctype html><html><body style="margin:0;padding:24px;background:#f3f6fb;font-family:Arial,Helvetica,sans-serif;color:#172033"><div style="max-width:720px;margin:0 auto;background:#ffffff;border:1px solid #dce3ee;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(15,23,42,.08)"><div style="padding:24px 28px;background:#152b5d;color:#ffffff"><div style="font-size:11px;letter-spacing:1.2px;font-weight:700;opacity:.8">AOC 24x7 · INCIDENT MANAGEMENT</div><div style="margin-top:10px;font-size:24px;line-height:1.25;font-weight:700">Critical Incident Notification</div><div style="margin-top:8px;font-size:15px;line-height:1.4;opacity:.95">${htmlEscape(title || 'Untitled incident')}</div></div><div style="padding:22px 28px"><div style="display:inline-block;padding:7px 11px;background:#fff1f2;border:1px solid #fecdd3;border-radius:999px;color:#be123c;font-size:12px;font-weight:700;letter-spacing:.3px">CRITICAL · INVESTIGATION IN PROGRESS</div><div style="margin-top:22px;font-size:14px;line-height:1.6;color:#25334a">${intro}</div><div style="margin-top:22px;border:1px solid #dce3ee;border-radius:8px;overflow:hidden"><div style="padding:11px 14px;background:#f8fafc;border-bottom:1px solid #dce3ee;color:#334155;font-size:12px;font-weight:700;letter-spacing:.6px">INCIDENT SUMMARY</div><table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse">${row('Incident Number', id)}${row('Customer', customer)}${row('Environment / Project', project)}${row('Area / Affected Service', area)}${row('Severity', severity || 'Critical')}${row('Assigned Engineer', engineer)}${row('Created', created)}</table></div><div style="margin-top:22px;font-size:14px;line-height:1.6;color:#25334a">${closing}</div><div style="margin-top:24px;padding-top:18px;border-top:1px solid #e5e7eb;color:#475569;font-size:13px;line-height:1.5">This notification was generated by the AOC 24x7 Incident Management Portal.<br><strong style="color:#172033">${htmlEscape(user || 'AOC Operations Team')}</strong></div></div></div></body></html>`;
 }
 
@@ -394,7 +424,7 @@ async function sendDeferredIncidentEmail(req, res) {
     let email;
     if (normalizeSeverity(incident.severity) === 'critical') {
       const body = String(draft.body || criticalEmailBody({ id: incident.id, title: incident.title, description: incident.description, customer: incident.customer, project: incident.project, severity: incident.severity, area: incident.area, start: incident.date_time_opened, user: req.user.name || req.user.email }));
-      email = await sendCriticalIncidentEmail({ from: process.env.MAIL_FROM, to: draft.to, cc: draft.cc || '', bcc: '', subject: draft.subject, html: `<div style="font-family:Arial,sans-serif;white-space:pre-wrap;line-height:1.55">${htmlEscape(body)}</div>`, attachments: draft.attachments || [] });
+      email = await sendCriticalIncidentEmail({ from: process.env.MAIL_FROM, to: draft.to, cc: draft.cc || '', bcc: '', subject: draft.subject, html: criticalEmailHtml({ id: incident.id, title: incident.title, body, customer: incident.customer, project: incident.project, severity: incident.severity, area: incident.area, start: incident.date_time_opened, timezone: incident.timezone, engineer: incident.engineer, user: req.user.name || req.user.email }), attachments: draft.attachments || [] });
       if (email.sent) {
         const [thread] = await pool.query('INSERT INTO incident_email_threads (incident_id, customer_name, conversation_id, graph_thread_id, message_id, internet_message_id, subject, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [incident.db_id, incident.customer || null, email.conversationId || null, email.conversationId || null, email.messageId || null, email.internetMessageId || null, draft.subject, 'sent', req.user.id]);
         await pool.query('INSERT INTO incident_email_messages (thread_id, incident_id, direction, action_type, graph_message_id, internet_message_id, subject, sender, recipients, cc_recipients, body_preview, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [thread.insertId, incident.db_id, 'outbound', 'email_sent', email.messageId || null, email.internetMessageId || null, draft.subject, process.env.MAIL_FROM || null, draft.to, draft.cc || null, body.slice(0, 6000), 'sent', req.user.id]);
@@ -443,7 +473,12 @@ const getActivityLog = async (req, res) => {
 };
 
 const findIncidentDbId = async (idOrRef) => {
-  const [rows] = await pool.query('SELECT id FROM incidents WHERE incident_ref = ? OR id = ? LIMIT 1', [idOrRef, Number(idOrRef) || 0]);
+  // Historical Salesforce references remain valid links after their visible
+  // portal IDs are normalised to INC-xxx.
+  const [rows] = await pool.query(
+    'SELECT id FROM incidents WHERE incident_ref = ? OR sf_case_no = ? OR legacy_case_number = ? OR id = ? LIMIT 1',
+    [idOrRef, idOrRef, idOrRef, Number(idOrRef) || 0]
+  );
   return rows.length ? rows[0].id : null;
 };
 
@@ -518,7 +553,7 @@ const updateIncident = async (req, res) => {
     if (b.status !== undefined) add('status', normalizedStatus);
     if (b.engineer !== undefined) add('assigned_to', await resolveUserId(b.engineer));
     if (b.case_owner !== undefined) add('case_owner', b.case_owner || null);
-    if (b.description !== undefined) add('description', b.description || null);
+    if (b.description !== undefined) add('description', sanitizeIncidentDescription(b.description) || null);
     if (b.sla_hours !== undefined) add('sla_hours', b.sla_hours || null);
     if (b.area !== undefined || b.area_id !== undefined) {
       const resolvedArea = await resolveArea(b.area_id || b.area);

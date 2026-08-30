@@ -710,6 +710,8 @@
   .mailbox-row-check { float:left; margin:2px 9px 0 0; }
   .mailbox-row:hover { background:var(--surface2); } .mailbox-row.active { background:rgba(79,142,247,.11); border-left-color:var(--accent); }
   .mailbox-row.unread .mailbox-subject { font-weight:800; color:var(--text); } .mailbox-row.unread .mailbox-from::before { content:'•'; color:var(--accent); margin-right:6px; font-size:15px; vertical-align:-1px; }
+  .mailbox-conversation { position:relative; padding-left:62px; } .mailbox-conversation-select { position:absolute; left:12px; top:18px; margin:0; accent-color:var(--accent); cursor:pointer; } .mailbox-thread-toggle { position:absolute; left:31px; top:16px; border:0; background:transparent; color:var(--text-muted); font-size:21px; cursor:pointer; line-height:1; } .mailbox-thread-toggle:hover { color:var(--accent); }
+  .mailbox-thread-message { margin:0 10px 0 40px; padding:10px 13px; border-bottom:1px solid var(--border); border-left:2px solid var(--border); cursor:pointer; background:var(--surface2); } .mailbox-thread-message:hover,.mailbox-thread-message.active { background:rgba(79,142,247,.12); border-left-color:var(--accent); } .mailbox-thread-message.unread .mailbox-from { font-weight:800; }
   .mailbox-from, .mailbox-meta { font-size:11px; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .mailbox-subject { margin:6px 0; font-size:13px; color:var(--text2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .mailbox-empty { color:var(--text-muted); padding:36px 28px; text-align:center; font-size:13px; }
@@ -733,6 +735,7 @@
   .mailbox-compose-toolbar { display:flex; flex-wrap:wrap; gap:5px; padding:7px; background:var(--surface); border:1px solid var(--border); border-bottom:0; border-radius:8px 8px 0 0; }
   .mailbox-tool { min-width:30px; padding:4px 7px; color:var(--text2); background:transparent; border:1px solid transparent; border-radius:5px; cursor:pointer; font-size:11px; } .mailbox-tool:hover { color:var(--accent); border-color:var(--border); background:var(--surface2); }
   .mailbox-rich-editor { min-height:150px; padding:13px; color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:0 0 8px 8px; outline:none; line-height:1.55; overflow:auto; } .mailbox-rich-editor:empty::before { content:attr(data-placeholder); color:var(--text-muted); pointer-events:none; }
+  #f_desc img { display:block; max-width:100%; height:auto; margin:8px 0; cursor:pointer; border-radius:6px; } #f_desc img.selected-description-image { outline:2px solid var(--accent); outline-offset:3px; }
   .mailbox-compose-attachments { display:flex; align-items:center; gap:10px; flex-wrap:wrap; } .mailbox-compose-attachments input { position:absolute; width:1px; height:1px; opacity:0; overflow:hidden; } .mailbox-attach-button { padding:6px 9px; color:var(--text2); background:var(--surface); border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:12px; } .mailbox-attach-button:hover { color:var(--accent); border-color:var(--accent); } .mailbox-file-names { color:var(--text-muted); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:420px; }
   .mailbox-detail-body-wrap { display:flex; flex:1 1 auto; min-height:0; padding:22px 28px 28px; overflow:hidden; background:linear-gradient(180deg,rgba(255,255,255,.012),transparent); }
   .mailbox-rich-frame { flex:1 1 auto; min-height:0; width:100%; height:auto; max-height:none; border:1px solid var(--border); border-radius:10px; background:var(--surface); display:block; }
@@ -1153,7 +1156,9 @@
   .id-cell {
     font-family: var(--font-mono);
     font-size: 11px;
-    color: var(--text3);
+    /* Keep incident references clearly legible in both themes. */
+    color: var(--text);
+    font-weight: 600;
   }
 
   .title-cell { color: var(--text); font-weight: 500; }

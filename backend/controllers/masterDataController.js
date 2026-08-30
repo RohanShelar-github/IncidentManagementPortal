@@ -12,6 +12,7 @@ function customerDto(row) {
     customer_branch: row.customer_branch,
     region: row.region,
     timezone: row.timezone,
+    jira_project_code: row.jira_project_code || null,
     inbound_csm_name: row.inbound_csm_name,
     outbound_csm_name: row.outbound_csm_name,
     is_active: row.is_active === 1 || row.is_active === true,

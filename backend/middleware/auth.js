@@ -14,7 +14,7 @@ const authenticateToken = (req, res, next) => {
     });
   }
 
-  jwt.verify(token, jwtSecret(), async (err, user) => {
+  jwt.verify(token, jwtSecret(), { algorithms: ['HS256'] }, async (err, user) => {
     if (err) {
       return res.status(403).json({
         success: false,
