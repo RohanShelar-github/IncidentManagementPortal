@@ -3,6 +3,7 @@
 const pool = require('../config/database');
 const { deleteInboxMessage, getInboxAttachment, getInboxMessage, getOperationsMailboxCounts, listInboxMessages, listSentMessages, markInboxMessageRead, replyToInboxMessage, sendNewMailboxMessage } = require('../services/emailService');
 const { markMailboxNotificationsRead, notifyMailboxUsers } = require('../services/notificationService');
+const { operationsIncidentDefaults } = require('../services/operationsMailClassificationService');
 
 let knownMailboxMessageIds = null;
 let mailboxPollTimer = null;
@@ -152,6 +153,7 @@ async function prepareMailboxIncident(req, res) {
   if (!await hasRolePermission(req, 'create_incidents')) return res.status(403).json({ success: false, message: 'Your role cannot create incidents.' });
   try {
     const message = await getInboxMessage(req.params.id);
+    const autoSelection = operationsIncidentDefaults(message.category, message.subject);
     const ticketContent = message.category === 'jira' ? parseCustomerRaisedTicket(message) : null;
     const alertContent = ['azure', 'coralogix'].includes(message.category) ? parseOperationsAlert(message) : null;
     const [customers] = await pool.query('SELECT id, customer_name, timezone, jira_project_code FROM customers WHERE is_active = 1 ORDER BY customer_name');
@@ -196,11 +198,13 @@ async function prepareMailboxIncident(req, res) {
       [message.id, message.subject, message.category || 'other', identified?.id || null, identified?.customer_name || null, identified?.jira_project_code || null, matchLocation, status, req.user.id]
     );
     if (!identified) console.warn(`Operations email customer match ${status}: ${message.id}`);
+    console.info('Operations incident auto-selection:', { messageId: message.id, category: message.category || 'other', ...autoSelection });
     return res.json({ success: true, data: {
       audit_id: audit.insertId, email_id: message.id, source_category: message.category || 'other',
       title: ticketContent ? ticketContent.title : alertContent ? alertContent.title : message.subject,
       description: ticketContent ? ticketContent.description : alertContent ? alertContent.description : plainMailText(message.body || message.preview), received_at: message.receivedAt,
       customer: identified ? { id: identified.id, name: identified.customer_name, timezone: identified.timezone || null, jira_project_code: identified.jira_project_code || null } : null,
+      auto_selection: autoSelection,
       candidates: candidates.map((customer) => ({ id: customer.id, name: customer.customer_name, jira_project_code: customer.jira_project_code || null })),
       match_location: matchLocation, message: matchMessage
     }});

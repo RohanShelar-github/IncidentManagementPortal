@@ -117,6 +117,21 @@ CREATE TABLE IF NOT EXISTS area (
   CONSTRAINT fk_area_updated_by FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Operations email incident defaults. Existing master records are never changed.
+INSERT IGNORE INTO area (area_name, area_code) VALUES
+  ('Infrastructure', 'infrastructure'),
+  ('Integration', 'integration'),
+  ('License', 'license'),
+  ('InMemoryMiddleware', 'inmemorymiddleware'),
+  ('Local Agent', 'local_agent'),
+  ('Workspace', 'workspace'),
+  ('Magic Cloud Manager', 'magic_cloud_manager'),
+  ('NGC - MES', 'ngc_mes'),
+  ('NGC - MDE', 'ngc_mde'),
+  ('Historian', 'historian'),
+  ('Redis', 'redis'),
+  ('NGC - AIML', 'ngc_aiml');
+
 CREATE TABLE IF NOT EXISTS incidents (
   id INT NOT NULL AUTO_INCREMENT,
   incident_ref VARCHAR(20) NOT NULL,
@@ -259,5 +274,6 @@ INSERT INTO schema_migrations(version) VALUES
   ('005_incident_canonical_normalization'),
   ('013_user_profile_fields'),
   ('014_database_roles'),
-  ('015_repair_incident_timezone_values')
+  ('015_repair_incident_timezone_values'),
+  ('028_operations_incident_area_defaults')
 ON DUPLICATE KEY UPDATE applied_at = applied_at;

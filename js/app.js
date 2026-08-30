@@ -2860,6 +2860,22 @@ function mailboxEmailReceivedInIst(value) {
   return local.getUTCFullYear() + '-' + pad(local.getUTCMonth() + 1) + '-' + pad(local.getUTCDate()) + 'T' + pad(local.getUTCHours()) + ':' + pad(local.getUTCMinutes());
 }
 
+function applyOperationsIncidentAutoSelection(selection) {
+  if (!selection) return '';
+  var applied = [];
+  var area = document.getElementById('f_area');
+  if (selection.area && area) {
+    area.value = selection.area;
+    if (area.value === selection.area) applied.push('Area: ' + selection.area);
+    else console.warn('Operations incident auto-selected area is unavailable in master data:', selection.area);
+  }
+  var productLine = document.getElementById('f_product_line');
+  if (selection.product_line && productLine) { productLine.value = selection.product_line; applied.push('Product Line: ' + selection.product_line); }
+  var severity = document.getElementById('f_severity');
+  if (selection.severity && severity) { severity.value = selection.severity; applied.push('Severity: ' + selection.severity); }
+  return applied.length ? 'Auto-selected from email: ' + applied.join(' · ') + '. You can edit these values before creating the incident.' : '';
+}
+
 function openCreateIncidentFromOperationsEmail(message, button) {
   if (!hasPermission('create_incidents')) { showToast('Your role cannot create incidents.', 'error'); return; }
   if (button) { button.disabled = true; button.textContent = 'Preparing…'; }
@@ -2874,12 +2890,13 @@ function openCreateIncidentFromOperationsEmail(message, button) {
       selectedTZ = 'IST'; renderTZSelector('createTZSelector', 'IST', 'changeCreateTZ(this.value)');
       var dateHint = document.getElementById('f_date_tz_hint'); if (dateHint) dateHint.textContent = 'Email received time (IST); converted after customer selection.';
       pendingOperationsEmailAuditId = prefill.audit_id || null;
+      var autoSelectionHint = applyOperationsIncidentAutoSelection(prefill.auto_selection);
       if (prefill.customer) {
         var customerSelect = document.getElementById('f_customer'); customerSelect.value = prefill.customer.name;
         applyCreateCustomerTimezone(prefill.customer.name);
       }
       var hint = document.getElementById('f_operations_email_hint');
-      if (hint) { hint.textContent = prefill.message || ''; hint.style.display = ''; }
+      if (hint) { hint.textContent = [prefill.message, autoSelectionHint].filter(Boolean).join(' '); hint.style.display = hint.textContent ? '' : 'none'; }
       if (!prefill.customer) showToast(prefill.message || 'No matching customer found. Select a customer manually.', 'info');
     })
     .catch(function (error) { showToast(error.message, 'error'); })
