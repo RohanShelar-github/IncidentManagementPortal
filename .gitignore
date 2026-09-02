@@ -1,3 +1,4 @@
 # Runtime secrets stay on the server and must never be committed.
 backend/.env
 backend/.env.local
+backend/logs/

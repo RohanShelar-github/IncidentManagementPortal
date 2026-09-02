@@ -68,18 +68,10 @@ const createCustomer = async (req, res) => {
     const name = String(req.body.customer_name || req.body.name || '').trim();
     if (!name) return res.status(400).json({ success: false, message: 'Customer name is required' });
     const code = String(req.body.customer_code || makeCode(name)).trim();
-    await pool.query(
+    const [result] = await pool.query(
       `INSERT INTO customers
        (customer_name, customer_code, customer_branch, region, timezone, inbound_csm_name, outbound_csm_name, created_by, updated_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE
-         is_active = 1,
-         customer_branch = COALESCE(VALUES(customer_branch), customer_branch),
-         region = COALESCE(VALUES(region), region),
-         timezone = COALESCE(VALUES(timezone), timezone),
-         inbound_csm_name = COALESCE(VALUES(inbound_csm_name), inbound_csm_name),
-         outbound_csm_name = COALESCE(VALUES(outbound_csm_name), outbound_csm_name),
-         updated_by = VALUES(updated_by)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         name,
         code,
@@ -92,9 +84,10 @@ const createCustomer = async (req, res) => {
         req.user.id
       ]
     );
-    const [rows] = await pool.query('SELECT * FROM customers WHERE customer_code = ? OR customer_name = ? LIMIT 1', [code, name]);
+    const [rows] = await pool.query('SELECT * FROM customers WHERE id = ? LIMIT 1', [result.insertId]);
     res.status(201).json({ success: true, data: customerDto(rows[0]) });
   } catch (error) {
+    if (error?.code === 'ER_DUP_ENTRY') return res.status(409).json({ success: false, message: 'A customer with this name or code already exists. Existing master data was not changed.' });
     console.error('Create customer error:', error);
     res.status(500).json({ success: false, message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
@@ -119,15 +112,15 @@ const createArea = async (req, res) => {
     const name = String(req.body.area_name || req.body.name || '').trim();
     if (!name) return res.status(400).json({ success: false, message: 'Area name is required' });
     const code = String(req.body.area_code || makeCode(name)).trim();
-    await pool.query(
+    const [result] = await pool.query(
       `INSERT INTO area (area_name, area_code, created_by, updated_by)
-       VALUES (?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE is_active = 1, updated_by = VALUES(updated_by)`,
+       VALUES (?, ?, ?, ?)`,
       [name, code, req.user.id, req.user.id]
     );
-    const [rows] = await pool.query('SELECT * FROM area WHERE area_code = ? OR area_name = ? LIMIT 1', [code, name]);
+    const [rows] = await pool.query('SELECT * FROM area WHERE id = ? LIMIT 1', [result.insertId]);
     res.status(201).json({ success: true, data: areaDto(rows[0]) });
   } catch (error) {
+    if (error?.code === 'ER_DUP_ENTRY') return res.status(409).json({ success: false, message: 'An area with this name or code already exists. Existing master data was not changed.' });
     console.error('Create area error:', error);
     res.status(500).json({ success: false, message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }

@@ -43,9 +43,24 @@ test('preview uses editable recipient chips with authenticated creator and opera
   assert.match(frontend, /function addPreSendRecipient\(group\)/);
   assert.match(frontend, /function removePreSendRecipient\(group, index\)/);
   assert.match(frontend, /currentUserProfile\.email \|\| ''/);
-  assert.match(frontend, /'its24x7@magicsoftware\.com'/);
+  assert.match(frontend, /its24x7@magicsoftware\.com,cloudopssupport@magicsoftware\.com/);
+  assert.match(frontend, /cloudopssupport@magicsoftware\.com/);
   assert.match(frontend, /const to = \(document\.getElementById\('notificationEmailTo'\)/);
   assert.match(frontend, /const cc = \(document\.getElementById\('notificationEmailCc'\)/);
+});
+
+test('NGC Historian mail pre-fills the required recipients for every severity while keeping them editable', () => {
+  assert.match(frontend, /function historianMailRecipientPreset\(inc\)/);
+  assert.match(frontend, /customer !== 'ngc' \|\| project !== 'historian' \|\| area !== 'historian'/);
+  assert.match(frontend, /ServiceDesk@NationalGypsum\.com/);
+  assert.match(frontend, /BillB@NationalGypsum\.com/);
+  assert.match(frontend, /MatthewP@NationalGypsum\.com/);
+  assert.match(frontend, /RyanSa@NationalGypsum\.com/);
+  assert.match(frontend, /dimpalp@nationalgypsum\.com/);
+  assert.match(frontend, /jkaplan@magicsoftware\.com/);
+  assert.match(frontend, /cloudopssupport@magicsoftware\.com/);
+  assert.match(frontend, /const recipientConfig = historianRecipients \|\| config/);
+  assert.match(frontend, /You may edit the draft before sending/);
 });
 
 test('new incidents open preview before the backend POST', () => {

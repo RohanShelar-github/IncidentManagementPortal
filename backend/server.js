@@ -24,6 +24,15 @@ const allowedOrigins = String(process.env.CORS_ORIGIN || 'http://localhost:5500'
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  next();
+});
+
 // Middleware
 app.use(cors({
   origin(origin, callback) {

@@ -15,7 +15,9 @@ function jiraSubjectPrefix() {
 }
 
 function isJiraCustomerTicketSubject(subject) {
-  const value = String(subject || '').trim().toLowerCase();
+  // Customer and Operations replies retain the Jira notification subject but
+  // prepend one or more mail-client prefixes (for example Re: or FW:).
+  const value = String(subject || '').trim().replace(/^(?:(?:re|fw|fwd)\s*:\s*)+/i, '').toLowerCase();
   const prefix = jiraSubjectPrefix().toLowerCase();
   return Boolean(prefix && value.startsWith(prefix) && /\bwas reported by the customer\b/i.test(value));
 }
@@ -67,6 +69,10 @@ function operationsIncidentDefaults(category, subject) {
   return selected(null, null, 'no-source-rule');
 }
 
+function noHistorianReadIncidentDefaults() {
+  return { area: 'Historian', product_line: 'Integration', project: 'Historian', severity: null, rule: 'no-historian-read' };
+}
+
 function classifyOperationsMessage(message) {
   const sender = String(message?.from || message?.fromAddress || '').trim().toLowerCase();
   const subject = String(message?.subject || '');
@@ -81,4 +87,4 @@ function normalizedOperationsCategory(value) {
   return Object.prototype.hasOwnProperty.call(OPERATIONS_MAIL_CATEGORIES, key) ? key : 'all';
 }
 
-module.exports = { OPERATIONS_MAIL_CATEGORIES, classifyOperationsMessage, extractJiraIssueKey, isJiraCustomerTicketSubject, jiraSubjectPrefix, normalizedOperationsCategory, operationsIncidentDefaults, subjectContains };
+module.exports = { OPERATIONS_MAIL_CATEGORIES, classifyOperationsMessage, extractJiraIssueKey, isJiraCustomerTicketSubject, jiraSubjectPrefix, noHistorianReadIncidentDefaults, normalizedOperationsCategory, operationsIncidentDefaults, subjectContains };

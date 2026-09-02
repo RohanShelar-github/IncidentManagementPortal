@@ -38,7 +38,14 @@ test('mailbox renders a safely sandboxed rich-email preview', () => {
   assert.match(frontend, /localStorage\.getItem\('mc_theme'\) === 'light'/);
   assert.match(frontend, /mailboxPreview\.srcdoc = mailboxSafeRichHtml\(activeMailboxRichBody, !isLight\)/);
   assert.match(frontend, /body,body \*\{color:/);
+  assert.match(frontend, /mailbox-coralogix-logo/);
+  assert.match(frontend, /background-color:#172554/);
   assert.match(frontend, /frame\.srcdoc = mailboxSafeRichHtml/);
+});
+
+test('incoming mailbox headers show the Graph To recipients alongside sender and received time', () => {
+  assert.match(frontend, /message\.to \? '\\nTo: ' \+ message\.to : ''/);
+  assert.match(frontend, /'From: ' \+ \(message\.fromName \|\| message\.from\)/);
 });
 
 test('generated incident email includes operational incident details and escapes XML', () => {
@@ -76,6 +83,13 @@ test('formatted email does not repeat the generated incident summary above the d
   assert.match(email.html, /Incident ID/);
 });
 
+test('empty rich-text content does not render an additional-message panel', () => {
+  const { hasDisplayableEmailContent } = require('../backend/services/emailService');
+  assert.equal(hasDisplayableEmailContent('<br><br>&nbsp;'), false);
+  assert.equal(hasDisplayableEmailContent('<p>Sender note</p>'), true);
+  assert.equal(hasDisplayableEmailContent('<img src="data:image/png;base64,AA==">'), true);
+});
+
 test('mail configuration never becomes active without OAuth token material', () => {
   const previous = { ...process.env };
   process.env.MAIL_ENABLED = 'true';
@@ -96,6 +110,18 @@ test('Microsoft Graph mail provider uses application authentication and the Grap
   assert.match(service, /https:\/\/graph\.microsoft\.com\/v1\.0/);
   assert.match(service, /\/users\/\$\{encodeURIComponent\(from\)\}\/sendMail/);
   assert.match(exampleEnv, /MAIL_PROVIDER=graph/);
+});
+
+test('temporary Graph mail diagnostics are opt-in and exclude protected mail content', () => {
+  const service = fs.readFileSync('backend/services/emailService.js', 'utf8');
+  const exampleEnv = fs.readFileSync('backend/.env.example', 'utf8');
+  assert.match(service, /function writeMailDiagnostic\(event, details = \{\}\)/);
+  assert.match(service, /MAIL_DIAGNOSTIC_LOG/);
+  assert.match(service, /graph_send_attempt/);
+  assert.match(service, /graph_send_failed/);
+  assert.match(service, /subjectLength:/);
+  assert.doesNotMatch(service, /accessToken:|clientSecret:|messageBody:/);
+  assert.match(exampleEnv, /MAIL_DIAGNOSTIC_LOG=false/);
 });
 
 test('shared operations mailbox is exposed through authenticated, role-permission endpoints', () => {
@@ -151,7 +177,7 @@ test('reply all exposes original CC recipients while excluding the shared mailbo
   assert.match(mailService, /message\?\.ccRecipients/);
   assert.match(mailService, /address\.toLowerCase\(\) !== self/);
   assert.match(frontend, /message\.replyAllCc/);
-  assert.match(frontend, /Reply all recipients from the original email are included below/);
+  assert.match(frontend, /Reply-all recipients are included in CC/);
 });
 
 test('mailbox access is an assignable role permission with an admin-safe default', () => {
@@ -239,17 +265,27 @@ test('reviewed recipients are validated and forwarded to the mail service', () =
 });
 
 test('incident mail recipients default to the authenticated creator and operations CC', () => {
-  assert.match(controller, /const INCIDENT_NOTIFICATION_CC = 'its24x7@magicsoftware\.com'/);
+  assert.match(controller, /const INCIDENT_NOTIFICATION_CC = 'its24x7@magicsoftware\.com,cloudopssupport@magicsoftware\.com'/);
   assert.match(controller, /emailTo: b\.notification_email\?\.to \|\| req\.user\.email/);
   assert.match(controller, /emailCc: b\.notification_email\?\.cc === undefined \? INCIDENT_NOTIFICATION_CC/);
 });
 
-test('created and closed incident emails include the fixed operational BCC list', () => {
-  assert.match(controller, /const INCIDENT_NOTIFICATION_BCC = 'prachi_palande@magicsoftware\.com,nikhil_kawade@magicsoftware\.com,shravani_bhosale@magicsoftware\.com,jidnyasa_patil@magicsoftware\.com'/);
-  assert.equal((controller.match(/emailBcc: INCIDENT_NOTIFICATION_BCC/g) || []).length, 2);
+test('incident CC recipients remain editable while BCC recipients stay removed', () => {
+  assert.equal(cleanAddressList('existing@example.com', ''), 'existing@example.com');
+  assert.equal(cleanAddressList('', ''), '');
+  assert.doesNotMatch(controller, /INCIDENT_NOTIFICATION_BCC/);
+  assert.equal((controller.match(/emailBcc: ''/g) || []).length, 2);
   const service = fs.readFileSync('backend/services/emailService.js', 'utf8');
-  assert.match(service, /bcc: bcc \|\| undefined/);
-  assert.match(service, /recipientXml\('BccRecipients', bcc\)/);
+  assert.doesNotMatch(service, /incidentNotificationCc/);
+  assert.match(service, /const bcc = '';/);
+  assert.match(service, /bcc = '';/);
+});
+
+test('No Historian alert emails place Description before the unchanged incident table only for that alert', () => {
+  const noHistorian = incidentEmail({ id: 'INC-1002', title: 'Azure: SHO No Historian Read', severity: 'High', description: 'Historian details' });
+  const ordinary = incidentEmail({ id: 'INC-1003', title: 'Azure: CPU threshold reached', severity: 'High', description: 'Infrastructure details' });
+  assert.ok(noHistorian.html.indexOf('>Description<') < noHistorian.html.indexOf('<table'));
+  assert.ok(ordinary.html.indexOf('<table') < ordinary.html.indexOf('>Description<'));
 });
 
 test('closing an incident sends one closure email only on the transition to Closed', () => {
@@ -278,4 +314,9 @@ test('mailbox compose mode is selected only from the message action icons', () =
   const replyComposer = frontend.match(/function showMailboxReply\(message, detail, initialMode\) \{[\s\S]*?function updateMode\(\)/)?.[0] || '';
   assert.match(replyComposer, /var mode = \{ value: initialMode \|\| 'reply' \}; heading\.append\(label\);/);
   assert.doesNotMatch(replyComposer, /document\.createElement\('select'\)/);
+});
+
+test('reply and reply-all retain original recipients while keeping To editable', () => {
+  assert.match(frontend, /to\.readOnly = false; to\.disabled = false/);
+  assert.match(frontend, /You may edit To, subject, or CC/);
 });

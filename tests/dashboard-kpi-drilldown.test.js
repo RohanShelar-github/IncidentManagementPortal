@@ -45,3 +45,8 @@ test('dashboard Missed MTTR count and drill-down exclude Historian-area incident
   assert.match(frontend, /countMissedMttr\(dashboardMttrIncidents\)/);
   assert.match(frontend, /metric === 'mttr' && !customerName && !reportingCategory && isCustomer360HistorianIncident\(inc\)/);
 });
+
+test('temporary Missed MTTR exceptions exclude only the requested incidents', () => {
+  assert.match(frontend, /MISSED_MTTR_EXCLUDED_INCIDENTS = new Set\(\['INC-227', 'INC-273'\]\)/);
+  assert.match(frontend, /MISSED_MTTR_EXCLUDED_INCIDENTS\.has\(String\(\(inc && \(inc\.id \|\| inc\.incident_ref\)\) \|\| ''\)\)/);
+});

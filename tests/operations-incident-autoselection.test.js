@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { operationsIncidentDefaults, subjectContains } = require('../backend/services/operationsMailClassificationService');
+const { noHistorianReadIncidentDefaults, operationsIncidentDefaults, subjectContains } = require('../backend/services/operationsMailClassificationService');
 
 test('Operations incident auto-selection maps every Coralogix subject rule in priority order', () => {
   const cases = [
@@ -32,6 +32,18 @@ test('Operations incident auto-selection maps every Azure subject rule in priori
 
 test('Customer Raised Tickets retain the default area and choose Integration', () => {
   assert.deepEqual(operationsIncidentDefaults('jira', 'A new support issue'), { area: null, product_line: 'Integration', severity: null, rule: 'customer-ticket' });
+});
+
+test('No Historian Read alerts use their fixed NGC and Historian incident defaults', () => {
+  assert.deepEqual(noHistorianReadIncidentDefaults(), {
+    area: 'Historian', product_line: 'Integration', project: 'Historian', severity: null, rule: 'no-historian-read'
+  });
+  const root = path.resolve(__dirname, '..');
+  const controller = fs.readFileSync(path.join(root, 'backend', 'controllers', 'mailboxController.js'), 'utf8');
+  const ui = fs.readFileSync(path.join(root, 'js', 'app.js'), 'utf8');
+  assert.match(controller, /isNoHistorianAlert \? noHistorianReadIncidentDefaults\(\)/);
+  assert.match(controller, /customer_name \|\| ''\)\.trim\(\)\.toLowerCase\(\) === 'ngc'/);
+  assert.match(ui, /selection\.project/);
 });
 
 test('keyword matching is case-insensitive, accepts subject separators, and keeps word boundaries', () => {

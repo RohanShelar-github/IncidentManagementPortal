@@ -30,6 +30,12 @@ test('Critical editing calculates downtime when start or end changes but permits
   assert.match(frontend, /dp_f_dtM/);
 });
 
+test('reopening a Critical incident preserves its saved downtime override', () => {
+  const populateEditForm = frontend.match(/function populateEditForm\(inc\) \{[\s\S]*?function updateCriticalEditDowntime/);
+  assert.ok(populateEditForm, 'populateEditForm should be present');
+  assert.doesNotMatch(populateEditForm[0], /updateCriticalEditDowntime\(\)/);
+});
+
 test('backend calculates Critical downtime only when no manual override is supplied', () => {
   assert.match(controller, /const isCriticalDowntimeCalculation = normalizeSeverity/);
   assert.match(controller, /&& hasEndDateUpdate && canonical\.closed_at_utc/);

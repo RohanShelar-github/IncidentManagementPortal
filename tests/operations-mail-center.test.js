@@ -13,6 +13,8 @@ test('Operations source classification uses structured sender addresses before J
 
 test('Jira customer ticket classification and issue extraction remain conservative', () => {
   assert.equal(isJiraCustomerTicketSubject('A new support issue CSO-1234 was reported by the customer'), true);
+  assert.equal(isJiraCustomerTicketSubject('Re: A new support issue TOR-269 was reported by the customer'), true);
+  assert.equal(isJiraCustomerTicketSubject('FW: Re: A new support issue TOR-269 was reported by the customer'), true);
   assert.equal(isJiraCustomerTicketSubject('A new support issue CSO-1234 was updated'), false);
   assert.equal(extractJiraIssueKey('A new support issue CSO-1234 was reported by the customer'), 'CSO-1234');
   assert.equal(extractJiraIssueKey('No key here'), '');
@@ -29,4 +31,19 @@ test('Operations endpoints reuse the protected mailbox routes for counts, Sent I
   assert.match(controller, /requireMailboxPermission\(req, res, 'send_mailbox'\)/);
   assert.match(service, /async function sendNewMailboxMessage/);
   assert.match(service, /saveToSentItems/);
+  assert.match(service, /contains\(subject,'was reported by the customer'\)/);
+  assert.match(service, /selectedCategory === 'jira' && folder === 'inbox'/);
+  assert.match(service, /query\.set\('\$filter', jiraFilter\)/);
+  assert.match(service, /query\.delete\('\$orderby'\)/);
+});
+
+test('Operations compose supports image formatting and sends pasted images as Graph inline attachments', () => {
+  const ui = fs.readFileSync('js/app.js', 'utf8');
+  const service = fs.readFileSync('backend/services/emailService.js', 'utf8');
+  assert.match(ui, /function addMailboxComposeImageTools/);
+  assert.match(ui, /configureMailboxComposeImageEditor\(editor, 'mailboxReplyEditor'\)/);
+  assert.match(ui, /configureMailboxComposeImageEditor\(editor, 'mailboxNewMailEditor'\)/);
+  assert.match(ui, /Resize selected image to full width/);
+  assert.match(service, /const inline = inlineDataImagesForEmail\(html\)/);
+  assert.match(service, /contentDisposition: 'inline'/);
 });

@@ -26,6 +26,14 @@ const MIME_TYPES = {
   '.woff2': 'font/woff2'
 };
 
+function setSecurityHeaders(res) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'");
+}
+
 function sendFile(res, filePath) {
   const ext = path.extname(filePath).toLowerCase();
   let contentType = MIME_TYPES[ext] || 'application/octet-stream';
@@ -40,7 +48,11 @@ function sendFile(res, filePath) {
       return;
     }
 
-    res.writeHead(200, { 'Content-Type': contentType });
+    const headers = { 'Content-Type': contentType };
+    // The portal UI contains the incident edit/save behaviour. Revalidate the
+    // browser assets so a user cannot continue submitting an outdated payload.
+    if (['.html', '.css', '.js', '.json'].includes(ext)) headers['Cache-Control'] = 'no-cache';
+    res.writeHead(200, headers);
     res.end(content);
   });
 }
@@ -51,8 +63,20 @@ function getFilePath(url) {
   return path.resolve(ROOT_DIR, `.${requestPath}`);
 }
 
+function isPublicFilePath(url) {
+  let requestPath;
+  try { requestPath = decodeURIComponent(url.split('?')[0]); } catch (_) { return false; }
+  return requestPath === '/' || requestPath === '/index.html'
+    // This is browser runtime configuration only (API path and feature flag),
+    // not a server-side environment file.  Keep the exception exact so the
+    // rest of config/ and all backend files remain unavailable.
+    || requestPath === '/config/config.js'
+    || /^\/(?:css|js)\/[A-Za-z0-9._/-]+$/.test(requestPath);
+}
+
 function createUiServer() {
   return http.createServer((req, res) => {
+    setSecurityHeaders(res);
     if (req.url === '/api' || req.url.startsWith('/api/')) {
       const proxyRequest = http.request({
         hostname: API_HOST,
@@ -82,6 +106,15 @@ function createUiServer() {
     if (!['GET', 'HEAD'].includes(req.method)) {
       res.writeHead(405, { 'Content-Type': 'text/plain' });
       res.end('Method not allowed');
+      return;
+    }
+
+    // Never expose source code, backend configuration, database exports, or
+    // environment files from the repository root. Only the browser assets
+    // explicitly required by this UI may be served.
+    if (!isPublicFilePath(req.url || '')) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Not found');
       return;
     }
 

@@ -16,6 +16,18 @@ window.onerror = function (msg, src, line, col, err) {
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('click', function (e) {
   var t = e.target;
+  // The themed calendar glyph is drawn as an input background. Open the
+  // browser's native picker when its right-side hit area is clicked.
+  var datePickerInput = t && t.closest ? t.closest('input[type="date"], input[type="datetime-local"]') : null;
+  if (datePickerInput) {
+    var datePickerBounds = datePickerInput.getBoundingClientRect();
+    if (e.clientX >= datePickerBounds.right - 46 && typeof datePickerInput.showPicker === 'function') {
+      e.preventDefault();
+      e.stopPropagation();
+      try { datePickerInput.showPicker(); } catch (_) { datePickerInput.focus(); }
+      return;
+    }
+  }
   function up(el, id) {
     while (el && el !== document) { if (el.id === id) return true; el = el.parentElement; }
     return false;
@@ -188,7 +200,36 @@ function formatStoredIncidentDateTime(value) {
   if (parts.length !== 2) return localValue;
   const dateParts = parts[0].split('-');
   if (dateParts.length !== 3) return localValue;
-  return `${dateParts[2]}-${dateParts[1]}-${dateParts[0]} ${parts[1]}`;
+  const timeParts = parts[1].split(':');
+  const hour24 = Number(timeParts[0]);
+  if (Number.isNaN(hour24) || timeParts.length < 2) return `${dateParts[2]}-${dateParts[1]}-${dateParts[0]} ${parts[1]}`;
+  const hour12 = hour24 % 12 || 12;
+  const meridiem = hour24 >= 12 ? 'PM' : 'AM';
+  return `${dateParts[2]}-${dateParts[1]}-${dateParts[0]} ${hour12}:${timeParts[1]} ${meridiem}`;
+}
+
+// Use one display formatter for timestamps that are not stored as incident wall-clock values.
+// Native datetime-local controls intentionally retain their required machine-readable value.
+function formatUiDateTime(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return value ? String(value) : '—';
+  return date.toLocaleString('en-GB', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true
+  });
+}
+
+// Reports are intentionally plain text. Convert saved rich editor content to readable text
+// before assigning it with textContent, so markup can never be displayed to the user.
+function plainIncidentDescriptionText(value) {
+  var text = String(value || '');
+  for (var i = 0; i < 3; i++) text = mailboxDecodeEntities(text);
+  text = text
+    .replace(/<\s*br\b[^>]*>/gi, '\n')
+    .replace(/<\/\s*(?:p|div|li|tr|h[1-6])\s*>/gi, '\n')
+    .replace(/<[^>]*>/g, ' ');
+  return text.replace(/\u00a0/g, ' ').replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function toMysqlDatetime(value) {
@@ -455,7 +496,7 @@ function loadIncidentsFromBackend(callback) {
               type: 'comment',
               action: comment.action || 'commented',
               msg: (comment.author || 'User') + ' commented — ' + (comment.detail || ''),
-              time: created.toLocaleString(),
+              time: formatUiDateTime(created),
               timestamp: created.getTime(),
               incId: incident.id
             });
@@ -724,9 +765,34 @@ function getIncidentOpenedTimestamp(inc) {
   return NaN;
 }
 
+function getIncidentClosedTimestamp(inc) {
+  var canonicalUtc = inc && inc.closed_at_utc;
+  if (canonicalUtc) {
+    var canonicalTimestamp = new Date(canonicalUtc).getTime();
+    if (Number.isFinite(canonicalTimestamp)) return canonicalTimestamp;
+  }
+
+  var rawValue = inc && (inc.date_time_closed || inc.endDT || inc.downtimeEnd);
+  if (!rawValue) return NaN;
+  var normalized = String(rawValue).trim().replace(' ', 'T');
+  if (/Z$|[+-]\d{2}:?\d{2}$/.test(normalized)) {
+    var absoluteTimestamp = new Date(normalized).getTime();
+    if (Number.isFinite(absoluteTimestamp)) return absoluteTimestamp;
+  }
+  var wallClockTimestamp = new Date(normalized.replace(/Z$/, '') + 'Z').getTime();
+  return Number.isFinite(wallClockTimestamp)
+    ? wallClockTimestamp - getTZOffset((inc && (inc.timezone || inc.source_timezone)) || 'IST') * 3600000
+    : NaN;
+}
+
+// Temporary business exceptions for the Missed MTTR KPI and drill-down only.
+// The incidents remain available everywhere else in the portal.
+const MISSED_MTTR_EXCLUDED_INCIDENTS = new Set(['INC-227', 'INC-273']);
+
 // A Missed MTTR is a completed incident whose actual resolution duration
 // strictly exceeds its applicable SLA resolution target.
 function isMissedMttr(inc) {
+  if (MISSED_MTTR_EXCLUDED_INCIDENTS.has(String((inc && (inc.id || inc.incident_ref)) || ''))) return false;
   var status = String((inc && inc.status) || '').toLowerCase();
   if (String((inc && inc.severity) || '').toLowerCase() !== 'critical') return false;
   if (status !== 'closed' && status !== 'resolved') return false;
@@ -809,6 +875,37 @@ function setDescriptionEditorValue(value) {
   editor.innerHTML = /<\/?(?:b|strong|i|em|u|font|div|p|br|ul|ol|li)\b/i.test(text) ? text : escapeMetricHtml(text).replace(/\r?\n/g, '<br>');
 }
 
+function safeIncidentDescriptionHtml(value) {
+  var holder = document.createElement('template');
+  holder.innerHTML = String(value || '');
+  var allowed = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'FONT', 'DIV', 'P', 'BR', 'UL', 'OL', 'LI', 'IMG']);
+  Array.from(holder.content.querySelectorAll('*')).forEach(function (node) {
+    if (!allowed.has(node.tagName)) {
+      // Do not retain script-like content; retain readable text from harmless
+      // legacy wrappers without reintroducing their markup or attributes.
+      if (/^(SCRIPT|STYLE|IFRAME|OBJECT|EMBED|FORM)$/i.test(node.tagName)) node.remove();
+      else node.replaceWith(document.createTextNode(node.textContent || ''));
+      return;
+    }
+    var fontSize = node.getAttribute('size');
+    var imageSource = node.getAttribute('src');
+    var imageAlt = node.getAttribute('alt');
+    Array.from(node.attributes).forEach(function (attribute) { node.removeAttribute(attribute.name); });
+    if (node.tagName === 'FONT') {
+      var size = String(fontSize || '');
+      if (/^[1-7]$/.test(size)) node.setAttribute('size', size);
+    }
+    if (node.tagName === 'IMG') {
+      var source = String(imageSource || '');
+      if (!/^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/i.test(source)) { node.remove(); return; }
+      node.setAttribute('src', source);
+      if (imageAlt) node.setAttribute('alt', String(imageAlt).slice(0, 160));
+      node.style.cssText = 'display:block;max-width:100%;height:auto;margin:8px 0;';
+    }
+  });
+  return holder.innerHTML;
+}
+
 function formatIncidentDescription(command, value) {
   var editor = document.getElementById(activeIncidentDescriptionEditorId || 'f_desc');
   if (!editor) return;
@@ -818,10 +915,23 @@ function formatIncidentDescription(command, value) {
 var selectedIncidentDescriptionImage = null;
 var activeIncidentDescriptionEditorId = 'f_desc';
 function activateIncidentDescriptionEditor(id) { activeIncidentDescriptionEditorId = id || 'f_desc'; }
-function chooseIncidentDescriptionImage() { var input = document.getElementById('f_desc_image_input'); if (input) input.click(); }
+var incidentDescriptionSelectionRanges = {};
+function saveIncidentDescriptionSelection(editorId) {
+  var editor = document.getElementById(editorId || activeIncidentDescriptionEditorId);
+  var selection = window.getSelection && window.getSelection();
+  if (!editor || !selection || !selection.rangeCount) return;
+  var range = selection.getRangeAt(0);
+  if (editor.contains(range.startContainer) && editor.contains(range.endContainer)) incidentDescriptionSelectionRanges[editor.id] = range.cloneRange();
+}
+function restoreIncidentDescriptionSelection(editor) {
+  var range = incidentDescriptionSelectionRanges[editor.id];
+  if (range && editor.contains(range.startContainer) && editor.contains(range.endContainer)) return range;
+  range = document.createRange(); range.selectNodeContents(editor); range.collapse(false); return range;
+}
+function chooseIncidentDescriptionImage() { saveIncidentDescriptionSelection(activeIncidentDescriptionEditorId); var input = document.getElementById('f_desc_image_input'); if (input) input.click(); }
 function selectIncidentDescriptionImage(event) {
   var image = event && event.target && event.target.tagName === 'IMG' ? event.target : null;
-  document.querySelectorAll('#f_desc img.selected-description-image,#notificationEmailBody img.selected-description-image').forEach(function (item) { item.classList.remove('selected-description-image'); });
+  document.querySelectorAll('#f_desc img.selected-description-image,#notificationEmailBody img.selected-description-image,[data-rich-incident-editor] img.selected-description-image').forEach(function (item) { item.classList.remove('selected-description-image'); });
   selectedIncidentDescriptionImage = image;
   if (image) image.classList.add('selected-description-image');
 }
@@ -837,14 +947,22 @@ function insertIncidentDescriptionImage(file) {
       if (source.length > 500000) { showToast('This image is too large after compression. Crop it or use a smaller image.', 'error'); return; }
       var editor = document.getElementById(activeIncidentDescriptionEditorId); if (!editor) return; editor.focus();
       var img = document.createElement('img'); img.src = source; img.alt = file.name || 'Incident image'; img.style.width = '65%'; img.dataset.widthPercent = '65';
-      document.execCommand('insertHTML', false, '<br>'); editor.appendChild(img); editor.appendChild(document.createElement('br')); selectIncidentDescriptionImage({ target: img });
+      var range = restoreIncidentDescriptionSelection(editor);
+      range.deleteContents();
+      var fragment = document.createDocumentFragment();
+      var before = document.createElement('br'), after = document.createElement('br');
+      fragment.append(before, img, after); range.insertNode(fragment);
+      range.setStartAfter(after); range.collapse(true);
+      var selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+      incidentDescriptionSelectionRanges[editor.id] = range.cloneRange();
+      selectIncidentDescriptionImage({ target: img });
     }; image.src = reader.result;
   }; reader.readAsDataURL(file);
 }
 function handleIncidentDescriptionPaste(event) {
   var files = Array.from((event.clipboardData && event.clipboardData.files) || []).filter(function (file) { return /^image\//i.test(file.type || ''); });
   if (!files.length) return;
-  event.preventDefault(); insertIncidentDescriptionImage(files[0]);
+  event.preventDefault(); saveIncidentDescriptionSelection(activeIncidentDescriptionEditorId); insertIncidentDescriptionImage(files[0]);
 }
 function resizeSelectedIncidentImage(percent) {
   if (!selectedIncidentDescriptionImage || !selectedIncidentDescriptionImage.isConnected) { showToast('Select an image in the description first.', 'info'); return; }
@@ -968,7 +1086,7 @@ function closeMetricDrillDown() {
 function addAudit(icon, action, detail) {
   auditLog.unshift({
     icon: icon, action: action, detail: detail,
-    time: new Date().toLocaleString('en-GB'), user: currentUserName
+    time: formatUiDateTime(new Date()), user: currentUserName
   });
   if (auditLog.length > 200) auditLog.pop();
   if (document.getElementById('page-reports') &&
@@ -1022,7 +1140,7 @@ function loadAuditLogFromBackend(callback) {
           action: actionLabels[entry.action_type] || entry.action_type || 'Activity',
           detail: detail,
           time: timestamp && !Number.isNaN(timestamp.getTime())
-            ? timestamp.toLocaleString('en-GB')
+            ? formatUiDateTime(timestamp)
             : String(entry.created_at || ''),
           user: entry.user || 'System'
         };
@@ -1057,7 +1175,7 @@ function renderAuditLog() {
 function addFeedEntry(incId, type, action, detail) {
   if (!incidentComments[incId]) incidentComments[incId] = [];
   var now = new Date();
-  var timeLabel = now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0') + ' · just now';
+  var timeLabel = now.toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true }) + ' · just now';
   var inc = incidents.find(function (i) { return i.id === incId; });
   var entry = {
     type: type, author: currentUserName, action: action, detail: detail,
@@ -1152,7 +1270,7 @@ function persistIncidentComment(incId, text, callback) {
         type: 'comment',
         action: comment.action || 'commented',
         msg: (comment.author || currentUserName) + ' commented — ' + text,
-        time: new Date(comment.created_at || Date.now()).toLocaleString(),
+        time: formatUiDateTime(new Date(comment.created_at || Date.now())),
         timestamp: new Date(comment.created_at || Date.now()).getTime(),
         incId: incId
       }));
@@ -1879,7 +1997,7 @@ function runGlobalSearch(q) {
   }).slice(0, 10);
 
   if (!results.length) {
-    res.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px">No results for "' + q + '"</div>';
+    res.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px">No results for "' + escapeMetricHtml(q) + '"</div>';
     return;
   }
 
@@ -1887,12 +2005,12 @@ function runGlobalSearch(q) {
     return '<div onclick="closeGlobalSearch();openDetailPanel(\'' + i.id + '\')" '
       + 'style="display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--border);cursor:pointer" '
       + 'onmouseenter="this.style.background=\'rgba(79,142,247,0.07)\'" onmouseleave="this.style.background=\'\'">'
-      + '<span style="font-family:var(--font-mono);font-size:11px;color:var(--accent);min-width:70px">' + i.id + '</span>'
+      + '<span style="font-family:var(--font-mono);font-size:11px;color:var(--accent);min-width:70px">' + escapeMetricHtml(i.id) + '</span>'
       + '<div style="flex:1;min-width:0">'
-      + '<div style="font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + i.title + '</div>'
+      + '<div style="font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeMetricHtml(i.title) + '</div>'
       + '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + i.customer + ' · ' + i.engineer + '</div>'
       + '</div>'
-      + '<span class="badge badge-' + i.severity.toLowerCase() + '">' + i.severity + '</span>'
+      + '<span class="badge badge-' + escapeMetricHtml(i.severity.toLowerCase()) + '">' + escapeMetricHtml(i.severity) + '</span>'
       + '</div>';
   }).join('');
 }
@@ -2589,17 +2707,23 @@ function mailboxSafeRichHtml(value, useLightTheme) {
       else if (name === 'style' && (/expression\s*\(|javascript:|behavior\s*:/i.test(scheme))) node.removeAttribute(attribute.name);
     });
     if (node.tagName === 'A') { node.setAttribute('target', '_blank'); node.setAttribute('rel', 'noopener noreferrer'); }
-    if (node.tagName === 'IMG') { node.setAttribute('loading', 'lazy'); node.style.maxWidth = '100%'; node.style.height = 'auto'; }
+    if (node.tagName === 'IMG') {
+      node.setAttribute('loading', 'lazy'); node.style.maxWidth = '100%'; node.style.height = 'auto';
+      // Coralogix supplies a white logo intended for a dark header. The safe
+      // preview removes sender background styles, so restore contrast only for
+      // that recognized logo rather than changing arbitrary email styling.
+      if (/coralogix/i.test(String(node.getAttribute('alt') || '') + ' ' + String(node.getAttribute('src') || ''))) node.classList.add('mailbox-coralogix-logo');
+    }
   });
   var palette = useLightTheme
     ? { background: '#f7f8fc', text: '#20263a', muted: '#69728a', border: '#dce1ed', link: '#2563eb' }
     : { background: '#111318', text: '#e8eaf0', muted: '#aab1c5', border: '#2d3040', link: '#75a7ff' };
   var themeCss = 'html,body{margin:0;background:' + palette.background + ';color:' + palette.text + ';font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.58}'
     + 'body{padding:28px;box-sizing:border-box}body,body *{color:' + palette.text + ' !important;background-color:transparent !important;border-color:' + palette.border + ' !important}'
-    + 'img{max-width:100%;height:auto;background:transparent !important}table{max-width:100%;border-collapse:collapse}a,a:visited{color:' + palette.link + ' !important;text-decoration:underline}blockquote{border-left:3px solid ' + palette.border + ';margin-left:0;padding-left:14px;color:' + palette.muted + ' !important}';
+    + 'img{max-width:100%;height:auto;background:transparent !important}.mailbox-coralogix-logo{display:inline-block !important;background-color:#172554 !important;padding:8px 12px !important;border-radius:4px !important;box-sizing:content-box !important}table{max-width:100%;border-collapse:collapse}a,a:visited{color:' + palette.link + ' !important;text-decoration:underline}blockquote{border-left:3px solid ' + palette.border + ';margin-left:0;padding-left:14px;color:' + palette.muted + ' !important}';
   return '<!doctype html><html><head><meta charset="utf-8"><style>' + themeCss + '</style></head><body>' + documentValue.body.innerHTML + '</body></html>';
 }
-function mailboxDate(value) { try { return new Date(value).toLocaleString(); } catch (_) { return value || ''; } }
+function mailboxDate(value) { try { return formatUiDateTime(value); } catch (_) { return value || ''; } }
 function legacyLoadMailbox(options) {
   options = options || {};
   var list = document.getElementById('mailboxList'); if (!list) return;
@@ -2640,6 +2764,55 @@ function downloadMailboxAttachment(messageId, attachment) {
     .catch(function (error) { showToast(error.message, 'error'); });
 }
 function mailboxFilesToPayload(files) { return Promise.all(Array.from(files || []).map(function (file) { return new Promise(function (resolve, reject) { var reader = new FileReader(); reader.onload = function () { resolve({ name: file.name, contentType: file.type || 'application/octet-stream', contentBytes: String(reader.result || '').split(',')[1] || '' }); }; reader.onerror = function () { reject(new Error('Unable to read ' + file.name)); }; reader.readAsDataURL(file); }); })); }
+function appendMailboxSignature(editor) {
+  if (!editor || editor.innerHTML.includes('data-aoc-user-signature')) return;
+  fetch(window.APP_CONFIG.API_BASE_URL + '/mailbox/signature', { headers: { Authorization: 'Bearer ' + mailboxToken() } })
+    .then(function (response) { return response.ok ? response.json() : null; })
+    .then(function (payload) { var signature = payload?.data?.html || ''; if (signature && !editor.innerHTML.includes('data-aoc-user-signature')) editor.innerHTML += '<br><br><div data-aoc-user-signature="true">' + signature + '</div>'; })
+    .catch(function () { /* Sending mail remains available if signature lookup fails. */ });
+}
+
+function configureMailboxComposeImageEditor(editor, id) {
+  if (!editor) return;
+  editor.id = id; editor.dataset.richIncidentEditor = 'true';
+  editor.onfocus = function () { activateIncidentDescriptionEditor(id); };
+  editor.onpaste = function (event) { activateIncidentDescriptionEditor(id); handleIncidentDescriptionPaste(event); };
+  editor.onclick = function (event) { activateIncidentDescriptionEditor(id); selectIncidentDescriptionImage(event); };
+  ['keyup', 'mouseup'].forEach(function (eventName) { editor.addEventListener(eventName, function () { activateIncidentDescriptionEditor(id); saveIncidentDescriptionSelection(id); }); });
+}
+
+function addMailboxComposeImageTools(toolbar, editor) {
+  [['Image', 'Insert image', function () { activateIncidentDescriptionEditor(editor.id); chooseIncidentDescriptionImage(); }], ['S', 'Resize selected image to 35%', function () { resizeSelectedIncidentImage(35); }], ['M', 'Resize selected image to 65%', function () { resizeSelectedIncidentImage(65); }], ['L', 'Resize selected image to full width', function () { resizeSelectedIncidentImage(100); }], ['Crop', 'Crop selected image', function () { cropSelectedIncidentImage(); }]].forEach(function (entry) {
+    var button = document.createElement('button'); button.type = 'button'; button.className = 'mailbox-tool'; button.textContent = entry[0]; button.title = entry[1]; button.onclick = entry[2]; toolbar.appendChild(button);
+  });
+}
+
+function openMailboxSignatureManager() {
+  var modal = document.createElement('div'); modal.className = 'modal-overlay open'; modal.id = 'mailboxSignatureModal';
+  modal.innerHTML = '<div class="modal" style="width:min(680px,94vw)"><div class="modal-head"><h3>✍ Email Signature</h3><button class="modal-close" type="button">×</button></div><div class="modal-body"><p style="margin-top:0;color:var(--text-muted);font-size:13px">Use the <strong>Signature</strong> button in a new, reply, or forward draft to add this signature when needed. It is private to your account.</p><div id="mailboxSignatureEditor" contenteditable="true" class="mailbox-rich-editor" style="min-height:160px"></div><div id="mailboxSignatureAdmin" style="margin-top:18px"></div></div><div class="modal-footer"><button type="button" class="btn btn-danger" id="mailboxSignatureDelete">Remove</button><button type="button" class="btn btn-primary" id="mailboxSignatureSave">Save Signature</button></div></div>';
+  document.body.appendChild(modal); var close = function () { modal.remove(); }; modal.querySelector('.modal-close').onclick = close;
+  var editor = modal.querySelector('#mailboxSignatureEditor'); var token = mailboxToken();
+  fetch(window.APP_CONFIG.API_BASE_URL + '/mailbox/signature', { headers: { Authorization: 'Bearer ' + token } }).then(function (r) { return r.json(); }).then(function (data) { editor.innerHTML = data?.data?.html || ''; });
+  modal.querySelector('#mailboxSignatureSave').onclick = function () { fetch(window.APP_CONFIG.API_BASE_URL + '/mailbox/signature', { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ html: editor.innerHTML }) }).then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.success) throw new Error(d.message); return d; }); }).then(function () { showToast('Email signature saved.', 'success'); close(); }).catch(function (e) { showToast(e.message || 'Unable to save signature.', 'error'); }); };
+  modal.querySelector('#mailboxSignatureDelete').onclick = function () { fetch(window.APP_CONFIG.API_BASE_URL + '/mailbox/signature', { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } }).then(function (r) { if (!r.ok) throw new Error('Unable to remove signature.'); showToast('Email signature removed.', 'success'); close(); }).catch(function (e) { showToast(e.message, 'error'); }); };
+  if (String(currentRole || '').toLowerCase() === 'admin') fetch(window.APP_CONFIG.API_BASE_URL + '/mailbox/signatures', { headers: { Authorization: 'Bearer ' + token } }).then(function (r) { return r.ok ? r.json() : null; }).then(function (data) {
+    var host = modal.querySelector('#mailboxSignatureAdmin'); var rows = data?.data || [];
+    host.innerHTML = '<h4 style="margin:0 0 8px">User signatures</h4>' + (rows.length ? rows.map(function (row) {
+      var id = Number(row.user_id);
+      return '<div data-signature-record="' + id + '" style="padding:8px 0;border-top:1px solid var(--border)"><div style="display:flex;justify-content:space-between;gap:10px"><span><strong>' + escapeMetricHtml(row.name) + '</strong><br><small>' + escapeMetricHtml(row.email) + '</small></span><span style="display:flex;gap:6px;align-items:start"><button class="btn btn-secondary btn-sm" data-view-signature="' + id + '">View</button><button class="btn btn-danger btn-sm" data-delete-signature="' + id + '">Remove</button></span></div></div>';
+    }).join('') : '<small>No saved user signatures.</small>');
+    host.querySelectorAll('button[data-view-signature]').forEach(function (button) { button.onclick = function () {
+      var id = Number(button.dataset.viewSignature); var record = host.querySelector('[data-signature-record="' + id + '"]'); var existing = record.querySelector('.admin-signature-preview');
+      if (existing) { existing.remove(); button.textContent = 'View'; return; }
+      var row = rows.find(function (item) { return Number(item.user_id) === id; }); if (!row) return;
+      var preview = document.createElement('div'); preview.className = 'admin-signature-preview'; preview.style.cssText = 'margin-top:8px;padding:10px;border:1px solid var(--border);border-radius:6px;background:#fff;overflow:auto';
+      var frame = document.createElement('iframe'); frame.setAttribute('sandbox', ''); frame.setAttribute('title', 'Saved signature preview'); frame.style.cssText = 'display:block;width:100%;height:180px;border:0;background:#fff'; frame.srcdoc = '<!doctype html><html><body style="margin:10px;font-family:Arial,sans-serif;color:#172033">' + String(row.html || '') + '</body></html>';
+      preview.appendChild(frame); record.appendChild(preview); button.textContent = 'Hide';
+    }; });
+    host.querySelectorAll('button[data-delete-signature]').forEach(function (button) { button.onclick = function () { fetch(window.APP_CONFIG.API_BASE_URL + '/mailbox/signatures/' + button.dataset.deleteSignature, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } }).then(function (r) { if (!r.ok) throw new Error(); button.closest('[data-signature-record]').remove(); }).catch(function () { showToast('Unable to remove signature.', 'error'); }); }; });
+  });
+}
+
 function showMailboxReply(message, detail, initialMode) {
   var existing = detail.querySelector('.mailbox-reply'); if (existing) existing.remove();
   var bodyWrap = detail.querySelector('.mailbox-detail-body-wrap');
@@ -2648,12 +2821,12 @@ function showMailboxReply(message, detail, initialMode) {
   var heading = document.createElement('div'); heading.className = 'mailbox-compose-head'; var label = document.createElement('div'); label.className = 'mailbox-reply-label'; label.textContent = 'Compose from AOC mailbox'; var mode = { value: initialMode || 'reply' }; heading.append(label);
   var to = document.createElement('input'); to.type = 'email'; to.className = 'mailbox-compose-input'; to.placeholder = 'To'; to.value = message.from || ''; var cc = document.createElement('input'); cc.type = 'text'; cc.className = 'mailbox-compose-input'; cc.placeholder = 'CC (comma-separated, optional)'; var bcc = document.createElement('input'); bcc.type = 'text'; bcc.className = 'mailbox-compose-input'; bcc.placeholder = 'BCC (comma-separated, optional)'; var subject = document.createElement('input'); subject.type = 'text'; subject.className = 'mailbox-compose-input'; subject.placeholder = 'Subject'; subject.value = message.subject && /^re:/i.test(message.subject) ? message.subject : 'Re: ' + (message.subject || '');
   var recipientHelp = document.createElement('div'); recipientHelp.className = 'mailbox-recipient-help'; recipientHelp.textContent = 'Reply recipients are taken from the original message.';
-  function updateMode() { var forward = mode.value === 'forward'; to.readOnly = !forward; if (mode.value === 'replyAll' && message.replyAllCc && !cc.dataset.manuallyChanged) cc.value = message.replyAllCc; recipientHelp.textContent = forward ? 'Enter the recipient(s) for this forwarded email.' : (mode.value === 'replyAll' ? 'Reply all recipients from the original email are included below. You may edit the subject or CC list.' : 'Reply recipients are taken from the original message. You may edit the subject.'); }
+  function updateMode() { var forward = mode.value === 'forward'; to.readOnly = false; to.disabled = false; to.setAttribute('aria-disabled', 'false'); to.title = forward ? 'Enter the recipient(s) for this forwarded email.' : 'You may edit the reply recipient(s).'; if (mode.value === 'replyAll' && message.replyAllCc && !cc.dataset.manuallyChanged) cc.value = message.replyAllCc; recipientHelp.textContent = forward ? 'Enter the recipient(s) for this forwarded email.' : (mode.value === 'replyAll' ? 'Reply-all recipients are included in CC. You may edit To, subject, or CC.' : 'Reply recipients are taken from the original message. You may edit To or subject.'); }
   cc.addEventListener('input', function () { cc.dataset.manuallyChanged = 'true'; });
-  var toolbar = document.createElement('div'); toolbar.className = 'mailbox-compose-toolbar'; [['bold','B','Bold'],['italic','I','Italic'],['underline','U','Underline'],['insertUnorderedList','• List','Bulleted list'],['insertOrderedList','1. List','Numbered list'],['createLink','↗ Link','Insert link'],['removeFormat','Tx','Clear formatting']].forEach(function (entry) { var button = document.createElement('button'); button.type = 'button'; button.className = 'mailbox-tool'; button.textContent = entry[1]; button.title = entry[2]; button.onclick = function () { var value = entry[0] === 'createLink' ? window.prompt('Paste the link URL') : null; if (entry[0] !== 'createLink' || value) document.execCommand(entry[0], false, value); editor.focus(); }; toolbar.appendChild(button); });
-  var editor = document.createElement('div'); editor.className = 'mailbox-rich-editor'; editor.contentEditable = 'true'; editor.setAttribute('role', 'textbox'); editor.setAttribute('aria-label', 'Email message'); editor.dataset.placeholder = 'Write your message…';
+  var toolbar = document.createElement('div'); toolbar.className = 'mailbox-compose-toolbar'; [['bold','B','Bold'],['italic','I','Italic'],['underline','U','Underline'],['insertUnorderedList','• List','Bulleted list'],['insertOrderedList','1. List','Numbered list'],['createLink','↗ Link','Insert link'],['addSignature','Signature','Add saved signature'],['removeFormat','Tx','Clear formatting']].forEach(function (entry) { var button = document.createElement('button'); button.type = 'button'; button.className = 'mailbox-tool'; button.textContent = entry[1]; button.title = entry[2]; button.onclick = function () { if (entry[0] === 'addSignature') { appendMailboxSignature(editor); return; } var value = entry[0] === 'createLink' ? window.prompt('Paste the link URL') : null; if (entry[0] !== 'createLink' || value) document.execCommand(entry[0], false, value); editor.focus(); }; toolbar.appendChild(button); });
+  var editor = document.createElement('div'); editor.className = 'mailbox-rich-editor'; editor.contentEditable = 'true'; editor.setAttribute('role', 'textbox'); editor.setAttribute('aria-label', 'Email message'); editor.dataset.placeholder = 'Write your message…'; configureMailboxComposeImageEditor(editor, 'mailboxReplyEditor'); addMailboxComposeImageTools(toolbar, editor);
   var attachments = document.createElement('div'); attachments.className = 'mailbox-compose-attachments'; var fileInput = document.createElement('input'); fileInput.type = 'file'; fileInput.multiple = true; fileInput.id = 'mailboxReplyFiles'; var fileLabel = document.createElement('label'); fileLabel.className = 'mailbox-attach-button'; fileLabel.htmlFor = fileInput.id; fileLabel.textContent = 'Attach files'; var fileNames = document.createElement('span'); fileNames.className = 'mailbox-file-names'; fileNames.textContent = 'Up to 10 files, 2.5 MB each'; fileInput.onchange = function () { fileNames.textContent = fileInput.files.length ? Array.from(fileInput.files).map(function (file) { return file.name; }).join(', ') : 'Up to 10 files, 2.5 MB each'; }; attachments.append(fileInput, fileLabel, fileNames);
-  var actions = document.createElement('div'); actions.className = 'mailbox-reply-actions'; var cancel = document.createElement('button'); cancel.className = 'btn btn-secondary btn-sm'; cancel.textContent = 'Discard'; cancel.onclick = function () { form.remove(); }; var send = document.createElement('button'); send.className = 'btn btn-primary btn-sm'; send.textContent = 'Send'; send.onclick = function () { var html = editor.innerHTML.trim(); if (!editor.textContent.trim()) { showToast('Please enter a message.', 'error'); return; } send.disabled = true; send.textContent = 'Preparing…'; mailboxFilesToPayload(fileInput.files).then(function (attachmentsPayload) { send.textContent = 'Sending…'; return fetch(window.APP_CONFIG.API_BASE_URL + '/mailbox/inbox/' + encodeURIComponent(message.id) + '/reply', { method: 'POST', headers: { Authorization: 'Bearer ' + mailboxToken(), 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: mode.value, to: to.value.trim(), cc: cc.value.trim(), bcc: bcc.value.trim(), subject: subject.value.trim(), html: html, attachments: attachmentsPayload }) }).then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to send email'); return data; }); }); }).then(function () { showToast('Email sent from the AOC mailbox.', 'success'); form.remove(); }).catch(function (error) { send.disabled = false; send.textContent = 'Send'; showToast(error.message, 'error'); }); }; actions.append(cancel, send);
+  var actions = document.createElement('div'); actions.className = 'mailbox-reply-actions'; var cancel = document.createElement('button'); cancel.className = 'btn btn-secondary btn-sm'; cancel.textContent = 'Discard'; cancel.onclick = function () { form.remove(); }; var send = document.createElement('button'); send.className = 'btn btn-primary btn-sm'; send.textContent = 'Send'; send.onclick = function () { var html = editor.innerHTML.trim(); if (!editor.textContent.trim() && !editor.querySelector('img')) { showToast('Please enter a message.', 'error'); return; } send.disabled = true; send.textContent = 'Preparing…'; mailboxFilesToPayload(fileInput.files).then(function (attachmentsPayload) { send.textContent = 'Sending…'; return fetch(window.APP_CONFIG.API_BASE_URL + '/mailbox/inbox/' + encodeURIComponent(message.id) + '/reply', { method: 'POST', headers: { Authorization: 'Bearer ' + mailboxToken(), 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: mode.value, to: to.value.trim(), cc: cc.value.trim(), bcc: bcc.value.trim(), subject: subject.value.trim(), html: html, attachments: attachmentsPayload }) }).then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to send email'); return data; }); }); }).then(function () { showToast('Email sent from the AOC mailbox.', 'success'); form.remove(); }).catch(function (error) { send.disabled = false; send.textContent = 'Send'; showToast(error.message, 'error'); }); }; actions.append(cancel, send);
   form.append(heading, to, cc, bcc, subject, recipientHelp, toolbar, editor, attachments, actions); detail.querySelector('.mailbox-detail-body-wrap').before(form); var composerObserver = new MutationObserver(function () { if (!form.isConnected) { if (bodyWrap) bodyWrap.style.display = ''; composerObserver.disconnect(); } }); composerObserver.observe(detail, { childList: true }); updateMode(); editor.focus();
 }
 function deleteMailboxMessage(message, detail) {
@@ -2748,6 +2921,7 @@ function ensureOperationsMailboxUi() {
   if (!document.getElementById('operationsNav')) {
     var sidebar = document.createElement('aside'); sidebar.id = 'operationsNav'; sidebar.className = 'operations-nav'; sidebar.setAttribute('aria-label', 'Operations mailbox views');
     var compose = document.createElement('button'); compose.id = 'operationsNewMailBtn'; compose.className = 'btn btn-primary operations-new-mail'; compose.type = 'button'; compose.textContent = '+ New Mail'; compose.onclick = showNewMailboxComposer; sidebar.appendChild(compose);
+    var signature = document.createElement('button'); signature.className = 'operations-view'; signature.type = 'button'; signature.textContent = '✍ Signature'; signature.onclick = openMailboxSignatureManager; sidebar.appendChild(signature);
     function group(label) { var item = document.createElement('div'); item.className = 'operations-nav-group'; item.textContent = label; sidebar.appendChild(item); }
     function view(key, label, emphasis) { var button = document.createElement('button'); button.type = 'button'; button.className = 'operations-view' + (emphasis ? ' operations-customer' : ''); button.dataset.mailboxView = key; button.onclick = function () { setMailboxView(key); }; var text = document.createElement('span'); text.textContent = label; var count = document.createElement('span'); count.className = 'operations-count'; count.id = 'operationsCount' + key.charAt(0).toUpperCase() + key.slice(1); button.append(text, count); sidebar.appendChild(button); }
     group('Incoming'); view('all', 'All Incoming'); view('coralogix', 'Coralogix Alerts'); view('azure', 'Azure Alerts'); view('jira', 'Customer Raised Tickets', true); group('Mail'); view('sent', 'Sent Items');
@@ -2863,6 +3037,8 @@ function mailboxEmailReceivedInIst(value) {
 function applyOperationsIncidentAutoSelection(selection) {
   if (!selection) return '';
   var applied = [];
+  var project = document.getElementById('f_project');
+  if (selection.project && project) { project.value = selection.project; applied.push('Project / Service: ' + selection.project); }
   var area = document.getElementById('f_area');
   if (selection.area && area) {
     area.value = selection.area;
@@ -2909,7 +3085,14 @@ function mailboxCreateIncidentButton(message) {
   return button;
 }
 
-function mailboxComposeToolbar(editor) { var toolbar = document.createElement('div'); toolbar.className = 'mailbox-compose-toolbar'; [['bold','B'],['italic','I'],['underline','U'],['insertUnorderedList','• List'],['insertOrderedList','1. List']].forEach(function (item) { var button = document.createElement('button'); button.type = 'button'; button.className = 'mailbox-tool'; button.textContent = item[1]; button.onclick = function () { editor.focus(); document.execCommand(item[0], false, null); }; toolbar.appendChild(button); }); var link = document.createElement('button'); link.type = 'button'; link.className = 'mailbox-tool'; link.textContent = 'Link'; link.onclick = function () { var url = window.prompt('Enter link URL'); if (url) { editor.focus(); document.execCommand('createLink', false, url); } }; toolbar.appendChild(link); return toolbar; }
+function mailboxComposeToolbar(editor) {
+  var toolbar = document.createElement('div'); toolbar.className = 'mailbox-compose-toolbar';
+  [['bold','B'],['italic','I'],['underline','U'],['insertUnorderedList','• List'],['insertOrderedList','1. List']].forEach(function (item) { var button = document.createElement('button'); button.type = 'button'; button.className = 'mailbox-tool'; button.textContent = item[1]; button.onclick = function () { editor.focus(); document.execCommand(item[0], false, null); }; toolbar.appendChild(button); });
+  var link = document.createElement('button'); link.type = 'button'; link.className = 'mailbox-tool'; link.textContent = 'Link'; link.onclick = function () { var url = window.prompt('Enter link URL'); if (url) { editor.focus(); document.execCommand('createLink', false, url); } }; toolbar.appendChild(link);
+  var signature = document.createElement('button'); signature.type = 'button'; signature.className = 'mailbox-tool'; signature.textContent = 'Signature'; signature.title = 'Add saved signature'; signature.onclick = function () { appendMailboxSignature(editor); }; toolbar.appendChild(signature);
+  addMailboxComposeImageTools(toolbar, editor);
+  return toolbar;
+}
 
 function showNewMailboxComposer() {
   if (!hasMailboxPermission('send_mailbox')) { showToast('Your role cannot send Operations mail.', 'error'); return; }
@@ -2917,15 +3100,53 @@ function showNewMailboxComposer() {
   var form = document.createElement('div'); form.className = 'mailbox-reply mailbox-compose'; var heading = document.createElement('div'); heading.className = 'mailbox-compose-head'; var label = document.createElement('div'); label.className = 'mailbox-reply-label'; label.textContent = 'New mail from Operations'; heading.appendChild(label);
   function field(placeholder, type) { var input = document.createElement('input'); input.type = type || 'text'; input.className = 'mailbox-compose-input'; input.placeholder = placeholder; return input; }
   var to = field('To (comma-separated recipients)', 'text'), cc = field('CC (optional)', 'text'), bcc = field('BCC (optional)', 'text'), subject = field('Subject');
-  var editor = document.createElement('div'); editor.className = 'mailbox-rich-editor'; editor.contentEditable = 'true'; editor.dataset.placeholder = 'Write your message…'; editor.setAttribute('role', 'textbox'); editor.setAttribute('aria-label', 'Email body');
+  var editor = document.createElement('div'); editor.className = 'mailbox-rich-editor'; editor.contentEditable = 'true'; editor.dataset.placeholder = 'Write your message…'; editor.setAttribute('role', 'textbox'); editor.setAttribute('aria-label', 'Email body'); configureMailboxComposeImageEditor(editor, 'mailboxNewMailEditor');
   var attachments = document.createElement('div'); attachments.className = 'mailbox-compose-attachments'; var fileInput = document.createElement('input'); fileInput.type = 'file'; fileInput.multiple = true; fileInput.id = 'operationsNewMailFiles'; var fileLabel = document.createElement('label'); fileLabel.className = 'mailbox-attach-button'; fileLabel.htmlFor = fileInput.id; fileLabel.textContent = 'Attach files'; var fileNames = document.createElement('span'); fileNames.className = 'mailbox-file-names'; fileNames.textContent = 'Up to 10 files, 2.5 MB each'; fileInput.onchange = function () { fileNames.textContent = fileInput.files.length ? Array.from(fileInput.files).map(function (file) { return file.name; }).join(', ') : 'Up to 10 files, 2.5 MB each'; }; attachments.append(fileInput, fileLabel, fileNames);
-  var actions = document.createElement('div'); actions.className = 'mailbox-reply-actions'; var discard = document.createElement('button'); discard.type = 'button'; discard.className = 'btn btn-secondary btn-sm'; discard.textContent = 'Discard'; discard.onclick = function () { var dirty = to.value || cc.value || bcc.value || subject.value || editor.textContent.trim() || fileInput.files.length; if (!dirty || window.confirm('Discard this email?')) { detail.innerHTML = '<div class="mailbox-empty">Select an email to read it here.</div>'; } }; var send = document.createElement('button'); send.type = 'button'; send.className = 'btn btn-primary btn-sm'; send.textContent = 'Send'; send.onclick = function () { var html = editor.innerHTML.trim(); if (!to.value.trim()) { showToast('Add at least one To recipient.', 'error'); return; } if (!subject.value.trim()) { showToast('Email subject is required.', 'error'); return; } if (!editor.textContent.trim()) { showToast('Please enter a message.', 'error'); return; } send.disabled = true; send.textContent = 'Preparing…'; mailboxFilesToPayload(fileInput.files).then(function (attachmentsPayload) { send.textContent = 'Sending…'; return fetch(window.APP_CONFIG.API_BASE_URL + '/mailbox/send', { method: 'POST', headers: { Authorization: 'Bearer ' + mailboxToken(), 'Content-Type': 'application/json' }, body: JSON.stringify({ to: to.value.trim(), cc: cc.value.trim(), bcc: bcc.value.trim(), subject: subject.value.trim(), html: html, attachments: attachmentsPayload }) }).then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to send email'); return data; }); }); }).then(function () { showToast('Email sent successfully.', 'success'); detail.innerHTML = '<div class="mailbox-empty">Email sent successfully. Select an email to read it here.</div>'; if (mailboxActiveView === 'sent') loadMailbox(); }).catch(function (error) { send.disabled = false; send.textContent = 'Send'; showToast(error.message, 'error'); }); }; actions.append(discard, send);
+  var actions = document.createElement('div'); actions.className = 'mailbox-reply-actions'; var discard = document.createElement('button'); discard.type = 'button'; discard.className = 'btn btn-secondary btn-sm'; discard.textContent = 'Discard'; discard.onclick = function () { var dirty = to.value || cc.value || bcc.value || subject.value || editor.textContent.trim() || editor.querySelector('img') || fileInput.files.length; if (!dirty || window.confirm('Discard this email?')) { detail.innerHTML = '<div class="mailbox-empty">Select an email to read it here.</div>'; } }; var send = document.createElement('button'); send.type = 'button'; send.className = 'btn btn-primary btn-sm'; send.textContent = 'Send'; send.onclick = function () { var html = editor.innerHTML.trim(); if (!to.value.trim()) { showToast('Add at least one To recipient.', 'error'); return; } if (!subject.value.trim()) { showToast('Email subject is required.', 'error'); return; } if (!editor.textContent.trim() && !editor.querySelector('img')) { showToast('Please enter a message.', 'error'); return; } send.disabled = true; send.textContent = 'Preparing…'; mailboxFilesToPayload(fileInput.files).then(function (attachmentsPayload) { send.textContent = 'Sending…'; return fetch(window.APP_CONFIG.API_BASE_URL + '/mailbox/send', { method: 'POST', headers: { Authorization: 'Bearer ' + mailboxToken(), 'Content-Type': 'application/json' }, body: JSON.stringify({ to: to.value.trim(), cc: cc.value.trim(), bcc: bcc.value.trim(), subject: subject.value.trim(), html: html, attachments: attachmentsPayload }) }).then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to send email'); return data; }); }); }).then(function () { showToast('Email sent successfully.', 'success'); detail.innerHTML = '<div class="mailbox-empty">Email sent successfully. Select an email to read it here.</div>'; if (mailboxActiveView === 'sent') loadMailbox(); }).catch(function (error) { send.disabled = false; send.textContent = 'Send'; showToast(error.message, 'error'); }); }; actions.append(discard, send);
   form.append(heading, to, cc, bcc, subject, mailboxComposeToolbar(editor), editor, attachments, actions); detail.appendChild(form); to.focus();
 }
 
 function openMailboxMessage(id) {
   selectedMailboxId = id; renderMailboxList(); var detail = document.getElementById('mailboxDetail'); if (!detail) return; detail.innerHTML = '<div class="mailbox-empty">Loading message…</div>';
   fetch(window.APP_CONFIG.API_BASE_URL + '/mailbox/inbox/' + encodeURIComponent(id), { headers: { Authorization: 'Bearer ' + mailboxToken() } }).then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to load message'); return data.data; }); }).then(function (message) { markMailboxMessageReadInUi(message); detail.innerHTML = ''; var head = document.createElement('div'); head.className = 'mailbox-detail-head'; var subject = document.createElement('div'); subject.className = 'mailbox-detail-subject'; subject.textContent = message.subject; var meta = document.createElement('div'); meta.className = 'mailbox-detail-meta'; meta.textContent = (mailboxActiveView === 'sent' ? 'To: ' + (message.to || '') + '\nSent: ' + mailboxDate(message.sentAt || message.receivedAt) : 'From: ' + (message.fromName || message.from) + (message.from ? ' <' + message.from + '>' : '') + '\nReceived: ' + mailboxDate(message.receivedAt)); head.append(subject, meta); var actions = document.createElement('div'); actions.className = 'mailbox-message-actions'; if (mailboxActiveView !== 'sent' && hasMailboxPermission('send_mailbox')) actions.append(mailboxActionButton('Reply', '↩', function () { showMailboxReply(message, detail, 'reply'); }), mailboxActionButton('Reply all', '↩↩', function () { showMailboxReply(message, detail, 'replyAll'); }), mailboxActionButton('Forward', '↪', function () { showMailboxReply(message, detail, 'forward'); })); if (mailboxActiveView !== 'sent' && hasMailboxPermission('delete_mailbox')) actions.appendChild(mailboxActionButton('Move to Deleted Items', '⌫', function () { deleteMailboxMessage(message, detail); }, true)); if (actions.childElementCount) head.appendChild(actions); var attachments = message.attachments || []; if (attachments.length) { var attachmentBox = document.createElement('div'); attachmentBox.className = 'mailbox-attachments'; var attachmentTitle = document.createElement('div'); attachmentTitle.className = 'mailbox-attachments-title'; attachmentTitle.textContent = 'Attachments'; attachmentBox.appendChild(attachmentTitle); attachments.forEach(function (attachment) { var item = document.createElement('button'); item.className = 'mailbox-attachment'; item.title = 'Download ' + attachment.name; item.onclick = function () { downloadMailboxAttachment(message.id, attachment); }; var name = document.createElement('span'); name.textContent = attachment.name; var size = document.createElement('small'); size.textContent = mailboxFormatBytes(attachment.size); item.append(name, size); attachmentBox.appendChild(item); }); head.appendChild(attachmentBox); } var wrap = document.createElement('div'); wrap.className = 'mailbox-detail-body-wrap'; var frame = document.createElement('iframe'); frame.className = 'mailbox-rich-frame'; frame.setAttribute('sandbox', 'allow-popups allow-popups-to-escape-sandbox'); frame.setAttribute('referrerpolicy', 'no-referrer'); frame.title = 'Safe rich email preview'; frame.srcdoc = mailboxSafeRichHtml(message.body || message.preview || 'This message has no readable text body.', document.body.classList.contains('light-mode')); wrap.appendChild(frame); detail.append(head, wrap); }).catch(function (error) { detail.innerHTML = '<div class="mailbox-empty"></div>'; detail.firstChild.textContent = error.message; });
+}
+
+// The Operations inbox receives recipient data from Graph as message.to. Keep
+// it visible in the selected-message header, just as Sent Items already does.
+function openMailboxMessage(id) {
+  selectedMailboxId = id;
+  renderMailboxList();
+  var detail = document.getElementById('mailboxDetail');
+  if (!detail) return;
+  detail.innerHTML = '<div class="mailbox-empty">Loading message…</div>';
+  fetch(window.APP_CONFIG.API_BASE_URL + '/mailbox/inbox/' + encodeURIComponent(id), { headers: { Authorization: 'Bearer ' + mailboxToken() } })
+    .then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to load message'); return data.data; }); })
+    .then(function (message) {
+      markMailboxMessageReadInUi(message);
+      detail.innerHTML = '';
+      var head = document.createElement('div'); head.className = 'mailbox-detail-head';
+      var subject = document.createElement('div'); subject.className = 'mailbox-detail-subject'; subject.textContent = message.subject;
+      var meta = document.createElement('div'); meta.className = 'mailbox-detail-meta';
+      meta.textContent = mailboxActiveView === 'sent'
+        ? 'To: ' + (message.to || '') + '\nSent: ' + mailboxDate(message.sentAt || message.receivedAt)
+        : 'From: ' + (message.fromName || message.from) + (message.from ? ' <' + message.from + '>' : '') + (message.to ? '\nTo: ' + message.to : '') + '\nReceived: ' + mailboxDate(message.receivedAt);
+      head.append(subject, meta);
+      var actions = document.createElement('div'); actions.className = 'mailbox-message-actions';
+      if (mailboxActiveView !== 'sent' && hasMailboxPermission('send_mailbox')) actions.append(mailboxActionButton('Reply', '↩', function () { showMailboxReply(message, detail, 'reply'); }), mailboxActionButton('Reply all', '↩↩', function () { showMailboxReply(message, detail, 'replyAll'); }), mailboxActionButton('Forward', '↪', function () { showMailboxReply(message, detail, 'forward'); }));
+      if (mailboxActiveView !== 'sent' && hasMailboxPermission('delete_mailbox')) actions.appendChild(mailboxActionButton('Move to Deleted Items', '⌫', function () { deleteMailboxMessage(message, detail); }, true));
+      if (actions.childElementCount) head.appendChild(actions);
+      var attachments = message.attachments || [];
+      if (attachments.length) {
+        var attachmentBox = document.createElement('div'); attachmentBox.className = 'mailbox-attachments';
+        var attachmentTitle = document.createElement('div'); attachmentTitle.className = 'mailbox-attachments-title'; attachmentTitle.textContent = 'Attachments'; attachmentBox.appendChild(attachmentTitle);
+        attachments.forEach(function (attachment) { var item = document.createElement('button'); item.className = 'mailbox-attachment'; item.title = 'Download ' + attachment.name; item.onclick = function () { downloadMailboxAttachment(message.id, attachment); }; var name = document.createElement('span'); name.textContent = attachment.name; var size = document.createElement('small'); size.textContent = mailboxFormatBytes(attachment.size); item.append(name, size); attachmentBox.appendChild(item); });
+        head.appendChild(attachmentBox);
+      }
+      var wrap = document.createElement('div'); wrap.className = 'mailbox-detail-body-wrap';
+      var frame = document.createElement('iframe'); frame.className = 'mailbox-rich-frame'; frame.setAttribute('sandbox', 'allow-popups allow-popups-to-escape-sandbox'); frame.setAttribute('referrerpolicy', 'no-referrer'); frame.title = 'Safe rich email preview'; frame.srcdoc = mailboxSafeRichHtml(message.body || message.preview || 'This message has no readable text body.', document.body.classList.contains('light-mode'));
+      wrap.appendChild(frame); detail.append(head, wrap);
+    })
+    .catch(function (error) { detail.innerHTML = '<div class="mailbox-empty"></div>'; detail.firstChild.textContent = error.message; });
 }
 
 function navigate(page, el) {
@@ -3221,7 +3442,7 @@ var activeNotificationTab = 'all';
 function notificationTimeLabel(value) {
   if (!value) return 'Just now';
   var date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'Just now' : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? 'Just now' : formatUiDateTime(date);
 }
 
 function loadNotificationsFromBackend(options) {
@@ -3630,14 +3851,14 @@ function renderIncidentTable() {
     return `
     <tr onclick="openDetailPanel('${i.id}')" style="cursor:pointer">
       <td style="width:34px" onclick="event.stopPropagation()"><input type="checkbox" style="accent-color:var(--accent);cursor:pointer" ${selectedIncidents.has(i.id) ? 'checked' : ''} onchange="toggleIncidentSelect('${i.id}',this.checked)"></td>
-      <td class="id-cell">${i.id}</td>
-      <td class="title-cell">${i.title}</td>
-      <td>${i.customer}</td>
-      <td>${i.project}</td>
-      <td><span class="badge badge-${i.severity.toLowerCase()}">${i.severity}</span></td>
-      <td><span class="badge badge-${i.status.toLowerCase().replace(/ /g, '-').replace(/&/g, '')}">${i.status}</span></td>
-      <td>${i.engineer}</td>
-      <td style="font-family:var(--font-mono);font-size:11px;color:var(--text3)">${i.date}</td>
+      <td class="id-cell">${escapeMetricHtml(i.id)}</td>
+      <td class="title-cell">${escapeMetricHtml(i.title)}</td>
+      <td>${escapeMetricHtml(i.customer)}</td>
+      <td>${escapeMetricHtml(i.project)}</td>
+      <td><span class="badge badge-${escapeMetricHtml(i.severity.toLowerCase())}">${escapeMetricHtml(i.severity)}</span></td>
+      <td><span class="badge badge-${escapeMetricHtml(i.status.toLowerCase().replace(/ /g, '-').replace(/&/g, ''))}">${escapeMetricHtml(i.status)}</span></td>
+      <td>${escapeMetricHtml(i.engineer)}</td>
+      <td style="font-family:var(--font-mono);font-size:11px;color:var(--text3)">${escapeMetricHtml(i.date)}</td>
       <td>${showSla
         ? `<span class="sla-badge ${sla.cls}" title="${sla.title}">${sla.label}</span>`
         : '<span style="color:var(--text3)">&mdash;</span>'}</td>
@@ -4250,7 +4471,7 @@ function closeIncident(id) {
 
   const hasDetails = (inc.downtimeH > 0 || inc.downtimeM > 0)
     && (inc.mttrH > 0 || inc.mttrM > 0)
-    && inc.rca && inc.resolution && inc.downtimeEnd;
+    && inc.rca && inc.resolution && inc.resolvedBy && inc.downtimeEnd;
 
   if (hasDetails) {
     // All details already saved — just confirm close
@@ -4297,6 +4518,11 @@ function _showCloseConfirm(inc) {
 function _forceCloseIncident(id) {
   const inc = incidents.find(i => i.id === id);
   if (!inc) return;
+  if (!String(inc.resolvedBy || inc.resolved_by || '').trim()) {
+    showToast('Please select who resolved the incident before closing it', 'error');
+    openDowntimeModal(id);
+    return;
+  }
 
   if (window.APP_CONFIG && window.APP_CONFIG.ENABLE_BACKEND) {
     const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
@@ -4468,8 +4694,8 @@ function openDowntimeModal(id) {
   document.getElementById('dtm_mttr_hours').value = inc.mttrH || '';
   document.getElementById('dtm_mttr_mins').value = inc.mttrM || '';
   document.getElementById('dtm_resolved_by').value = inc.resolvedBy || inc.resolved_by || '';
-  document.getElementById('dtm_rca').value = inc.rca || '';
-  document.getElementById('dtm_resolution').value = inc.resolution || '';
+  var closeRca = document.getElementById('dtm_rca'); if (closeRca) closeRca.innerHTML = safeIncidentDescriptionHtml(inc.rca || '');
+  var closeResolution = document.getElementById('dtm_resolution'); if (closeResolution) closeResolution.innerHTML = safeIncidentDescriptionHtml(inc.resolution || '');
   document.getElementById('dtm_inc_ref').value = id;
   // Init TZ selector — use incident's saved TZ or current selectedTZ
   var dtmTZ = inc.timezone || selectedTZ || 'IST';
@@ -4546,8 +4772,8 @@ function confirmCloseIncident() {
   const mttrH = parseInt(document.getElementById('dtm_mttr_hours').value) || 0;
   const mttrM = parseInt(document.getElementById('dtm_mttr_mins').value) || 0;
   const resolvedBy = document.getElementById('dtm_resolved_by').value;
-  const rca = document.getElementById('dtm_rca').value.trim();
-  const res = document.getElementById('dtm_resolution').value.trim();
+  const rca = (document.getElementById('dtm_rca')?.innerHTML || '').trim();
+  const res = (document.getElementById('dtm_resolution')?.innerHTML || '').trim();
   convertIncidentEndFromIST('dtm_end_time', 'dtm_end_tz_hint');
   const endTimeRaw = document.getElementById('dtm_end_time').value;
 
@@ -6465,37 +6691,36 @@ function _drawTrend(gridC, textC, textC2, data) {
   var r = _fitCanvas(el, 230);
   var ctx = r.ctx, W = r.W, H = r.H;
 
-  // Build daily data for current month + simulate prior months
+  // Standard operational trend: monthly opened events versus monthly closed events.
+  // Only the incidents currently loaded from the database are counted.
   var now = new Date();
-  var labels = [], dOpen = [], dClosed = [], dNew = [];
+  var labels = [], dOpen = [], dClosed = [];
 
-  // Generate 8 weeks of weekly data for a richer trend
-  for (var w = 7; w >= 0; w--) {
-    var d = new Date(now); d.setDate(d.getDate() - w * 7);
-    var weekStart = new Date(d); weekStart.setDate(d.getDate() - 3);
-    var weekEnd = new Date(d); weekEnd.setDate(d.getDate() + 3);
-    var mo = d.toLocaleString('default', { month: 'short' });
-    var day = d.getDate();
-    labels.push(mo + ' ' + day);
+  // Include the current calendar month plus the preceding seven calendar months.
+  for (var monthOffset = 7; monthOffset >= 0; monthOffset--) {
+    var monthStart = new Date(now.getFullYear(), now.getMonth() - monthOffset, 1);
+    var monthEnd = new Date(now.getFullYear(), now.getMonth() - monthOffset + 1, 1);
+    labels.push(monthStart.toLocaleString('default', { month: 'short', year: '2-digit' }));
 
-    // Count incidents created in this week window
-    var weekInc = data.filter(function (i) {
-      var dd = new Date(i.date); return dd >= weekStart && dd <= weekEnd;
-    });
-    var openCnt = weekInc.filter(function (i) { return i.status !== 'Closed' && i.status !== 'Resolved'; }).length;
-    var closedCnt = weekInc.filter(function (i) { return i.status === 'Closed' || i.status === 'Resolved'; }).length;
+    var openCnt = data.filter(function (i) {
+      var openedAt = getIncidentOpenedTimestamp(i);
+      return Number.isFinite(openedAt) && openedAt >= monthStart.getTime() && openedAt < monthEnd.getTime();
+    }).length;
+    var closedCnt = data.filter(function (i) {
+      var status = String(i.status || '').toLowerCase();
+      var closedAt = getIncidentClosedTimestamp(i);
+      return (status === 'closed' || status === 'resolved')
+        && Number.isFinite(closedAt) && closedAt >= monthStart.getTime() && closedAt < monthEnd.getTime();
+    }).length;
 
-    // Simulate cumulative growth for visual richness
-    var base = w === 0 ? 0 : (8 - w);
-    dOpen.push(openCnt + Math.max(0, base + Math.round(Math.sin(w * 0.8) * 2)));
-    dClosed.push(closedCnt + Math.max(0, Math.round(base * 0.6 + Math.cos(w * 0.7) * 1.5)));
-    dNew.push(weekInc.length + Math.max(0, Math.round(base * 0.3)));
+    dOpen.push(openCnt);
+    dClosed.push(closedCnt);
   }
 
   var pad = { t: 20, r: 20, b: 52, l: 38 };
   var cW = W - pad.l - pad.r, cH = H - pad.t - pad.b;
-  var maxV = Math.max.apply(null, dOpen.concat(dClosed).concat([8]));
-  maxV = Math.ceil(maxV / 4) * 4;
+  var maxV = Math.max.apply(null, dOpen.concat(dClosed).concat([1]));
+  maxV = Math.max(4, Math.ceil(maxV / 4) * 4);
 
   ctx.clearRect(0, 0, W, H);
   // Clip drawing to chart area to prevent dots escaping bounds
@@ -6579,13 +6804,13 @@ function _drawTrend(gridC, textC, textC2, data) {
 
   // Draw closed first (behind), then open
   drawSeries(dClosed, '#2dd4a0', 'rgba(45,212,160,0.25)', 'rgba(45,212,160,0.02)', 'Closed');
-  drawSeries(dOpen, '#f75c7c', 'rgba(247,92,124,0.25)', 'rgba(247,92,124,0.02)', 'New');
+  drawSeries(dOpen, '#f75c7c', 'rgba(247,92,124,0.25)', 'rgba(247,92,124,0.02)', 'Opened');
 
   // Restore clip before drawing legend (legend is outside chart area)
   ctx.restore();
   // Stylish legend pills
   var ly = H - 10;
-  [['New', '#f75c7c'], ['Closed', '#2dd4a0']].forEach(function (item, i) {
+  [['Opened', '#f75c7c'], ['Closed', '#2dd4a0']].forEach(function (item, i) {
     var lx = W / 2 - 55 + i * 100;
     // Pill background
     ctx.fillStyle = 'rgba(255,255,255,0.06)';
@@ -6597,7 +6822,7 @@ function _drawTrend(gridC, textC, textC2, data) {
     ctx.fillStyle = item[1]; ctx.shadowColor = item[1]; ctx.shadowBlur = 6;
     ctx.beginPath(); ctx.arc(lx + 6, ly - 5, 4, 0, Math.PI * 2); ctx.fill();
     ctx.shadowBlur = 0;
-    ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.font = '11px sans-serif'; ctx.textAlign = 'left';
+    ctx.fillStyle = textC2; ctx.font = '11px sans-serif'; ctx.textAlign = 'left';
     ctx.fillText(item[0], lx + 14, ly);
   });
 
@@ -6610,7 +6835,7 @@ function _drawTrend(gridC, textC, textC2, data) {
     pOpen.forEach(function (pt, i) { var d = Math.abs(pt.x - mx); if (d < bestDist) { bestDist = d; best = i; } });
     if (best >= 0 && bestDist < cW / (labels.length - 1) * 0.65) {
       // Redraw and add crosshair
-      _drawTrend(gridC, textC, textC2);
+      _drawTrend(gridC, textC, textC2, data);
       var px = pOpen[best].x;
       ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
       ctx.beginPath(); ctx.moveTo(px, pad.t); ctx.lineTo(px, pad.t + cH); ctx.stroke();
@@ -6625,14 +6850,14 @@ function _drawTrend(gridC, textC, textC2, data) {
       });
       _showTip(el,
         '<div style="font-weight:700;margin-bottom:4px;color:#e0e0f0">' + labels[best] + '</div>'
-        + '<div style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:50%;background:#f75c7c;display:inline-block"></span><span style="color:#aaa">New</span><b style="margin-left:auto;padding-left:16px;color:#f75c7c">' + dOpen[best] + '</b></div>'
+        + '<div style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:50%;background:#f75c7c;display:inline-block"></span><span style="color:#aaa">Opened</span><b style="margin-left:auto;padding-left:16px;color:#f75c7c">' + dOpen[best] + '</b></div>'
         + '<div style="display:flex;align-items:center;gap:6px;margin-top:3px"><span style="width:10px;height:10px;border-radius:50%;background:#2dd4a0;display:inline-block"></span><span style="color:#aaa">Closed</span><b style="margin-left:auto;padding-left:16px;color:#2dd4a0">' + dClosed[best] + '</b></div>',
         e);
     } else {
       _hideTip();
     }
   };
-  el.onmouseleave = function () { _hideTip(); _drawTrend(gridC, textC, textC2); };
+  el.onmouseleave = function () { _hideTip(); _drawTrend(gridC, textC, textC2, data); };
 }
 
 /* ── 2. SEVERITY DONUT ─────────────────────────────────────── */
@@ -7185,7 +7410,7 @@ function generatePDFReport() {
   showToast('Generating PDF report…', 'success');
   setTimeout(() => {
     const custFilter = (document.getElementById('reportCustomerFilter')?.value) || 'All Customers';
-    const now = new Date().toLocaleString();
+    const now = formatUiDateTime(new Date());
     const totalInc = data.length;
     const openInc = data.filter(i => i.status !== 'Closed' && i.status !== 'Resolved').length;
     const closedInc = data.filter(i => i.status === 'Closed' || i.status === 'Resolved').length;
@@ -7646,7 +7871,8 @@ function viewIncidentReport(id) {
   document.getElementById('ir_title').textContent = inc.title;
   document.getElementById('ir_meta').innerHTML = `<span class="badge badge-${inc.severity.toLowerCase()}">${inc.severity}</span> &nbsp; <span class="badge">${inc.status}</span>`;
   var _q = function (id, v) { var e = document.getElementById(id); if (e) e.textContent = v; }; _q('ir_subject', inc.title);
-  _q('ir_desc', inc.desc || 'No description provided.');
+  var _richReport = function (id, value, fallback) { var e = document.getElementById(id); if (e) e.innerHTML = safeIncidentDescriptionHtml(value || fallback); };
+  _richReport('ir_desc', inc.desc, 'No description provided.');
   _q('ir_customer', inc.customer);
   _q('ir_project', inc.project);
   _q('ir_product_line', inc.product_line || '—');
@@ -7663,7 +7889,7 @@ function viewIncidentReport(id) {
   const baseDate = new Date(inc.date + 'T09:00:00');
   const actualHours = (inc.downtimeH || 0) + (inc.downtimeM || 0) / 60 || slaHours;
   const endDate = new Date(baseDate.getTime() + actualHours * 3600000);
-  const fmt = d => d.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const fmt = d => d.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
   document.getElementById('ir_start_time').textContent = inc.downtimeStart ? fmt(new Date(inc.downtimeStart)) : fmt(baseDate);
   document.getElementById('ir_end_time').textContent = inc.downtimeEnd ? fmt(new Date(inc.downtimeEnd)) : fmt(endDate);
   const dtH = inc.downtimeH !== undefined ? inc.downtimeH : Math.floor(slaHours);
@@ -7684,8 +7910,8 @@ function viewIncidentReport(id) {
     Medium: 'Configuration corrected and deployment pushed. Verified stable across all environments.',
     Normal: 'Issue resolved via standard support procedure. Documentation updated.',
   };
-  _q('ir_rca', inc.rca || rcaMap[inc.severity] || 'Root cause analysis pending.');
-  _q('ir_resolution', inc.resolution || resMap[inc.severity] || 'Resolution steps applied.');
+  _richReport('ir_rca', inc.rca, rcaMap[inc.severity] || 'Root cause analysis pending.');
+  _richReport('ir_resolution', inc.resolution, resMap[inc.severity] || 'Resolution steps applied.');
   const irRB = document.getElementById('ir_resolved_by'); if (irRB) irRB.textContent = inc.resolvedBy || '—';
   const irSF = document.getElementById('ir_sf_case'); if (irSF) { irSF.textContent = inc.sfCase || '—'; irSF.style.color = inc.sfCase ? '#4f8ef7' : 'var(--text-secondary)'; }
   // Timezone: reset to IST on fresh open, render selector, apply timestamps
@@ -7856,7 +8082,7 @@ function exportIncidentPDF() {
   parts.push('<div class="field"><div class="field-lbl">Resolved By</div><div class="field-val">' + resolvedBy + '</div></div>');
   parts.push('<div class="field"><div class="field-lbl">Salesforce Case No.</div><div class="field-val" style="color:#4f8ef7;font-weight:700;font-family:monospace">' + sfCase + '</div></div>');
   parts.push('</div>');
-  parts.push('<div class="ftr"><span>Magic Cloud &mdash; Incident Management Portal</span><span>Generated: ' + new Date().toLocaleString('en-GB') + '</span></div>');
+  parts.push('<div class="ftr"><span>Magic Cloud &mdash; Incident Management Portal</span><span>Generated: ' + formatUiDateTime(new Date()) + '</span></div>');
   parts.push('</body>');
   parts.push('</html>');
 
@@ -8018,7 +8244,8 @@ function openDetailPanel(id, editMode = false) {
   var _si = function (id, val) { var e = document.getElementById(id); if (e) e.innerHTML = val; };
   _si('dp_sev_text', '<span class="badge badge-' + inc.severity.toLowerCase() + '">' + inc.severity + '</span>');
   _si('dp_stat_text', '<span class="badge badge-' + inc.status.toLowerCase().replace(/ /g, '-').replace(/&/g, '') + '">' + inc.status + '</span>');
-  _s('dp_desc', inc.desc || 'No description provided.');
+  var dpDescription = document.getElementById('dp_desc');
+  if (dpDescription) dpDescription.innerHTML = safeIncidentDescriptionHtml(inc.desc || 'No description provided.');
 
   // RCA & Resolution — show only for closed incidents with data
   const rcaSection = document.getElementById('dp_rca_section');
@@ -8027,8 +8254,8 @@ function openDetailPanel(id, editMode = false) {
     const hasAny = inc.rca || inc.resolution || inc.downtimeH > 0 || inc.downtimeM > 0 || inc.mttrH > 0 || inc.mttrM > 0;
     rcaSection.style.display = hasAny ? '' : 'none';
     if (hasAny) {
-      document.getElementById('dp_rca').textContent = inc.rca || '—';
-      document.getElementById('dp_resolution').textContent = inc.resolution || '—';
+      var rcaView = document.getElementById('dp_rca'); if (rcaView) rcaView.innerHTML = safeIncidentDescriptionHtml(inc.rca || '—');
+      var resolutionView = document.getElementById('dp_resolution'); if (resolutionView) resolutionView.innerHTML = safeIncidentDescriptionHtml(inc.resolution || '—');
       const dpRB = document.getElementById('dp_resolved_by'); if (dpRB) dpRB.textContent = inc.resolvedBy || '—';
       const dpSF = document.getElementById('dp_sf_case'); if (dpSF) { dpSF.textContent = inc.sfCase || '—'; dpSF.style.color = inc.sfCase ? '#4f8ef7' : 'var(--text-secondary)'; }
       const dtView = document.getElementById('dp_view_downtime');
@@ -8153,7 +8380,7 @@ function populateEditForm(inc) {
   document.getElementById('dp_f_engineer').value = inc.engineer;
   ensureEngineerDropdownsLoaded(function () { var de = document.getElementById('dp_f_engineer'); if (de) de.value = inc.engineer || ''; });
   document.getElementById('dp_f_date').value = inc.date;
-  document.getElementById('dp_f_desc').value = inc.desc || '';
+  var editDescription = document.getElementById('dp_f_desc'); if (editDescription) editDescription.innerHTML = safeIncidentDescriptionHtml(inc.desc || '');
   var areaEl = document.getElementById('dp_f_area'); if (areaEl) areaEl.value = inc.area || '';
 
   // Show report fields only for closed incidents
@@ -8173,18 +8400,18 @@ function populateEditForm(inc) {
   // Always populate report fields regardless of status
   set('dp_f_dtH', inc.downtimeH || 0);
   set('dp_f_dtM', inc.downtimeM || 0);
-  var critical = String(inc.severity || '').toLowerCase() === 'critical';
   ['dp_f_dtH', 'dp_f_dtM'].forEach(function (id) {
     var field = document.getElementById(id);
     field.readOnly = false;
     field.style.opacity = '1';
     field.style.cursor = '';
   });
-  if (critical && editEndEl && editEndEl.value) updateCriticalEditDowntime();
+  // Keep the saved downtime when reopening an incident. Critical-incident
+  // downtime is recalculated only when an operator changes its start/end time.
   set('dp_f_mttr_h', inc.mttrH || 0);
   set('dp_f_mttr_m', inc.mttrM || 0);
-  set('dp_f_rca', inc.rca || '');
-  set('dp_f_resolution', inc.resolution || '');
+  var editRca = document.getElementById('dp_f_rca'); if (editRca) editRca.innerHTML = safeIncidentDescriptionHtml(inc.rca || '');
+  var editResolution = document.getElementById('dp_f_resolution'); if (editResolution) editResolution.innerHTML = safeIncidentDescriptionHtml(inc.resolution || '');
   set('dp_f_resolved_by', inc.resolvedBy || '');
   set('dp_f_sf_case', inc.sfCase || inc.sf_case || '');
   set('dp_f_rd_tickets', inc.rd_tickets || inc.rdTickets || '');
@@ -8248,7 +8475,7 @@ function saveDetailEdit() {
   const status = document.getElementById('dp_f_status').value;
   const engineer = document.getElementById('dp_f_engineer').value;
   const date = document.getElementById('dp_f_date').value;
-  const desc = document.getElementById('dp_f_desc').value.trim();
+  const desc = (document.getElementById('dp_f_desc')?.innerHTML || '').trim();
 
   if (!title || !customer || !severity || !engineer) {
     showToast('Please fill in all required fields', 'error');
@@ -8295,8 +8522,8 @@ function saveDetailEdit() {
   inc.mttrH = parseInt(getVal('dp_f_mttr_h')) || 0;
   inc.mttrM = parseInt(getVal('dp_f_mttr_m')) || 0;
   inc.mttrStr = inc.mttrH > 0 ? (inc.mttrM > 0 ? `${inc.mttrH}h ${inc.mttrM}m` : `${inc.mttrH}h`) : inc.mttrM > 0 ? `${inc.mttrM}m` : '';
-  inc.rca = getVal('dp_f_rca');
-  inc.resolution = getVal('dp_f_resolution');
+  inc.rca = (document.getElementById('dp_f_rca')?.innerHTML || '').trim();
+  inc.resolution = (document.getElementById('dp_f_resolution')?.innerHTML || '').trim();
   inc.resolvedBy = getVal('dp_f_resolved_by');
   const sfCaseValue = getVal('dp_f_sf_case').trim();
   if (sfCaseValue) inc.sfCase = sfCaseValue;
@@ -9021,6 +9248,19 @@ SLA: ${inc.slaHours || 4}h from creation`;
   modal.style.display = 'flex';
 }
 
+function historianMailRecipientPreset(inc) {
+  // This preset is deliberately a UI default: the recipient chips remain
+  // fully editable in the pre-send review for every incident severity.
+  const customer = String(inc?.customer || '').trim().toLowerCase();
+  const project = String(inc?.project || '').trim().toLowerCase();
+  const area = String(inc?.area || '').trim().toLowerCase();
+  if (customer !== 'ngc' || project !== 'historian' || area !== 'historian') return null;
+  return {
+    to: 'ServiceDesk@NationalGypsum.com,BillB@NationalGypsum.com,MatthewP@NationalGypsum.com,RyanSa@NationalGypsum.com,dimpalp@nationalgypsum.com',
+    cc: 'jkaplan@magicsoftware.com,RenatoDeGasperis@magicsoftware.com,Abhishek_Gawali@magicsoftware.com,Rohan_Vikhe@magicsoftware.com,jaiprakash_prajapati@magicsoftware.com,its24x7@magicsoftware.com,cloudopssupport@magicsoftware.com'
+  };
+}
+
 function showPreSendEmailPreview(inc) {
   const modal = document.getElementById('notifSimModal');
   const content = document.getElementById('notifSimContent');
@@ -9030,11 +9270,13 @@ function showPreSendEmailPreview(inc) {
   // modals and prevents a brief reappearance of the create form on submit.
   document.getElementById('incidentModal')?.classList.remove('open');
   const isCritical = String(inc.severity || '').toLowerCase() === 'critical';
+  const historianRecipients = historianMailRecipientPreset(inc);
   const render = function (config) {
+  const recipientConfig = historianRecipients || config;
   const defaultSubject = isCritical ? inc.title : `[${inc.severity}] New Incident: ${inc.title}`;
   const defaultBody = isCritical ? `Dear Team,\n\nWe have received the following critical incident:\n${inc.title}.\n\nOur team is currently reviewing it.\n\nWe will provide further updates as soon as more information becomes available.\n\nThanks & Regards,\n${currentUserProfile.name || currentUserProfile.email || 'AOC Operations Team'}` : '';
   content.innerHTML = `
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">${isCritical ? (config?.configured ? 'Critical incident recipients were loaded from the customer configuration. You may edit the draft before sending.' : 'No customer recipient configuration exists yet. Enter recipients manually before sending this critical incident notification.') : 'The notification defaults to your signed-in email address with the operations team copied. You may edit the recipients, subject, and message.'}</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">${historianRecipients ? 'Historian notification recipients were prefilled. You may edit the draft before sending.' : (isCritical ? (config?.configured ? 'Critical incident recipients were loaded from the customer configuration. You may edit the draft before sending.' : 'No customer recipient configuration exists yet. Enter recipients manually before sending this critical incident notification.') : 'The notification defaults to your signed-in email address with the operations team copied. You may edit the recipients, subject, and message.')}</div>
     <div style="margin-bottom:12px">
       <label class="form-label required" for="notificationEmailToInput">To</label>
       <div id="notificationEmailToChips" aria-label="To recipients" style="display:flex;flex-wrap:wrap;gap:6px;min-height:40px;padding:7px;border:1px solid var(--border);border-radius:7px;background:var(--surface2)"></div>
@@ -9064,12 +9306,14 @@ function showPreSendEmailPreview(inc) {
       <button class="btn btn-primary" id="confirmIncidentEmailBtn" onclick="confirmIncidentEmailAndCreate()">Create Incident &amp; Send Email</button>
     </div>`;
   preSendRecipients = {
-    to: parsePreSendRecipientList(config?.to || (isCritical ? '' : (currentUserProfile.email || ''))),
-    cc: parsePreSendRecipientList(config?.cc || (isCritical ? '' : 'its24x7@magicsoftware.com'))
+    to: parsePreSendRecipientList(recipientConfig?.to || (isCritical ? '' : (currentUserProfile.email || ''))),
+    cc: parsePreSendRecipientList(recipientConfig?.cc || 'its24x7@magicsoftware.com,cloudopssupport@magicsoftware.com')
   };
   renderPreSendRecipientEditors();
   document.getElementById('notificationEmailSubject').value = defaultSubject;
   document.getElementById('notificationEmailBody').innerHTML = escapeMetricHtml(defaultBody).replace(/\r?\n/g, '<br>');
+  var signatureButton = document.createElement('button'); signatureButton.type = 'button'; signatureButton.className = 'btn btn-sm'; signatureButton.textContent = 'Signature'; signatureButton.title = 'Add saved signature'; signatureButton.onclick = function () { appendMailboxSignature(document.getElementById('notificationEmailBody')); };
+  document.getElementById('notificationEmailBody').previousElementSibling?.appendChild(signatureButton);
   modal.style.display = 'flex';
   };
   if (!isCritical || !window.APP_CONFIG?.ENABLE_BACKEND) return render(null);

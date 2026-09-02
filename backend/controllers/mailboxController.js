@@ -1,9 +1,9 @@
 'use strict';
 
 const pool = require('../config/database');
-const { deleteInboxMessage, getInboxAttachment, getInboxMessage, getOperationsMailboxCounts, listInboxMessages, listSentMessages, markInboxMessageRead, replyToInboxMessage, sendNewMailboxMessage } = require('../services/emailService');
+const { deleteInboxMessage, getInboxAttachment, getInboxMessage, getOperationsMailboxCounts, listInboxMessages, listSentMessages, markInboxMessageRead, replyToInboxMessage, sanitizeMailboxReplyHtml, sendNewMailboxMessage } = require('../services/emailService');
 const { markMailboxNotificationsRead, notifyMailboxUsers } = require('../services/notificationService');
-const { operationsIncidentDefaults } = require('../services/operationsMailClassificationService');
+const { noHistorianReadIncidentDefaults, operationsIncidentDefaults } = require('../services/operationsMailClassificationService');
 
 let knownMailboxMessageIds = null;
 let mailboxPollTimer = null;
@@ -107,6 +107,78 @@ function parseOperationsAlert(message) {
   };
 }
 
+function isNoHistorianReadAlert(message) {
+  const subject = plainMailText(message?.subject || '');
+  const content = plainMailText(message?.body || message?.preview || '');
+  return /\b(?:FTD\s+)?No\s+Historian\s+Read\b/i.test(`${subject} ${content}`);
+}
+
+function firstMatch(value, expression) {
+  const match = String(value || '').match(expression);
+  return String(match?.[1] || match?.[0] || '').trim();
+}
+
+function noHistorianAlertFields(message) {
+  const subject = plainMailText(message?.subject || '');
+  const content = plainMailText(message?.body || message?.preview || '');
+  const bracketed = [...subject.matchAll(/\[([^\]\r\n]{1,100})\]/g)].map((match) => match[1].trim());
+  const plantFromSubject = bracketed.find((value) => /-APPSVR\b/i.test(value))
+    // Azure uses this compact subject format, where the token immediately
+    // after Severity is the plant. Both alert transitions occur in mail,
+    // e.g. "Activated Severity: 0 MED ..." and "Deactivated Severity: 0 SHO ...".
+    || firstMatch(subject, /\b(?:Activated|Deactivated)\s+Severity\s*:\s*\d+\s+([A-Za-z0-9][A-Za-z0-9._-]{1,99})\s+(?=(?:FTD\s+)?No\s+Historian\s+Read\b)/i)
+    || firstMatch(subject, /\b(?:plant|site)\s*[:=-]\s*([A-Za-z0-9][A-Za-z0-9._-]{1,99})/i)
+    || firstMatch(subject, /\bNo\s+Historian\s+Read\s+(?:at|for)\s+([A-Za-z0-9][A-Za-z0-9._-]{1,99})/i);
+  const alertDetail = bracketed.find((value) => value !== plantFromSubject)
+    || firstMatch(subject, /\bNGCXPI[A-Za-z0-9_-]+\b/i)
+    || firstMatch(content, /\bNGCXPI[A-Za-z0-9_-]+\b/i);
+  // Do not substitute an Azure monitoring resource for either of these
+  // operational fields: when the alert does not provide a server, leave the
+  // requested editable placeholder intact.
+  const plantName = String(plantFromSubject || '').replace(/-APPSVR\b/i, '').trim() || '[plant name]';
+  const plantServer = plantFromSubject && /-APPSVR\b/i.test(plantFromSubject)
+    ? plantFromSubject
+    : `${plantName.replace(/^\[|\]$/g, '')}-APPSVR`;
+  return {
+    plantName,
+    plantServer,
+    alertDetails: alertDetail ? `[${alertDetail}]` : '[NGCXPILAVM1]'
+  };
+}
+
+function parseNoHistorianReadAlert(message) {
+  const title = plainMailText(message?.subject || '').slice(0, 500) || 'No Historian Read alert';
+  const { plantName, plantServer, alertDetails } = noHistorianAlertFields(message);
+  return {
+    title,
+    description: [
+      'Dear Team,',
+      '',
+      `We would like to inform you about a recent occurrence of a 'No Historian Read' alert at ${plantName}.`,
+      'Our team has conducted an investigation and prepared a detailed report to provide you with all the necessary information.',
+      '',
+      'Please find the following details:',
+      '',
+      `- Plant Name: ${plantName}[${plantServer}]`,
+      `- 'No Historian Read' Alert Details: ${alertDetails}`,
+      '',
+      `- Duration: [insert the time here] minutes plant ${plantName} is down.`,
+      `- Impact: Data is not flowing into FactoryEye for ${plantName} while this alert is active.`,
+      '',
+      'Please find attached a screenshot for your reference.',
+      '',
+      '- Steps Taken:',
+      '',
+      'We have identified that we were not reading data from the Historian server and are not able to ping.',
+      'We have identified that we cannot read data from the Historian server. We ask that someone on the NGC technical support team check the server’s network access, power to the server and/or the plant, the Historian licensing is active and lastly restart the server if all else fails.',
+      'Please inform us when you have a resolution to the issue, and/or you have verified that the server is operational.',
+      'We understand the importance of resolving this matter promptly, and we appreciate your collaboration towards ensuring a swift resolution.',
+      '',
+      'Thank you for your attention to this matter.'
+    ].join('\n')
+  };
+}
+
 function parseCustomerRaisedTicket(message) {
   const content = plainMailText(message.body || message.preview);
   // Jira notification subject lines are wrappers. The meaningful incident
@@ -153,12 +225,23 @@ async function prepareMailboxIncident(req, res) {
   if (!await hasRolePermission(req, 'create_incidents')) return res.status(403).json({ success: false, message: 'Your role cannot create incidents.' });
   try {
     const message = await getInboxMessage(req.params.id);
-    const autoSelection = operationsIncidentDefaults(message.category, message.subject);
+    const isNoHistorianAlert = isNoHistorianReadAlert(message);
+    // This alert has a fixed operational owner and classification. It takes
+    // precedence over generic Azure/Coralogix subject mappings, including
+    // when an Azure notification was forwarded from another mailbox.
+    const autoSelection = isNoHistorianAlert ? noHistorianReadIncidentDefaults() : operationsIncidentDefaults(message.category, message.subject);
     const ticketContent = message.category === 'jira' ? parseCustomerRaisedTicket(message) : null;
-    const alertContent = ['azure', 'coralogix'].includes(message.category) ? parseOperationsAlert(message) : null;
+    // Forwarded Azure alerts may be classified as a regular email because the
+    // sender changes. Detect this high-value alert by its subject/body too.
+    const historianAlertContent = isNoHistorianReadAlert(message) ? parseNoHistorianReadAlert(message) : null;
+    const alertContent = historianAlertContent || (['azure', 'coralogix'].includes(message.category) ? parseOperationsAlert(message) : null);
     const [customers] = await pool.query('SELECT id, customer_name, timezone, jira_project_code FROM customers WHERE is_active = 1 ORDER BY customer_name');
     let candidates = [], matchLocation = 'none', matchMessage = 'No matching customer was found. Select a customer manually.';
-    if (message.category === 'azure') {
+    if (isNoHistorianAlert) {
+      candidates = customers.filter((customer) => String(customer.customer_name || '').trim().toLowerCase() === 'ngc');
+      matchLocation = candidates.length === 1 ? 'no-historian-read-rule' : 'none';
+      matchMessage = candidates.length === 1 ? 'No Historian Read alerts are assigned to NGC.' : 'No Historian Read customer mapping NGC was not found. Select a customer manually.';
+    } else if (message.category === 'azure') {
       candidates = customers.filter((customer) => String(customer.jira_project_code || '').trim().toUpperCase() === 'NATGYP');
       matchLocation = candidates.length === 1 ? 'azure-source-rule' : 'none';
       matchMessage = candidates.length === 1 ? 'Azure Alerts are assigned to National Gypsum (NATGYP).' : 'Azure Alert customer mapping NATGYP was not found. Select a customer manually.';
@@ -252,15 +335,63 @@ async function getMailboxMessage(req, res) {
   }
 }
 
+function isAdmin(req) { return String(req.user?.role || '').toLowerCase() === 'admin'; }
+
+async function getOwnMailboxSignature(req, res) {
+  if (!await requireMailboxPermission(req, res, 'view_mailbox')) return;
+  try {
+    const [rows] = await pool.query('SELECT signature_html, updated_at FROM user_email_signatures WHERE user_id = ? LIMIT 1', [req.user.id]);
+    res.json({ success: true, data: rows[0] ? { html: rows[0].signature_html, updated_at: rows[0].updated_at } : null });
+  } catch (error) { res.status(500).json({ success: false, message: 'Unable to load your email signature.' }); }
+}
+
+async function saveOwnMailboxSignature(req, res) {
+  if (!await requireMailboxPermission(req, res, 'view_mailbox')) return;
+  const html = sanitizeMailboxReplyHtml(req.body?.html, 500000);
+  if (!html || html.length > 500000) return res.status(400).json({ success: false, message: 'Signature must contain between 1 and 500,000 characters.' });
+  try {
+    await pool.query('INSERT INTO user_email_signatures (user_id, signature_html) VALUES (?, ?) ON DUPLICATE KEY UPDATE signature_html = VALUES(signature_html)', [req.user.id, html]);
+    res.json({ success: true, data: { html } });
+  } catch (error) { res.status(500).json({ success: false, message: 'Unable to save your email signature.' }); }
+}
+
+async function deleteOwnMailboxSignature(req, res) {
+  if (!await requireMailboxPermission(req, res, 'view_mailbox')) return;
+  try { await pool.query('DELETE FROM user_email_signatures WHERE user_id = ?', [req.user.id]); res.json({ success: true }); }
+  catch (error) { res.status(500).json({ success: false, message: 'Unable to remove your email signature.' }); }
+}
+
+async function listMailboxSignatures(req, res) {
+  if (!isAdmin(req)) return res.status(403).json({ success: false, message: 'Only administrators can view user signatures.' });
+  try {
+    const [rows] = await pool.query('SELECT s.user_id, u.full_name, u.email, s.signature_html, s.updated_at FROM user_email_signatures s JOIN users u ON u.id = s.user_id ORDER BY u.full_name, u.email');
+    res.json({ success: true, data: rows.map((row) => ({ user_id: row.user_id, name: row.full_name || row.email, email: row.email, html: row.signature_html, updated_at: row.updated_at })) });
+  } catch (error) { res.status(500).json({ success: false, message: 'Unable to load user signatures.' }); }
+}
+
+async function deleteMailboxSignatureAsAdmin(req, res) {
+  if (!isAdmin(req)) return res.status(403).json({ success: false, message: 'Only administrators can remove user signatures.' });
+  const userId = Number(req.params.userId);
+  if (!Number.isInteger(userId) || userId < 1) return res.status(400).json({ success: false, message: 'Invalid user signature.' });
+  try { await pool.query('DELETE FROM user_email_signatures WHERE user_id = ?', [userId]); res.json({ success: true }); }
+  catch (error) { res.status(500).json({ success: false, message: 'Unable to remove user signature.' }); }
+}
+
+async function withUserSignature(userId, payload) {
+  // Signature insertion is opt-in in the compose UI. Do not add one at send
+  // time when the user chose to omit it.
+  return { ...(payload || {}) };
+}
+
 async function replyToMailboxMessage(req, res) {
   if (!await requireMailboxPermission(req, res, 'send_mailbox')) return;
-  try { res.json({ success: true, data: await replyToInboxMessage(req.params.id, req.body) }); }
+  try { res.json({ success: true, data: await replyToInboxMessage(req.params.id, await withUserSignature(req.user.id, req.body)) }); }
   catch (error) { res.status(400).json({ success: false, message: error.message || 'Unable to send reply.' }); }
 }
 
 async function sendNewMailbox(req, res) {
   if (!await requireMailboxPermission(req, res, 'send_mailbox')) return;
-  try { res.json({ success: true, data: await sendNewMailboxMessage(req.body) }); }
+  try { res.json({ success: true, data: await sendNewMailboxMessage(await withUserSignature(req.user.id, req.body)) }); }
   catch (error) { res.status(400).json({ success: false, message: error.message || 'Unable to send email.' }); }
 }
 
@@ -324,4 +455,4 @@ function startMailboxNotificationPolling() {
   mailboxPollTimer = setInterval(pollMailboxForNotifications, 60000);
 }
 
-module.exports = { conciseAlertDescription, containsCustomerName, deleteMailboxMessage, downloadMailboxAttachment, getMailboxMessage, getMailboxOperationsCounts, listMailbox, listSentMailbox, markMailboxMessageRead, matchingCustomersByName, parseOperationsAlert, prepareMailboxIncident, replyToMailboxMessage, sendNewMailbox, startMailboxNotificationPolling };
+module.exports = { conciseAlertDescription, containsCustomerName, deleteMailboxMessage, deleteMailboxSignatureAsAdmin, deleteOwnMailboxSignature, downloadMailboxAttachment, getMailboxMessage, getMailboxOperationsCounts, getOwnMailboxSignature, isNoHistorianReadAlert, listMailbox, listMailboxSignatures, listSentMailbox, markMailboxMessageRead, matchingCustomersByName, noHistorianAlertFields, parseNoHistorianReadAlert, parseOperationsAlert, prepareMailboxIncident, replyToMailboxMessage, saveOwnMailboxSignature, sendNewMailbox, startMailboxNotificationPolling, withUserSignature };

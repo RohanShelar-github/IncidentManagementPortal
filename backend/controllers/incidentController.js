@@ -5,9 +5,8 @@ const {
   resolveDurationMinutes
 } = require('../services/incidentNormalization');
 const { notifyUsers } = require('../services/notificationService');
-const { sendIncidentClosedEmail, sendIncidentCreatedEmail, sendCriticalIncidentEmail, htmlEscape } = require('../services/emailService');
-const INCIDENT_NOTIFICATION_CC = 'its24x7@magicsoftware.com';
-const INCIDENT_NOTIFICATION_BCC = 'prachi_palande@magicsoftware.com,nikhil_kawade@magicsoftware.com,shravani_bhosale@magicsoftware.com,jidnyasa_patil@magicsoftware.com';
+const { sendIncidentClosedEmail, sendIncidentCreatedEmail, sendCriticalIncidentEmail, htmlEscape, safeIncidentEmailHtml } = require('../services/emailService');
+const INCIDENT_NOTIFICATION_CC = 'its24x7@magicsoftware.com,cloudopssupport@magicsoftware.com';
 
 const CANONICAL_INCIDENT_FIELDS = process.env.CANONICAL_INCIDENT_FIELDS !== 'false';
 
@@ -251,7 +250,7 @@ const createIncident = async (req, res) => {
     if (!b.title || !b.severity) return res.status(400).json({ success: false, message: 'Title and severity are required' });
 
     b.description = sanitizeIncidentDescription(b.description);
-    const incidentRef = await generateIncidentRef();
+    let incidentRef = await generateIncidentRef();
     const assignedTo = await resolveUserId(b.engineer);
     const resolvedCustomer = await resolveCustomer(b.customer_id || b.customer);
     const resolvedArea = await resolveArea(b.area_id || b.area);
@@ -284,10 +283,22 @@ const createIncident = async (req, res) => {
       columns.push('opened_at_utc', 'closed_at_utc', 'source_timezone', 'sla_minutes', 'mttr_minutes');
       values.push(canonical.opened_at_utc, canonical.closed_at_utc, canonical.source_timezone, canonical.sla_minutes, canonical.mttr_minutes);
     }
-    await pool.query(
-      'INSERT INTO incidents (' + columns.join(', ') + ') VALUES (' + columns.map(() => '?').join(', ') + ')',
-      values
-    );
+    // The reference has a database unique key. Retry a freshly generated
+    // reference if another request commits between MAX(...) and this insert.
+    let inserted = false;
+    for (let attempt = 0; attempt < 3 && !inserted; attempt += 1) {
+      try {
+        values[0] = incidentRef;
+        await pool.query(
+          'INSERT INTO incidents (' + columns.join(', ') + ') VALUES (' + columns.map(() => '?').join(', ') + ')',
+          values
+        );
+        inserted = true;
+      } catch (error) {
+        if (error?.code !== 'ER_DUP_ENTRY' || attempt === 2) throw error;
+        incidentRef = await generateIncidentRef();
+      }
+    }
     await notifyUsers({
       actorId: req.user.id,
       message: `${req.user.name || req.user.email} created ${incidentRef}: ${b.title}`,
@@ -335,7 +346,7 @@ const createIncident = async (req, res) => {
         // the reviewed email preview to supply edited recipients.
         emailTo: b.notification_email?.to || req.user.email,
         emailCc: b.notification_email?.cc === undefined ? INCIDENT_NOTIFICATION_CC : b.notification_email.cc,
-        emailBcc: INCIDENT_NOTIFICATION_BCC,
+        emailBcc: '',
         emailSubject: b.notification_email?.subject, emailBody: b.notification_email?.body
       });
     } catch (mailError) {
@@ -381,19 +392,22 @@ function criticalEmailBody({ id, title, description, customer, project, severity
   return `Dear Team,\n\nWe have received the following critical incident:\n${title}.\n\nOur team is currently reviewing it.\n\nWe will provide further updates as soon as more information becomes available.\n\nThanks & Regards,\n${user || 'AOC Operations Team'}`;
 }
 
+function criticalEmailBodyHtml(body) {
+  const content = String(body || '').trim();
+  const hasRichMarkup = /<\/?(?:b|strong|i|em|u|font|div|p|br|ul|ol|li|img)\b/i.test(content);
+  if (hasRichMarkup) return safeIncidentEmailHtml(content);
+  return content.split(/\r?\n\s*\r?\n/).filter(Boolean)
+    .map((section) => `<p style="margin:0 0 16px;white-space:pre-wrap">${htmlEscape(section.trim())}</p>`).join('');
+}
+
 function criticalEmailHtml({ id, title, body, customer, project, severity, area, start, timezone, engineer, user }) {
-  const sections = String(body || '').split(/\r?\n\s*\r?\n/).filter(Boolean).map(section => section.trim());
-  const updateIndex = sections.findIndex(section => /^We will provide further updates/i.test(section));
-  const paragraphs = (values) => values.map(section => `<p style="margin:0 0 16px;white-space:pre-wrap">${htmlEscape(section)}</p>`).join('');
-  const intro = paragraphs(updateIndex < 0 ? sections : sections.slice(0, updateIndex));
-  let closing = paragraphs(updateIndex < 0 ? [] : sections.slice(updateIndex));
+  const messageBody = criticalEmailBodyHtml(body);
   const row = (label, value) => `<tr><td style="padding:10px 14px;width:38%;border-bottom:1px solid #e5e7eb;color:#64748b;font-size:13px;font-weight:600">${htmlEscape(label)}</td><td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#0f172a;font-size:13px;font-weight:600">${htmlEscape(value || 'Not provided')}</td></tr>`;
   const created = `${start || 'Not provided'}${timezone ? ` ${timezone}` : ''}`;
   const portalBaseUrl = String(process.env.PORTAL_BASE_URL || '').replace(/\/$/, '');
   const incidentUrl = portalBaseUrl && id ? `${portalBaseUrl}/?incident=${encodeURIComponent(id)}#incidents` : '';
   const openIncident = incidentUrl ? `<div style="margin-top:22px;text-align:center"><a href="${htmlEscape(incidentUrl)}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:8px;font-size:14px;font-weight:700">Open Incident ${htmlEscape(id)}</a><div style="margin-top:9px;color:#64748b;font-size:11px">Sign in when prompted; the incident will open automatically.</div></div>` : '';
-  closing = openIncident + closing;
-  return `<!doctype html><html><body style="margin:0;padding:24px;background:#f3f6fb;font-family:Arial,Helvetica,sans-serif;color:#172033"><div style="max-width:720px;margin:0 auto;background:#ffffff;border:1px solid #dce3ee;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(15,23,42,.08)"><div style="padding:24px 28px;background:#152b5d;color:#ffffff"><div style="font-size:11px;letter-spacing:1.2px;font-weight:700;opacity:.8">AOC 24x7 · INCIDENT MANAGEMENT</div><div style="margin-top:10px;font-size:24px;line-height:1.25;font-weight:700">Critical Incident Notification</div><div style="margin-top:8px;font-size:15px;line-height:1.4;opacity:.95">${htmlEscape(title || 'Untitled incident')}</div></div><div style="padding:22px 28px"><div style="display:inline-block;padding:7px 11px;background:#fff1f2;border:1px solid #fecdd3;border-radius:999px;color:#be123c;font-size:12px;font-weight:700;letter-spacing:.3px">CRITICAL · INVESTIGATION IN PROGRESS</div><div style="margin-top:22px;font-size:14px;line-height:1.6;color:#25334a">${intro}</div><div style="margin-top:22px;border:1px solid #dce3ee;border-radius:8px;overflow:hidden"><div style="padding:11px 14px;background:#f8fafc;border-bottom:1px solid #dce3ee;color:#334155;font-size:12px;font-weight:700;letter-spacing:.6px">INCIDENT SUMMARY</div><table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse">${row('Incident Number', id)}${row('Customer', customer)}${row('Environment / Project', project)}${row('Area / Affected Service', area)}${row('Severity', severity || 'Critical')}${row('Assigned Engineer', engineer)}${row('Created', created)}</table></div><div style="margin-top:22px;font-size:14px;line-height:1.6;color:#25334a">${closing}</div><div style="margin-top:24px;padding-top:18px;border-top:1px solid #e5e7eb;color:#475569;font-size:13px;line-height:1.5">This notification was generated by the AOC 24x7 Incident Management Portal.<br><strong style="color:#172033">${htmlEscape(user || 'AOC Operations Team')}</strong></div></div></div></body></html>`;
+  return `<!doctype html><html><body style="margin:0;padding:24px;background:#f3f6fb;font-family:Arial,Helvetica,sans-serif;color:#172033"><div style="max-width:720px;margin:0 auto;background:#ffffff;border:1px solid #dce3ee;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(15,23,42,.08)"><div style="padding:24px 28px;background:#152b5d;color:#ffffff"><div style="font-size:11px;letter-spacing:1.2px;font-weight:700;opacity:.8">AOC 24x7 · INCIDENT MANAGEMENT</div><div style="margin-top:10px;font-size:24px;line-height:1.25;font-weight:700">Critical Incident Notification</div><div style="margin-top:8px;font-size:15px;line-height:1.4;opacity:.95">${htmlEscape(title || 'Untitled incident')}</div></div><div style="padding:22px 28px"><div style="display:inline-block;padding:7px 11px;background:#fff1f2;border:1px solid #fecdd3;border-radius:999px;color:#be123c;font-size:12px;font-weight:700;letter-spacing:.3px">CRITICAL · INVESTIGATION IN PROGRESS</div><div style="margin-top:22px;font-size:14px;line-height:1.6;color:#25334a">${messageBody}</div><div style="margin-top:22px;border:1px solid #dce3ee;border-radius:8px;overflow:hidden"><div style="padding:11px 14px;background:#f8fafc;border-bottom:1px solid #dce3ee;color:#334155;font-size:12px;font-weight:700;letter-spacing:.6px">INCIDENT SUMMARY</div><table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse">${row('Incident Number', id)}${row('Customer', customer)}${row('Environment / Project', project)}${row('Area / Affected Service', area)}${row('Severity', severity || 'Critical')}${row('Assigned Engineer', engineer)}${row('Created', created)}</table></div>${openIncident}<div style="margin-top:24px;padding-top:18px;border-top:1px solid #e5e7eb;color:#475569;font-size:13px;line-height:1.5">This notification was generated by the AOC 24x7 Incident Management Portal.<br><strong style="color:#172033">${htmlEscape(user || 'AOC Operations Team')}</strong></div></div></div></body></html>`;
 }
 
 async function getCriticalEmailRecipients(req, res) {
@@ -646,7 +660,7 @@ const updateIncident = async (req, res) => {
             mttd: mttd.text || 'Not recorded',
             emailTo: current.creator_email || req.user.email,
             emailCc: INCIDENT_NOTIFICATION_CC,
-            emailBcc: INCIDENT_NOTIFICATION_BCC
+            emailBcc: ''
           });
         } catch (mailError) {
           console.error(`Incident ${incidentRef} closed email failed:`, mailError.message);

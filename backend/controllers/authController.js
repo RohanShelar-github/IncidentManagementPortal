@@ -7,6 +7,7 @@ const { hasRolePermission } = require('../middleware/permissions');
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_MAX_FAILURES = 5;
 const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
+const LOGIN_ATTEMPT_MAX_KEYS = 10000;
 const loginAttempts = new Map();
 
 function loginAttemptKey(req, email) {
@@ -24,6 +25,14 @@ function canAttemptLogin(key) {
 
 function recordFailedLogin(key) {
   const now = Date.now();
+  for (const [storedKey, storedAttempt] of loginAttempts) {
+    if (now - storedAttempt.firstFailure > LOGIN_WINDOW_MS && storedAttempt.lockedUntil <= now) loginAttempts.delete(storedKey);
+  }
+  while (!loginAttempts.has(key) && loginAttempts.size >= LOGIN_ATTEMPT_MAX_KEYS) {
+    const oldestKey = loginAttempts.keys().next().value;
+    if (oldestKey === undefined) break;
+    loginAttempts.delete(oldestKey);
+  }
   const previous = loginAttempts.get(key);
   const attempt = !previous || now - previous.firstFailure > LOGIN_WINDOW_MS ? { firstFailure: now, count: 0, lockedUntil: 0 } : previous;
   attempt.count += 1;

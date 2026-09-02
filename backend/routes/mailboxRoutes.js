@@ -1,12 +1,17 @@
 'use strict';
 const express = require('express');
 const { authenticateToken } = require('../middleware/auth');
-const { deleteMailboxMessage, downloadMailboxAttachment, getMailboxMessage, getMailboxOperationsCounts, listMailbox, listSentMailbox, markMailboxMessageRead, prepareMailboxIncident, replyToMailboxMessage, sendNewMailbox } = require('../controllers/mailboxController');
+const { deleteMailboxMessage, deleteMailboxSignatureAsAdmin, deleteOwnMailboxSignature, downloadMailboxAttachment, getMailboxMessage, getMailboxOperationsCounts, getOwnMailboxSignature, listMailbox, listMailboxSignatures, listSentMailbox, markMailboxMessageRead, prepareMailboxIncident, replyToMailboxMessage, saveOwnMailboxSignature, sendNewMailbox } = require('../controllers/mailboxController');
 const router = express.Router();
 router.use(authenticateToken);
 router.get('/inbox', listMailbox);
 router.get('/sent', listSentMailbox);
 router.get('/operations-counts', getMailboxOperationsCounts);
+router.get('/signature', getOwnMailboxSignature);
+router.put('/signature', saveOwnMailboxSignature);
+router.delete('/signature', deleteOwnMailboxSignature);
+router.get('/signatures', listMailboxSignatures);
+router.delete('/signatures/:userId', deleteMailboxSignatureAsAdmin);
 router.post('/send', sendNewMailbox);
 router.post('/inbox/:id/incident-prefill', prepareMailboxIncident);
 router.post('/inbox/:id/reply', replyToMailboxMessage);
