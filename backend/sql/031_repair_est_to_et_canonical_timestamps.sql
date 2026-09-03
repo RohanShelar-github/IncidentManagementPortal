@@ -1,0 +1,5 @@
+-- This data repair is executed through:
+-- node backend/scripts/repair-est-to-et-canonical-timestamps.js --apply
+--
+-- It uses Node's America/New_York timezone data to safely apply the correct
+-- EST/EDT offset for each saved wall-clock date. Do not run this file directly.

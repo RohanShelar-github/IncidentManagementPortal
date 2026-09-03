@@ -98,7 +98,9 @@ var TIMEZONES = [
   { key: 'IST', label: 'IST — India Standard Time', offset: +5.5 },
   { key: 'UTC', label: 'UTC — Coordinated Universal Time', offset: 0 },
   { key: 'GMT', label: 'GMT — Greenwich Mean Time', offset: 0 },
-  { key: 'EST', label: 'EST — Eastern Standard Time', offset: -5 },
+  // Keep the legacy EST key for existing records, but treat it as Eastern
+  // Time. This applies EST (UTC-5) in winter and EDT (UTC-4) in summer.
+  { key: 'EST', label: 'ET — Eastern Time (EST/EDT)', offset: -5, iana: 'America/New_York' },
   { key: 'PST', label: 'PST — Pacific Standard Time', offset: -8 },
   { key: 'PT', label: 'PT  — Pacific Time (PDT −7)', offset: -7 },
   { key: 'MST', label: 'MST — Mountain Standard Time', offset: -7 },
@@ -111,9 +113,39 @@ var TIMEZONES = [
 ];
 var selectedTZ = 'IST'; // default — user's input timezone
 
-function getTZOffset(key) {
+function getIanaTZOffset(timeZone, date) {
+  var reference = date instanceof Date ? date : new Date(date || Date.now());
+  if (isNaN(reference)) return 0;
+  try {
+    var parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timeZone,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+    }).formatToParts(reference).filter(function (part) { return part.type !== 'literal'; });
+    var values = {};
+    parts.forEach(function (part) { values[part.type] = Number(part.value); });
+    return (Date.UTC(values.year, values.month - 1, values.day, values.hour, values.minute, values.second)
+      - reference.getTime()) / 3600000;
+  } catch (_) {
+    return 0;
+  }
+}
+
+function getTZOffset(key, date) {
   var tz = TIMEZONES.find(function (t) { return t.key === key; });
+  if (tz && tz.iana) return getIanaTZOffset(tz.iana, date);
   return tz ? tz.offset : +5.5;
+}
+
+function wallClockToUtcMilliseconds(value, timezone) {
+  var normalized = String(value || '').trim().replace(' ', 'T').replace(/Z$/, '');
+  var localAsUtc = new Date(normalized + 'Z').getTime();
+  if (!Number.isFinite(localAsUtc)) return NaN;
+  var utc = localAsUtc;
+  for (var attempt = 0; attempt < 3; attempt += 1) {
+    utc = localAsUtc - getTZOffset(timezone || 'IST', new Date(utc)) * 3600000;
+  }
+  return utc;
 }
 
 function isSupportedTimezone(key) {
@@ -129,13 +161,9 @@ function getCustomerTimezone(customerName) {
 // Returns a new datetime-local string in the target tz
 function convertDatetimeLocalTZ(dtLocal, fromKey, toKey) {
   if (!dtLocal) return dtLocal;
-  var fromOff = getTZOffset(fromKey);
-  var toOff = getTZOffset(toKey);
-  if (fromOff === toOff) return dtLocal;
-  var d = new Date(dtLocal + ':00Z'); // treat as UTC momentarily
-  // Adjust: remove fromOff bias, add toOff bias
-  var utcMs = d.getTime() - fromOff * 3600000;
-  var targetMs = utcMs + toOff * 3600000;
+  var utcMs = wallClockToUtcMilliseconds(dtLocal, fromKey);
+  if (!Number.isFinite(utcMs)) return dtLocal;
+  var targetMs = utcMs + getTZOffset(toKey, new Date(utcMs)) * 3600000;
   var td = new Date(targetMs);
   var pad = function (n) { return String(n).padStart(2, '0'); };
   return td.getUTCFullYear() + '-' + pad(td.getUTCMonth() + 1) + '-' + pad(td.getUTCDate())
@@ -147,7 +175,7 @@ function fmtInTZ(dateVal, tzKey, opts) {
   if (!dateVal) return '—';
   var d = (dateVal instanceof Date) ? dateVal : new Date(dateVal);
   if (isNaN(d)) return '—';
-  var off = getTZOffset(tzKey);
+  var off = getTZOffset(tzKey, d);
   var localMs = d.getTime() + off * 3600000;
   var ld = new Date(localMs);
   var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -247,8 +275,7 @@ function wallClockToDate(value, timezone) {
     var absolute = new Date(value);
     return isNaN(absolute.getTime()) ? null : absolute;
   }
-  var wallUtc = Date.UTC(+match[1], +match[2] - 1, +match[3], +match[4], +match[5], +(match[6] || 0));
-  return new Date(wallUtc - getTZOffset(timezone || 'IST') * 3600000);
+  return new Date(wallClockToUtcMilliseconds(value, timezone || 'IST'));
 }
 
 function canonicalUtcDate(value) {
@@ -753,10 +780,8 @@ function getIncidentOpenedTimestamp(inc) {
       var absoluteTimestamp = new Date(normalized).getTime();
       if (Number.isFinite(absoluteTimestamp)) return absoluteTimestamp;
     }
-    var wallClockTimestamp = new Date(normalized.replace(/Z$/, '') + 'Z').getTime();
-    if (Number.isFinite(wallClockTimestamp)) {
-      return wallClockTimestamp - getTZOffset((inc && (inc.timezone || inc.source_timezone)) || 'IST') * 3600000;
-    }
+    var wallClockTimestamp = wallClockToUtcMilliseconds(normalized, (inc && (inc.timezone || inc.source_timezone)) || 'IST');
+    if (Number.isFinite(wallClockTimestamp)) return wallClockTimestamp;
   }
 
   if (inc && inc.date) {
@@ -779,10 +804,7 @@ function getIncidentClosedTimestamp(inc) {
     var absoluteTimestamp = new Date(normalized).getTime();
     if (Number.isFinite(absoluteTimestamp)) return absoluteTimestamp;
   }
-  var wallClockTimestamp = new Date(normalized.replace(/Z$/, '') + 'Z').getTime();
-  return Number.isFinite(wallClockTimestamp)
-    ? wallClockTimestamp - getTZOffset((inc && (inc.timezone || inc.source_timezone)) || 'IST') * 3600000
-    : NaN;
+  return wallClockToUtcMilliseconds(normalized, (inc && (inc.timezone || inc.source_timezone)) || 'IST');
 }
 
 // Temporary business exceptions for the Missed MTTR KPI and drill-down only.
@@ -4394,11 +4416,15 @@ function openModal(id) {
   if (id === 'incidentModal') ensureEngineerDropdownsLoaded();
   // Set today's date for new incident
   if (id === 'incidentModal' && !editingId) {
-    // default to current local datetime in IST format (datetime-local)
+    // Start from the current instant in the selected input timezone instead of
+    // the browser machine timezone. This keeps the initial value correct when
+    // a customer timezone is selected immediately afterwards.
     const now = new Date();
     const pad = n => String(n).padStart(2, '0');
-    const localDT = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate())
-      + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+    const initialOffset = getTZOffset('IST', now);
+    const initialTzNow = new Date(now.getTime() + initialOffset * 3600000);
+    const localDT = initialTzNow.getUTCFullYear() + '-' + pad(initialTzNow.getUTCMonth() + 1) + '-' + pad(initialTzNow.getUTCDate())
+      + 'T' + pad(initialTzNow.getUTCHours()) + ':' + pad(initialTzNow.getUTCMinutes());
     document.getElementById('f_date').value = localDT;
     document.getElementById('f_date').dataset.inputTimezone = 'IST';
     var _imt = document.getElementById('incidentModalTitle'); if (_imt) _imt.textContent = 'Create New Incident';
@@ -4710,7 +4736,7 @@ function openDowntimeModal(id) {
   } else if (endEl) {
     // Default to current time in display TZ
     var now = new Date();
-    var offNow = getTZOffset(dtmTZ);
+    var offNow = getTZOffset(dtmTZ, now);
     var tzNowMs = now.getTime() + offNow * 3600000;
     var tzNow = new Date(tzNowMs);
     var pad3 = n => String(n).padStart(2, '0');
@@ -9989,7 +10015,7 @@ function updateReportTimestamps(incId, tzKey) {
       var months = ['January', 'February', 'March', 'April', 'May', 'June',
         'July', 'August', 'September', 'October', 'November', 'December'];
       // Shift to target TZ
-      var targetMs = d.getTime() + getTZOffset(tzKey) * 3600000;
+      var targetMs = d.getTime() + getTZOffset(tzKey, d) * 3600000;
       var ld = new Date(targetMs);
       irDate.textContent = ld.getUTCDate() + ' ' + months[ld.getUTCMonth()] + ' ' + ld.getUTCFullYear();
     }

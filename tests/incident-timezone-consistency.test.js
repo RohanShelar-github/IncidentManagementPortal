@@ -3,16 +3,18 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const test = require('node:test');
-const { localDateTimeToUtc } = require('../backend/services/incidentNormalization');
+const { localDateTimeToUtc, normalizeIanaTimezone } = require('../backend/services/incidentNormalization');
 
 const frontend = fs.readFileSync('js/app.js', 'utf8');
 const html = fs.readFileSync('index.html', 'utf8');
 const database = fs.readFileSync('backend/config/database.js', 'utf8');
 const repair = fs.readFileSync('backend/sql/015_repair_incident_timezone_values.sql', 'utf8');
 
-test('EST start and end wall-clock values normalize to the correct UTC instants', () => {
-  assert.equal(localDateTimeToUtc('2026-08-03 23:56:00', 'EST'), '2026-08-04 04:56:00');
-  assert.equal(localDateTimeToUtc('2026-08-04 02:00:00', 'EST'), '2026-08-04 07:00:00');
+test('legacy EST values are treated as Eastern Time and observe daylight saving', () => {
+  assert.equal(normalizeIanaTimezone('EST'), 'America/New_York');
+  assert.equal(localDateTimeToUtc('2026-08-03 23:56:00', 'EST'), '2026-08-04 03:56:00');
+  assert.equal(localDateTimeToUtc('2026-08-04 02:00:00', 'EST'), '2026-08-04 06:00:00');
+  assert.equal(localDateTimeToUtc('2026-01-15 10:00:00', 'EST'), '2026-01-15 15:00:00');
 });
 
 test('reports use canonical start and actual end timestamps without assuming IST', () => {
@@ -28,11 +30,18 @@ test('edit fields preserve database wall-clock values and MySQL returns DATETIME
   assert.match(database, /dateStrings:\s*true/);
 });
 
-test('repair migration recalculates both canonical timestamps from the saved timezone', () => {
+test('the legacy repair migration remains recorded for earlier deployments', () => {
   assert.match(repair, /opened_at_utc = CASE/);
   assert.match(repair, /closed_at_utc = CASE/);
   assert.match(repair, /WHEN 'EST' THEN CONVERT_TZ\(date_time_opened, '-05:00', '\+00:00'\)/);
   assert.match(repair, /015_repair_incident_timezone_values/);
+});
+
+test('the browser labels EST records as Eastern Time and uses the IANA zone', () => {
+  assert.match(frontend, /ET — Eastern Time \(EST\/EDT\)/);
+  assert.match(frontend, /iana: 'America\/New_York'/);
+  assert.match(frontend, /function wallClockToUtcMilliseconds/);
+  assert.match(frontend, /initialOffset = getTZOffset\('IST', now\)/);
 });
 
 test('new incident end values are explicitly entered in IST and converted once to the selected timezone', () => {

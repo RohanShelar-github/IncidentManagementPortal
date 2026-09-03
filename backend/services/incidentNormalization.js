@@ -4,7 +4,9 @@ const TIMEZONE_ALIASES = Object.freeze({
   IST: 'Asia/Kolkata',
   UTC: 'Etc/UTC',
   GMT: 'Etc/UTC',
-  EST: 'Etc/GMT+5',
+  // The portal's legacy EST value represents Eastern Time for customers.
+  // America/New_York handles the EST/EDT daylight-saving transition.
+  EST: 'America/New_York',
   PST: 'Etc/GMT+8',
   PT: 'Etc/GMT+7',
   MST: 'Etc/GMT+7',
