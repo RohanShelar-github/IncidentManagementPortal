@@ -310,21 +310,44 @@ function setIncidentEndHint(hintId, targetTimezone, converted) {
     : 'Enter end time in IST' + (target !== 'IST' ? ' → converts to ' + target : '');
 }
 
+function getIncidentEndTargetTimezone(field) {
+  return (field && field.dataset.targetTimezone) || selectedTZ || 'IST';
+}
+
 function markIncidentEndAsIST(fieldId, hintId) {
   var field = document.getElementById(fieldId);
   if (!field) return;
   field.dataset.inputTimezone = 'IST';
-  setIncidentEndHint(hintId, selectedTZ || 'IST', false);
+  setIncidentEndHint(hintId, getIncidentEndTargetTimezone(field), false);
 }
 
 function convertIncidentEndFromIST(fieldId, hintId) {
   var field = document.getElementById(fieldId);
   if (!field || !field.value || field.dataset.inputTimezone !== 'IST') return field ? field.value : '';
-  var targetTimezone = selectedTZ || 'IST';
+  var targetTimezone = getIncidentEndTargetTimezone(field);
   field.value = convertDatetimeLocalTZ(field.value, 'IST', targetTimezone);
   field.dataset.inputTimezone = targetTimezone;
   setIncidentEndHint(hintId, targetTimezone, true);
   return field.value;
+}
+
+function getIncidentTimezone(incident) {
+  var stored = String((incident && incident.timezone) || '').trim();
+  if (isSupportedTimezone(stored)) return stored;
+  var customerTimezone = getCustomerTimezone(incident && incident.customer);
+  if (customerTimezone) return customerTimezone;
+  return 'IST';
+}
+
+function renderIncidentTimezoneLabel(containerId, timezone) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  container.innerHTML = '';
+  var label = document.createElement('span');
+  label.textContent = timezone;
+  label.title = 'Incident timezone is fixed when the incident is created';
+  label.style.cssText = 'display:inline-flex;align-items:center;min-width:64px;padding:5px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--accent);font-size:12px;font-weight:600;font-family:var(--font-mono);box-sizing:border-box';
+  container.appendChild(label);
 }
 
 function normalizeIncidentStatusLabel(value) {
@@ -2927,6 +2950,7 @@ function legacyOpenMailboxMessage(id) {
 // Operations Mail Center extends the existing mailbox instead of replacing its
 // Graph-backed message, reply, attachment, and safe HTML rendering paths.
 var mailboxActiveView = 'all';
+var mailboxReadFilter = 'all';
 var mailboxSearchQuery = '';
 
 function ensureOperationsMailboxUi() {
@@ -2953,6 +2977,7 @@ function ensureOperationsMailboxUi() {
   if (listCard && !document.getElementById('mailboxSearch')) { var searchWrap = document.createElement('div'); searchWrap.className = 'mailbox-search-wrap'; var search = document.createElement('input'); search.id = 'mailboxSearch'; search.type = 'search'; search.placeholder = 'Search this view…'; search.setAttribute('aria-label', 'Search Operations mail'); search.oninput = function () { setMailboxSearch(search.value); }; searchWrap.appendChild(search); listCard.querySelector('#mailboxList')?.before(searchWrap); }
   var titleEl = document.querySelector('#mailboxListTitle'); if (!titleEl) { var original = layout.querySelector('.mailbox-list-title strong'); if (original) { original.id = 'mailboxListTitle'; titleEl = original; } }
   if (titleEl) titleEl.textContent = operationsViewLabel(mailboxActiveView);
+  ensureMailboxReadFilterUi(layout);
   document.querySelectorAll('.operations-view').forEach(function (button) { button.classList.toggle('active', button.dataset.mailboxView === mailboxActiveView); });
   var composeButton = document.getElementById('operationsNewMailBtn'); if (composeButton) composeButton.style.display = hasMailboxPermission('send_mailbox') ? '' : 'none';
   ensureOperationsIncidentActions();
@@ -2980,9 +3005,32 @@ function ensureOperationsIncidentActions() {
 }
 
 function operationsViewLabel(view) { return ({ all: 'All Incoming', coralogix: 'Coralogix Alerts', azure: 'Azure Alerts', jira: 'Customer Raised Tickets', sent: 'Sent Items' })[view] || 'All Incoming'; }
-function setMailboxView(view) { mailboxActiveView = ['all', 'coralogix', 'azure', 'jira', 'sent'].indexOf(view) > -1 ? view : 'all'; mailboxSearchQuery = ''; var search = document.getElementById('mailboxSearch'); if (search) search.value = ''; selectedMailboxId = null; selectedMailboxMessageIds.clear(); var detail = document.getElementById('mailboxDetail'); if (detail) detail.innerHTML = '<div class="mailbox-empty">Select an email to read it here.</div>'; ensureOperationsMailboxUi(); loadMailbox(); }
+function mailboxReadFilterLabel(filter) { return ({ all: 'All', unread: 'Unread', read: 'Read' })[filter] || 'All'; }
+function setMailboxView(view) { mailboxActiveView = ['all', 'coralogix', 'azure', 'jira', 'sent'].indexOf(view) > -1 ? view : 'all'; if (mailboxActiveView === 'sent') mailboxReadFilter = 'all'; mailboxSearchQuery = ''; var search = document.getElementById('mailboxSearch'); if (search) search.value = ''; selectedMailboxId = null; selectedMailboxMessageIds.clear(); var detail = document.getElementById('mailboxDetail'); if (detail) detail.innerHTML = '<div class="mailbox-empty">Select an email to read it here.</div>'; ensureOperationsMailboxUi(); loadMailbox(); }
+function setMailboxReadFilter(filter) { mailboxReadFilter = ['all', 'unread', 'read'].indexOf(filter) > -1 ? filter : 'all'; selectedMailboxId = null; selectedMailboxMessageIds.clear(); var detail = document.getElementById('mailboxDetail'); if (detail) detail.innerHTML = '<div class="mailbox-empty">Select an email to read it here.</div>'; ensureOperationsMailboxUi(); renderMailboxList(); }
+function ensureMailboxReadFilterUi(layout) {
+  var head = layout && layout.querySelector('.mailbox-list-head'); if (!head) return;
+  var actions = head.querySelector('.mailbox-list-actions'); if (!actions) return;
+  var wrap = document.getElementById('mailboxReadFilter');
+  if (!wrap) {
+    wrap = document.createElement('div'); wrap.id = 'mailboxReadFilter'; wrap.className = 'mailbox-read-filter';
+    var button = document.createElement('button'); button.id = 'mailboxReadFilterButton'; button.type = 'button'; button.className = 'mailbox-filter-button'; button.setAttribute('aria-haspopup', 'menu'); button.onclick = function (event) { event.stopPropagation(); var menu = document.getElementById('mailboxReadFilterMenu'); if (menu) menu.hidden = !menu.hidden; };
+    var menu = document.createElement('div'); menu.id = 'mailboxReadFilterMenu'; menu.className = 'mailbox-filter-menu'; menu.setAttribute('role', 'menu'); menu.hidden = true;
+    [['all', 'All'], ['unread', 'Unread'], ['read', 'Read']].forEach(function (option) { var item = document.createElement('button'); item.type = 'button'; item.dataset.mailboxReadFilter = option[0]; item.setAttribute('role', 'menuitem'); item.textContent = option[1]; item.onclick = function () { menu.hidden = true; setMailboxReadFilter(option[0]); }; menu.appendChild(item); });
+    wrap.append(button, menu); actions.insertBefore(wrap, actions.firstChild);
+  }
+  wrap.style.display = mailboxActiveView === 'sent' ? 'none' : '';
+  var filterButton = document.getElementById('mailboxReadFilterButton'); if (filterButton) { filterButton.textContent = '☰ ' + mailboxReadFilterLabel(mailboxReadFilter) + ' ▾'; filterButton.title = 'Filter messages'; filterButton.setAttribute('aria-label', 'Filter messages: ' + mailboxReadFilterLabel(mailboxReadFilter)); }
+  wrap.querySelectorAll('[data-mailbox-read-filter]').forEach(function (item) { item.classList.toggle('active', item.dataset.mailboxReadFilter === mailboxReadFilter); });
+}
 function setMailboxSearch(value) { mailboxSearchQuery = String(value || '').trim().toLowerCase(); renderMailboxList(); }
-function mailboxVisibleMessages() { if (!mailboxSearchQuery) return mailboxMessages; return mailboxMessages.filter(function (message) { return [message.fromName, message.from, message.to, message.subject, message.preview, message.jiraIssueKey].join(' ').toLowerCase().indexOf(mailboxSearchQuery) > -1; }); }
+function mailboxVisibleMessages() {
+  var messages = mailboxMessages;
+  if (mailboxReadFilter === 'unread') messages = messages.filter(function (message) { return !message.isRead && message.mailboxSource !== 'sent'; });
+  if (mailboxReadFilter === 'read') messages = messages.filter(function (message) { return message.isRead && message.mailboxSource !== 'sent'; });
+  if (!mailboxSearchQuery) return messages;
+  return messages.filter(function (message) { return [message.fromName, message.from, message.to, message.subject, message.preview, message.jiraIssueKey].join(' ').toLowerCase().indexOf(mailboxSearchQuery) > -1; });
+}
 
 function loadOperationsCounts() {
   fetch(window.APP_CONFIG.API_BASE_URL + '/mailbox/operations-counts', { headers: { Authorization: 'Bearer ' + mailboxToken() } })
@@ -3015,9 +3063,8 @@ var expandedMailboxConversationIds = new Set();
 function mailboxConversationTime(message) { return new Date(message.sentAt || message.receivedAt || 0).getTime() || 0; }
 function mailboxConversations() {
   var groups = new Map();
-  mailboxMessages.forEach(function (message) { var key = message.conversationId || ('message:' + message.id); if (!groups.has(key)) groups.set(key, { key: key, messages: [] }); groups.get(key).messages.push(message); });
-  var visibleIds = new Set(mailboxVisibleMessages().map(function (message) { return message.id; }));
-  return Array.from(groups.values()).map(function (group) { group.messages.sort(function (a, b) { return mailboxConversationTime(a) - mailboxConversationTime(b); }); group.latest = group.messages[group.messages.length - 1]; return group; }).filter(function (group) { return !mailboxSearchQuery || group.messages.some(function (message) { return visibleIds.has(message.id); }); }).sort(function (a, b) { return mailboxConversationTime(b.latest) - mailboxConversationTime(a.latest); });
+  mailboxVisibleMessages().forEach(function (message) { var key = message.conversationId || ('message:' + message.id); if (!groups.has(key)) groups.set(key, { key: key, messages: [] }); groups.get(key).messages.push(message); });
+  return Array.from(groups.values()).map(function (group) { group.messages.sort(function (a, b) { return mailboxConversationTime(a) - mailboxConversationTime(b); }); group.latest = group.messages[group.messages.length - 1]; return group; }).sort(function (a, b) { return mailboxConversationTime(b.latest) - mailboxConversationTime(a.latest); });
 }
 updateMailboxBulkControls = function () {
   var enabled = mailboxActiveView !== 'sent' && hasMailboxPermission('delete_mailbox'), selectAll = document.getElementById('mailboxSelectAll'), deleteButton = document.getElementById('mailboxBulkDeleteBtn');
@@ -3039,15 +3086,42 @@ renderMailboxList = function () {
     var toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'mailbox-thread-toggle'; toggle.textContent = expanded ? '⌄' : '›'; toggle.title = expanded ? 'Collapse conversation' : 'Expand conversation'; toggle.onclick = function (event) { event.stopPropagation(); if (expanded) expandedMailboxConversationIds.delete(thread.key); else expandedMailboxConversationIds.add(thread.key); renderMailboxList(); };
     if (mailboxActiveView !== 'sent' && hasMailboxPermission('delete_mailbox')) { var inboxIds = thread.messages.filter(function (message) { return message.mailboxSource !== 'sent'; }).map(function (message) { return message.id; }); if (inboxIds.length) { var check = document.createElement('input'); check.type = 'checkbox'; check.className = isConversation ? 'mailbox-conversation-select' : 'mailbox-row-check'; check.checked = inboxIds.every(function (id) { return selectedMailboxMessageIds.has(id); }); check.setAttribute('aria-label', 'Select ' + (isConversation ? 'conversation: ' : '') + (latest.subject || 'No subject')); check.onclick = function (event) { event.stopPropagation(); }; check.onchange = function () { inboxIds.forEach(function (id) { if (check.checked) selectedMailboxMessageIds.add(id); else selectedMailboxMessageIds.delete(id); }); updateMailboxBulkControls(); }; row.appendChild(check); } }
     var from = document.createElement('div'); from.className = 'mailbox-from'; from.textContent = latest.mailboxSource === 'sent' ? ('To: ' + (latest.to || 'No recipient')) : (latest.fromName || latest.from);
-    var subject = document.createElement('div'); subject.className = 'mailbox-subject'; subject.textContent = latest.subject || '(No subject)'; if (thread.messages.length > 1) { var total = document.createElement('span'); total.className = 'mailbox-category'; total.textContent = thread.messages.length + ' messages'; subject.appendChild(total); }
+    var subject = document.createElement('div'); subject.className = 'mailbox-subject'; subject.textContent = latest.subject || '(No subject)'; if (thread.messages.length > 1) { var total = document.createElement('span'); total.className = 'mailbox-category'; total.textContent = thread.messages.length + ' messages'; subject.appendChild(total); } var incidentBadge = mailboxIncidentCreatedBadge(latest); if (incidentBadge) subject.appendChild(incidentBadge);
     var meta = document.createElement('div'); meta.className = 'mailbox-meta'; meta.textContent = mailboxDate(latest.sentAt || latest.receivedAt); var preview = document.createElement('div'); preview.className = 'mailbox-meta'; preview.textContent = mailboxPlainText(latest.preview || ''); if (isConversation) row.appendChild(toggle); row.append(from, subject, meta, preview);
     if (mailboxActiveView !== 'sent' && hasPermission('create_incidents') && latest.mailboxSource !== 'sent') { var create = mailboxCreateIncidentButton(latest); create.classList.add('mailbox-row-create-incident'); create.style.cssText = 'margin-top:7px;padding:4px 8px;font-size:10px'; row.appendChild(create); }
     list.appendChild(row);
-    if (isConversation && expanded) thread.messages.forEach(function (message) { var child = document.createElement('div'); child.className = 'mailbox-thread-message' + (!message.isRead && message.mailboxSource !== 'sent' ? ' unread' : '') + (message.id === selectedMailboxId ? ' active' : ''); child.onclick = function () { openMailboxMessage(message.id); }; var sender = document.createElement('div'); sender.className = 'mailbox-from'; sender.textContent = message.mailboxSource === 'sent' ? ('To: ' + (message.to || 'No recipient')) : (message.fromName || message.from); var line = document.createElement('div'); line.className = 'mailbox-meta'; line.textContent = mailboxPlainText(message.preview || ''); var source = document.createElement('span'); source.className = 'mailbox-category'; source.textContent = message.mailboxSource === 'sent' ? 'Sent' : 'Inbox'; child.append(sender, line, source); list.appendChild(child); });
+    if (isConversation && expanded) thread.messages.forEach(function (message) { var child = document.createElement('div'); child.className = 'mailbox-thread-message' + (!message.isRead && message.mailboxSource !== 'sent' ? ' unread' : '') + (message.id === selectedMailboxId ? ' active' : ''); child.onclick = function () { openMailboxMessage(message.id); }; var sender = document.createElement('div'); sender.className = 'mailbox-from'; sender.textContent = message.mailboxSource === 'sent' ? ('To: ' + (message.to || 'No recipient')) : (message.fromName || message.from); var line = document.createElement('div'); line.className = 'mailbox-meta'; line.textContent = mailboxPlainText(message.preview || ''); var source = document.createElement('span'); source.className = 'mailbox-category'; source.textContent = message.mailboxSource === 'sent' ? 'Sent' : 'Inbox'; var childIncidentBadge = mailboxIncidentCreatedBadge(message); child.append(sender, line, source); if (childIncidentBadge) child.appendChild(childIncidentBadge); list.appendChild(child); });
   });
 };
 
-function markMailboxMessageReadInUi(message) { if (mailboxActiveView === 'sent' || message.mailboxSource === 'sent' || message.isRead) return; message.isRead = true; renderMailboxList(); loadOperationsCounts(); fetch(window.APP_CONFIG.API_BASE_URL + '/mailbox/inbox/' + encodeURIComponent(message.id) + '/read', { method: 'PATCH', headers: { Authorization: 'Bearer ' + mailboxToken() } }).catch(function () { /* Message remains readable even if Graph read status update is delayed. */ }); }
+function setMailboxMessageReadStateInUi(message, isRead) {
+  if (!message || message.mailboxSource === 'sent') return Promise.resolve();
+  var nextState = Boolean(isRead);
+  if (Boolean(message.isRead) === nextState) return Promise.resolve();
+  var listMessage = mailboxMessages.find(function (item) { return item.id === message.id; });
+  var previousState = Boolean(listMessage ? listMessage.isRead : message.isRead);
+  message.isRead = nextState;
+  if (listMessage) listMessage.isRead = nextState;
+  renderMailboxList();
+  loadOperationsCounts();
+  return fetch(window.APP_CONFIG.API_BASE_URL + '/mailbox/inbox/' + encodeURIComponent(message.id) + '/read-state', {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer ' + mailboxToken(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ isRead: nextState })
+  }).then(function (response) {
+    if (!response.ok) throw new Error('Unable to update email read state.');
+  }).catch(function () {
+    message.isRead = previousState;
+    if (listMessage) listMessage.isRead = previousState;
+    renderMailboxList();
+    loadOperationsCounts();
+    showToast('Unable to update email read state.', 'error');
+  });
+}
+
+function markMailboxMessageReadInUi(message) {
+  return setMailboxMessageReadStateInUi(message, true);
+}
 
 function mailboxEmailReceivedInIst(value) {
   var date = new Date(value); if (Number.isNaN(date.getTime())) return '';
@@ -3107,6 +3181,12 @@ function mailboxCreateIncidentButton(message) {
   return button;
 }
 
+function mailboxIncidentCreatedBadge(message) {
+  if (!message || !message.incidentCreated || !message.incidentRef) return null;
+  var badge = document.createElement('span'); badge.className = 'mailbox-category incident-created'; badge.textContent = 'Incident Created · ' + message.incidentRef; badge.title = 'Incident created from this email';
+  return badge;
+}
+
 function mailboxComposeToolbar(editor) {
   var toolbar = document.createElement('div'); toolbar.className = 'mailbox-compose-toolbar';
   [['bold','B'],['italic','I'],['underline','U'],['insertUnorderedList','• List'],['insertOrderedList','1. List']].forEach(function (item) { var button = document.createElement('button'); button.type = 'button'; button.className = 'mailbox-tool'; button.textContent = item[1]; button.onclick = function () { editor.focus(); document.execCommand(item[0], false, null); }; toolbar.appendChild(button); });
@@ -3152,9 +3232,11 @@ function openMailboxMessage(id) {
       meta.textContent = mailboxActiveView === 'sent'
         ? 'To: ' + (message.to || '') + '\nSent: ' + mailboxDate(message.sentAt || message.receivedAt)
         : 'From: ' + (message.fromName || message.from) + (message.from ? ' <' + message.from + '>' : '') + (message.to ? '\nTo: ' + message.to : '') + '\nReceived: ' + mailboxDate(message.receivedAt);
-      head.append(subject, meta);
+      var detailIncidentBadge = mailboxIncidentCreatedBadge(message);
+      head.append(subject, meta); if (detailIncidentBadge) head.appendChild(detailIncidentBadge);
       var actions = document.createElement('div'); actions.className = 'mailbox-message-actions';
       if (mailboxActiveView !== 'sent' && hasMailboxPermission('send_mailbox')) actions.append(mailboxActionButton('Reply', '↩', function () { showMailboxReply(message, detail, 'reply'); }), mailboxActionButton('Reply all', '↩↩', function () { showMailboxReply(message, detail, 'replyAll'); }), mailboxActionButton('Forward', '↪', function () { showMailboxReply(message, detail, 'forward'); }));
+      if (mailboxActiveView !== 'sent' && message.isRead) actions.appendChild(mailboxActionButton('Mark as unread', '○', function () { setMailboxMessageReadStateInUi(message, false); }));
       if (mailboxActiveView !== 'sent' && hasMailboxPermission('delete_mailbox')) actions.appendChild(mailboxActionButton('Move to Deleted Items', '⌫', function () { deleteMailboxMessage(message, detail); }, true));
       if (actions.childElementCount) head.appendChild(actions);
       var attachments = message.attachments || [];
@@ -4723,10 +4805,11 @@ function openDowntimeModal(id) {
   var closeRca = document.getElementById('dtm_rca'); if (closeRca) closeRca.innerHTML = safeIncidentDescriptionHtml(inc.rca || '');
   var closeResolution = document.getElementById('dtm_resolution'); if (closeResolution) closeResolution.innerHTML = safeIncidentDescriptionHtml(inc.resolution || '');
   document.getElementById('dtm_inc_ref').value = id;
-  // Init TZ selector — use incident's saved TZ or current selectedTZ
-  var dtmTZ = inc.timezone || selectedTZ || 'IST';
+  // The incident timezone is fixed at creation. Closing accepts an IST input
+  // and converts it to this timezone, without changing the incident itself.
+  var dtmTZ = getIncidentTimezone(inc);
   selectedTZ = dtmTZ;
-  renderTZSelector('closeTZSelector', dtmTZ, 'changeCloseTZ(this.value)');
+  renderIncidentTimezoneLabel('closeTZSelector', dtmTZ);
 
   // Pre-fill end time from stored incident fields without reinterpreting timezone.
   var endEl = document.getElementById('dtm_end_time');
@@ -4734,17 +4817,18 @@ function openDowntimeModal(id) {
   if (endEl && storedEnd) {
     endEl.value = toDatetimeLocalWall(storedEnd);
   } else if (endEl) {
-    // Default to current time in display TZ
+    // The close form accepts the operator's input in IST.
     var now = new Date();
-    var offNow = getTZOffset(dtmTZ, now);
-    var tzNowMs = now.getTime() + offNow * 3600000;
-    var tzNow = new Date(tzNowMs);
+    var istNow = new Date(now.getTime() + getTZOffset('IST', now) * 3600000);
     var pad3 = n => String(n).padStart(2, '0');
-    endEl.value = tzNow.getUTCFullYear() + '-' + pad3(tzNow.getUTCMonth() + 1) + '-' + pad3(tzNow.getUTCDate())
-      + 'T' + pad3(tzNow.getUTCHours()) + ':' + pad3(tzNow.getUTCMinutes());
+    endEl.value = istNow.getUTCFullYear() + '-' + pad3(istNow.getUTCMonth() + 1) + '-' + pad3(istNow.getUTCDate())
+      + 'T' + pad3(istNow.getUTCHours()) + ':' + pad3(istNow.getUTCMinutes());
   }
-  if (endEl) endEl.dataset.inputTimezone = dtmTZ;
-  setIncidentEndHint('dtm_end_tz_hint', dtmTZ, false);
+  if (endEl) {
+    endEl.dataset.targetTimezone = dtmTZ;
+    endEl.dataset.inputTimezone = storedEnd ? dtmTZ : 'IST';
+  }
+  setIncidentEndHint('dtm_end_tz_hint', dtmTZ, Boolean(storedEnd));
   var critical = String(inc.severity || '').toLowerCase() === 'critical';
   var downtimeHours = document.getElementById('dtm_hours');
   var downtimeMinutes = document.getElementById('dtm_mins');
@@ -4773,19 +4857,6 @@ function updateCriticalDowntime() {
   document.getElementById('dtm_mins').value = totalMinutes % 60;
 }
 
-function changeCloseTZ(newKey) {
-  // Convert the currently entered end time to the new TZ
-  var endEl = document.getElementById('dtm_end_time');
-  if (endEl && endEl.value) {
-    endEl.value = convertDatetimeLocalTZ(endEl.value, selectedTZ, newKey);
-  }
-  selectedTZ = newKey;
-  if (endEl) endEl.dataset.inputTimezone = newKey;
-  setIncidentEndHint('dtm_end_tz_hint', newKey, false);
-  renderTZSelector('closeTZSelector', newKey, 'changeCloseTZ(this.value)');
-  updateCriticalDowntime();
-}
-
 function confirmCloseIncident() {
   const id = document.getElementById('dtm_inc_ref').value;
   const inc = incidents.find(i => i.id === id);
@@ -4812,7 +4883,6 @@ function confirmCloseIncident() {
   if (!res) { showToast('Please enter the Resolution Steps', 'error'); return; }
   if (!resolvedBy) { showToast('Please select who resolved the incident', 'error'); return; }
 
-  const closeTZ = selectedTZ || inc.timezone || 'IST';
   const closedAt = toMysqlDatetime(endTimeRaw);
 
   inc.downtimeH = h;
@@ -4827,7 +4897,6 @@ function confirmCloseIncident() {
   inc.endDT = closedAt;
   inc.date_time_closed = closedAt;
   inc.downtimeEnd = closedAt;
-  inc.timezone = closeTZ;
   inc.rca = rca;
   inc.resolution = res;
   const oldStatus = inc.status;
@@ -4856,7 +4925,6 @@ function confirmCloseIncident() {
         mttr_m: mttrM,
         mttr_minutes: mttrH * 60 + mttrM,
         resolved_by: resolvedBy,
-        timezone: closeTZ,
         endDT: closedAt,
         date_time_closed: closedAt,
         closed_date: closedAt ? closedAt.substring(0, 10) : null
@@ -5045,6 +5113,18 @@ function saveIncident() {
         .then(r => r.json())
         .then(data => {
           if (data && data.success) {
+            var operationsEmailLink = data.data.operations_email_link;
+            if (operationsEmailLink && operationsEmailLink.message_id) {
+              mailboxMessages.forEach(function (message) {
+                if (message.id === operationsEmailLink.message_id) {
+                  message.incidentCreated = true;
+                  message.incidentRef = operationsEmailLink.incident_ref || data.data.id;
+                }
+              });
+              renderMailboxList();
+            } else if (data.data.operations_email_link_error) {
+              showToast('Incident was created, but the mailbox incident link could not be saved.', 'error');
+            }
             pendingIncidentEmail = null;
             pendingOperationsEmailAuditId = null;
             showToast(`${data.data.id} created successfully`, 'success');

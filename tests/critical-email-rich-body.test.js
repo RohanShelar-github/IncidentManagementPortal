@@ -114,9 +114,9 @@ test('all user-facing incident timestamp formatters use a 12-hour clock', () => 
 
 test('native date and time picker icons remain visible in both portal themes', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '..', 'css', 'styles.css'), 'utf8');
-  assert.match(css, /input\[type="datetime-local"\] \{ color-scheme: dark; \}/);
-  assert.match(css, /::-webkit-calendar-picker-indicator \{ cursor: pointer; opacity: 1; filter: invert\(1\) brightness\(1\.8\); \}/);
-  assert.match(css, /body\.light-mode input\[type="datetime-local"\] \{ color-scheme: light; \}/);
+  assert.match(css, /input\[type="date"\], input\[type="datetime-local"\] \{\s*color-scheme: dark;/);
+  assert.match(css, /input\[type="datetime-local"\]::-webkit-calendar-picker-indicator \{\s*cursor: pointer;\s*opacity: 0;\s*width: 28px;/);
+  assert.match(css, /body\.light-mode input\[type="date"\], body\.light-mode input\[type="datetime-local"\] \{\s*color-scheme: light;/);
 });
 
 test('incident edit mode gives description, root cause, and resolution the full rich-text toolset', () => {

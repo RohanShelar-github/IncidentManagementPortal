@@ -2,6 +2,8 @@
 
 const pool = require('../config/database');
 const { answerIncidentQuestion, planIncidentQuestion, configured, selectIncidentContext, formatIncidentList, isStructuredIncidentRequest } = require('../services/aiService');
+const { listInboxMessages } = require('../services/emailService');
+const { hasRolePermission } = require('../middleware/permissions');
 
 const requestWindows = new Map();
 
@@ -16,6 +18,43 @@ function rateLimited(userId) {
 
 function cleanText(value, limit = 120) {
   return typeof value === 'string' ? value.trim().slice(0, limit) : '';
+}
+
+function isMailboxQuestion(message) {
+  const text = String(message || '');
+  return /\b(mail|mails|email|emails|inbox)\b/i.test(text)
+    && /\b(show|list|find|display|check|have|any|recent|unread|read|new)\b/i.test(text);
+}
+
+function mailboxReadState(message) {
+  const text = String(message || '').toLowerCase();
+  if (/\b(unread|new)\b/.test(text)) return false;
+  if (/\b(read)\b/.test(text)) return true;
+  return null;
+}
+
+function formatMailboxMetadata(messages, state) {
+  const label = state === false ? 'unread' : state === true ? 'read' : 'recent';
+  if (!messages.length) return `No ${label} emails were found in the Operations mailbox.`;
+  const visible = messages.slice(0, 20);
+  const lines = visible.map((message) => {
+    const sender = message.fromName || message.from || 'Unknown sender';
+    const subject = String(message.subject || '(No subject)').replace(/\s+/g, ' ').trim();
+    const received = message.receivedAt ? new Date(message.receivedAt).toLocaleString('en-GB', { hour12: true }) : 'Unknown time';
+    return `- ${sender}: ${subject} — ${received}`;
+  });
+  return `Found ${messages.length} ${label} email(s) in the Operations mailbox. Message content is not shown in Copilot.\n\n${lines.join('\n')}${messages.length > visible.length ? `\n\n… and ${messages.length - visible.length} more.` : ''}`;
+}
+
+async function answerMailboxQuestion(message, user) {
+  if (!await hasRolePermission(user?.role, 'view_mailbox')) {
+    return 'Your role does not have permission to view the Operations mailbox.';
+  }
+  const state = mailboxReadState(message);
+  const messages = await listInboxMessages(50, 'all');
+  const inboxMessages = messages.filter((item) => item.mailboxSource !== 'sent');
+  const matching = state === null ? inboxMessages : inboxMessages.filter((item) => Boolean(item.isRead) === state);
+  return formatMailboxMetadata(matching, state);
 }
 
 function dateWindow(preset) {
@@ -103,11 +142,15 @@ async function executeCopilotTool(call) {
 
 async function chat(req, res) {
   try {
-    if (!configured()) return res.status(503).json({ success: false, message: 'AI assistant is not configured. Check the selected AI provider settings on the backend.' });
     if (rateLimited(req.user.id)) return res.status(429).json({ success: false, message: 'Too many AI requests. Please wait a minute and try again.' });
     const message = String(req.body?.message || '').trim();
     if (!message || message.length > 2000) return res.status(400).json({ success: false, message: 'Enter a question up to 2,000 characters.' });
     const history = Array.isArray(req.body?.history) ? req.body.history : [];
+    if (isMailboxQuestion(message)) {
+      const answer = await answerMailboxQuestion(message, req.user);
+      return res.json({ success: true, data: { model: 'portal-mailbox', answer } });
+    }
+    if (!configured()) return res.status(503).json({ success: false, message: 'AI assistant is not configured. Check the selected AI provider settings on the backend.' });
     // Resolve direct list/filter requests first. This is a database-only path
     // and avoids waiting for a local model to recognise a simple query.
     const [rows] = await pool.query(`
@@ -156,4 +199,4 @@ async function chat(req, res) {
   }
 }
 
-module.exports = { chat, rateLimited };
+module.exports = { answerMailboxQuestion, chat, formatMailboxMetadata, isMailboxQuestion, mailboxReadState, rateLimited };

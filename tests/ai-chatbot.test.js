@@ -16,6 +16,22 @@ test('AI route is authenticated and mounted', () => {
   assert.match(server, /app\.use\('\/api\/ai', aiRoutes\)/);
 });
 
+test('Copilot can list permission-checked Operations mailbox metadata without exposing message bodies', () => {
+  const controller = read('backend/controllers/aiController.js');
+  const { formatMailboxMetadata, isMailboxQuestion, mailboxReadState } = require('../backend/controllers/aiController');
+  assert.match(controller, /hasRolePermission\(user\?\.role, 'view_mailbox'\)/);
+  assert.match(controller, /listInboxMessages\(50, 'all'\)/);
+  assert.match(controller, /Message content is not shown in Copilot/);
+  assert.equal(isMailboxQuestion('Show my unread mails'), true);
+  assert.equal(isMailboxQuestion('How are incident emails sent?'), false);
+  assert.equal(isMailboxQuestion('Summarize open incidents'), false);
+  assert.equal(mailboxReadState('Show unread emails'), false);
+  assert.equal(mailboxReadState('List read emails'), true);
+  const answer = formatMailboxMetadata([{ fromName: 'Azure Alerts', subject: 'Disk usage alert', receivedAt: '2026-09-05T08:42:00Z' }], false);
+  assert.match(answer, /Found 1 unread email/);
+  assert.match(answer, /Azure Alerts: Disk usage alert/);
+});
+
 test('OpenAI request remains server-side and privacy constrained', () => {
   const service = read('backend/services/aiService.js');
   const browser = read('js/app.js');

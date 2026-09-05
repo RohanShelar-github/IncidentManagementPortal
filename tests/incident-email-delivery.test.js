@@ -15,7 +15,7 @@ test('incident creation sends mail only after the database insert and preserves 
   const implementation = controller.slice(start, end);
   assert.ok(implementation.indexOf('INSERT INTO incidents') < implementation.indexOf('sendIncidentCreatedEmail'));
   assert.match(implementation, /catch \(mailError\)/);
-  assert.match(implementation, /success: true[\s\S]*data: \{ id: incidentRef, email \}/);
+  assert.match(implementation, /success: true[\s\S]*data: \{ id: incidentRef, email, operations_email_link: operationsEmailLink/);
 });
 
 test('mail is addressed through server-side environment configuration', () => {

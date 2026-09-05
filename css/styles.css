@@ -705,6 +705,7 @@
   .mailbox-list-head { display:flex; align-items:center; justify-content:space-between; padding:17px 18px; border-bottom:1px solid var(--border); background:linear-gradient(110deg,rgba(79,142,247,.13),transparent); }
   .mailbox-list-title, .mailbox-list-actions { display:flex; align-items:center; gap:9px; } .mailbox-list-title input, .mailbox-row-check { accent-color:var(--accent); cursor:pointer; }
   .mailbox-count { font:11px var(--font-mono); color:var(--accent); padding:4px 8px; background:rgba(79,142,247,.12); border-radius:99px; }
+  .mailbox-read-filter { position:relative; } .mailbox-filter-button { min-height:29px; padding:5px 8px; border:1px solid var(--border); border-radius:7px; color:var(--text2); background:var(--surface2); font:11px var(--font); cursor:pointer; white-space:nowrap; }.mailbox-filter-button:hover { color:var(--text); border-color:var(--accent); }.mailbox-filter-menu { position:absolute; z-index:20; top:calc(100% + 6px); right:0; min-width:142px; padding:5px; border:1px solid var(--border); border-radius:9px; background:var(--surface); box-shadow:0 12px 28px rgba(0,0,0,.22); }.mailbox-filter-menu[hidden] { display:none; }.mailbox-filter-menu button { display:block; width:100%; padding:7px 9px; border:0; border-radius:6px; color:var(--text2); background:transparent; font:12px var(--font); text-align:left; cursor:pointer; }.mailbox-filter-menu button:hover, .mailbox-filter-menu button.active { color:var(--accent); background:rgba(79,142,247,.11); }.mailbox-filter-menu button.active::before { content:'✓'; margin-right:7px; }
   .mailbox-list { min-height:0; flex:1; overflow-y:auto; overscroll-behavior:contain; scrollbar-gutter:stable; }
   .mailbox-row { padding:15px 17px; border-bottom:1px solid var(--border); cursor:pointer; transition:background .16s, border-color .16s; border-left:3px solid transparent; }
   .mailbox-row-check { float:left; margin:2px 9px 0 0; }
@@ -756,7 +757,7 @@
   .operations-view:hover { background:var(--surface2); color:var(--text); }.operations-view.active { color:var(--accent); background:rgba(79,142,247,.1); border-left-color:var(--accent); font-weight:700; }.operations-view.operations-customer { color:var(--accent2); }.operations-view.operations-customer.active { color:var(--accent2); border-left-color:var(--accent2); background:rgba(93,81,230,.1); }
   .operations-count { min-width:18px; padding:2px 6px; border-radius:99px; color:var(--accent); background:rgba(79,142,247,.12); font:10px var(--font-mono); text-align:center; }.operations-count:empty { display:none; }
   .mailbox-search-wrap { position:relative; padding:10px 12px; border-bottom:1px solid var(--border); background:var(--surface); }.mailbox-search-wrap::before { content:'\2315'; position:absolute; left:22px; top:50%; transform:translateY(-50%); color:var(--text-muted); font-size:17px; pointer-events:none; }.mailbox-search-wrap input { width:100%; box-sizing:border-box; min-height:34px; padding:7px 10px 7px 32px; color:var(--text); background:var(--surface2); border:1px solid var(--border); border-radius:8px; outline:none; font:12px var(--font); transition:border-color .16s,box-shadow .16s,background .16s; }.mailbox-search-wrap input::placeholder { color:var(--text-muted); opacity:1; }.mailbox-search-wrap input:focus { border-color:var(--accent); background:var(--surface); box-shadow:0 0 0 3px rgba(79,142,247,.12); }
-  .mailbox-category { display:inline-flex; margin-left:6px; padding:2px 6px; border-radius:99px; color:var(--accent); background:rgba(79,142,247,.1); font:10px var(--font-mono); vertical-align:1px; }.mailbox-category.jira { color:var(--accent2); background:rgba(93,81,230,.1); }.mailbox-category.coralogix { color:var(--success); background:rgba(45,212,160,.12); }.mailbox-category.azure { color:var(--warning); background:rgba(247,185,79,.14); }
+  .mailbox-category { display:inline-flex; margin-left:6px; padding:2px 6px; border-radius:99px; color:var(--accent); background:rgba(79,142,247,.1); font:10px var(--font-mono); vertical-align:1px; }.mailbox-category.jira { color:var(--accent2); background:rgba(93,81,230,.1); }.mailbox-category.coralogix { color:var(--success); background:rgba(45,212,160,.12); }.mailbox-category.azure { color:var(--warning); background:rgba(247,185,79,.14); }.mailbox-category.incident-created { color:var(--success); background:rgba(45,212,160,.14); border:1px solid rgba(45,212,160,.28); }
   .mailbox-compose-empty { padding:24px 28px; color:var(--text-muted); font-size:12px; border-bottom:1px solid var(--border); }
   @media (max-width:1150px) { .operations-layout { grid-template-columns:180px minmax(280px,.8fr) minmax(420px,1.5fr); } }
   @media (max-width:900px) { #page-mailbox.active { display:block; height:auto; overflow:visible; } .mailbox-layout { grid-template-columns:1fr; height:auto; min-height:0; max-height:none; } .mailbox-list-card, .mailbox-message-card { max-height:none; } .mailbox-list { max-height:330px; } }
@@ -1886,6 +1887,29 @@
   }
   body.light-mode input[type="date"]::-webkit-calendar-picker-indicator,
   body.light-mode input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: 0; }
+  /* Login keeps a dark card in both themes, but browsers may paint saved
+     credentials with a light autofill background in light mode. Override the
+     dark-form white text so saved usernames and passwords stay readable. */
+  body.light-mode .login-field input {
+    background: #f7f8fc;
+    color: #172033;
+    caret-color: #172033;
+    border-color: #c8d0e3;
+  }
+  body.light-mode .login-field input::placeholder { color: #69738a; }
+  body.light-mode .login-field input:focus {
+    background: #ffffff;
+    color: #172033;
+  }
+  body.light-mode .login-field input:-webkit-autofill,
+  body.light-mode .login-field input:-webkit-autofill:hover,
+  body.light-mode .login-field input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #172033;
+    caret-color: #172033;
+    box-shadow: 0 0 0 1000px #f7f8fc inset, inset 0 1px 0 rgba(23,32,51,0.04);
+  }
+  body.light-mode .input-icon,
+  body.light-mode .eye-toggle { color: #64748b; }
   body.light-mode .sidebar { background: #fff; }
   body.light-mode .topbar  { background: rgba(255,255,255,0.95); }
   body.light-mode #profileModal {

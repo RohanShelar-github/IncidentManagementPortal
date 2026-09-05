@@ -28,13 +28,26 @@ test('Operations endpoints reuse the protected mailbox routes for counts, Sent I
   assert.match(routes, /router\.get\('\/operations-counts', getMailboxOperationsCounts\)/);
   assert.match(routes, /router\.post\('\/send', sendNewMailbox\)/);
   assert.match(routes, /router\.patch\('\/inbox\/:id\/read', markMailboxMessageRead\)/);
+  assert.match(routes, /router\.patch\('\/inbox\/:id\/read-state', setMailboxMessageReadState\)/);
   assert.match(controller, /requireMailboxPermission\(req, res, 'send_mailbox'\)/);
+  assert.match(controller, /async function setMailboxMessageReadState/);
   assert.match(service, /async function sendNewMailboxMessage/);
+  assert.match(service, /async function setInboxMessageReadState/);
   assert.match(service, /saveToSentItems/);
   assert.match(service, /contains\(subject,'was reported by the customer'\)/);
   assert.match(service, /selectedCategory === 'jira' && folder === 'inbox'/);
   assert.match(service, /query\.set\('\$filter', jiraFilter\)/);
   assert.match(service, /query\.delete\('\$orderby'\)/);
+});
+
+test('Operations mailbox provides an Outlook-style read filter with a persistent unread action', () => {
+  const ui = fs.readFileSync('js/app.js', 'utf8');
+  assert.match(ui, /function ensureMailboxReadFilterUi/);
+  assert.match(ui, /mailboxReadFilter = 'all'/);
+  assert.match(ui, /setMailboxReadFilter/);
+  assert.match(ui, /\['all', 'All'\], \['unread', 'Unread'\], \['read', 'Read'\]/);
+  assert.match(ui, /setMailboxMessageReadStateInUi/);
+  assert.match(ui, /Mark as unread/);
 });
 
 test('Operations compose supports image formatting and sends pasted images as Graph inline attachments', () => {

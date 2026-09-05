@@ -534,10 +534,15 @@ async function replyToInboxMessage(id, comment) {
   return { sent: true };
 }
 
-async function markInboxMessageRead(id) {
+async function setInboxMessageReadState(id, isRead) {
   if (!validMailboxId(id)) throw new Error('Invalid mailbox message identifier');
-  await graphInboxJsonRequest(`/messages/${encodeURIComponent(id)}`, 'PATCH', { isRead: true });
-  return { read: true };
+  const read = Boolean(isRead);
+  await graphInboxJsonRequest(`/messages/${encodeURIComponent(id)}`, 'PATCH', { isRead: read });
+  return { read };
+}
+
+async function markInboxMessageRead(id) {
+  return setInboxMessageReadState(id, true);
 }
 
 async function sendNewMailboxMessage(options) {
@@ -681,4 +686,4 @@ async function sendIncidentClosedEmail(incident) {
   return sendIncidentCreatedEmail({ ...incident, emailType: 'closed' });
 }
 
-module.exports = { cleanAddressList, configured, countUnreadMailboxMessages, deleteInboxMessage, enrichInboxConversations, getAccessToken, getGraphAccessToken, getInboxAttachment, getInboxMessage, getOperationsMailboxCounts, graphRecipients, hasDisplayableEmailContent, htmlEscape, incidentEmail, inboundMailboxAddress, inlineDataImagesForEmail, listConversationMessages, listInboxMessages, listSentMessages, markInboxMessageRead, replyToInboxMessage, safeIncidentEmailHtml, sanitizeMailboxReplyHtml, sanitizeSignatureLayoutHtml, sendCriticalIncidentEmail, sendIncidentClosedEmail, sendIncidentCreatedEmail, sendNewMailboxMessage, writeMailDiagnostic, xmlEscape };
+module.exports = { cleanAddressList, configured, countUnreadMailboxMessages, deleteInboxMessage, enrichInboxConversations, getAccessToken, getGraphAccessToken, getInboxAttachment, getInboxMessage, getOperationsMailboxCounts, graphRecipients, hasDisplayableEmailContent, htmlEscape, incidentEmail, inboundMailboxAddress, inlineDataImagesForEmail, listConversationMessages, listInboxMessages, listSentMessages, markInboxMessageRead, replyToInboxMessage, safeIncidentEmailHtml, sanitizeMailboxReplyHtml, sanitizeSignatureLayoutHtml, sendCriticalIncidentEmail, sendIncidentClosedEmail, sendIncidentCreatedEmail, sendNewMailboxMessage, setInboxMessageReadState, writeMailDiagnostic, xmlEscape };

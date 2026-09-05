@@ -44,11 +44,24 @@ test('the browser labels EST records as Eastern Time and uses the IANA zone', ()
   assert.match(frontend, /initialOffset = getTZOffset\('IST', now\)/);
 });
 
-test('new incident end values are explicitly entered in IST and converted once to the selected timezone', () => {
+test('end values are entered in IST and converted once to the incident timezone', () => {
   assert.match(html, /id="dp_f_end_dt"[^>]*onchange="convertIncidentEndFromIST\('dp_f_end_dt','dp_end_tz_hint'\);updateCriticalEditDowntime\(\)"/);
   assert.match(html, /id="dtm_end_time"[^>]*onchange="convertIncidentEndFromIST\('dtm_end_time','dtm_end_tz_hint'\);updateCriticalDowntime\(\)"/);
   assert.match(html, /Enter end time in IST/);
   assert.match(frontend, /convertDatetimeLocalTZ\(field\.value, 'IST', targetTimezone\)/);
   assert.match(frontend, /field\.dataset\.inputTimezone !== 'IST'/);
   assert.match(frontend, /field\.dataset\.inputTimezone = targetTimezone/);
+  assert.match(frontend, /function getIncidentTimezone\(incident\)/);
+  assert.match(frontend, /endEl\.dataset\.targetTimezone = dtmTZ/);
+  assert.match(frontend, /renderIncidentTimezoneLabel\('closeTZSelector', dtmTZ\)/);
+  assert.match(frontend, /var targetTimezone = getIncidentEndTargetTimezone\(field\)/);
+});
+
+test('closing preserves the incident timezone rather than overwriting it from the dialog', () => {
+  const closeStart = frontend.indexOf('function openDowntimeModal');
+  const closeFlow = frontend.slice(closeStart, frontend.indexOf('function saveIncident', closeStart));
+  assert.doesNotMatch(closeFlow, /function changeCloseTZ/);
+  assert.doesNotMatch(closeFlow, /inc\.timezone\s*=/);
+  assert.doesNotMatch(closeFlow, /timezone:\s*closeTZ/);
+  assert.match(closeFlow, /getIncidentTimezone\(inc\)/);
 });

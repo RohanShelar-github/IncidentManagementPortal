@@ -1,13 +1,43 @@
 'use strict';
 
 const pool = require('../config/database');
-const { deleteInboxMessage, getInboxAttachment, getInboxMessage, getOperationsMailboxCounts, listInboxMessages, listSentMessages, markInboxMessageRead, replyToInboxMessage, sanitizeMailboxReplyHtml, sendNewMailboxMessage } = require('../services/emailService');
+const { deleteInboxMessage, getInboxAttachment, getInboxMessage, getOperationsMailboxCounts, listInboxMessages, listSentMessages, markInboxMessageRead, replyToInboxMessage, sanitizeMailboxReplyHtml, sendNewMailboxMessage, setInboxMessageReadState } = require('../services/emailService');
 const { markMailboxNotificationsRead, notifyMailboxUsers } = require('../services/notificationService');
 const { noHistorianReadIncidentDefaults, operationsIncidentDefaults } = require('../services/operationsMailClassificationService');
 
 let knownMailboxMessageIds = null;
 let mailboxPollTimer = null;
 let mailboxPollInFlight = false;
+
+function applyMailboxIncidentLinks(messages, links) {
+  const byMessageId = new Map();
+  (links || []).forEach((link) => {
+    const messageId = String(link.graph_message_id || '');
+    if (messageId && !byMessageId.has(messageId)) byMessageId.set(messageId, link.incident_ref);
+  });
+  return (messages || []).map((message) => {
+    const incidentRef = byMessageId.get(String(message?.id || '')) || null;
+    return incidentRef ? { ...message, incidentCreated: true, incidentRef } : message;
+  });
+}
+
+async function attachMailboxIncidentLinks(messages) {
+  const messageIds = Array.from(new Set((messages || [])
+    .map((message) => String(message?.id || '').trim())
+    .filter((id) => id && id.length <= 255)));
+  if (!messageIds.length) return messages || [];
+  const placeholders = messageIds.map(() => '?').join(', ');
+  const [links] = await pool.query(
+    `SELECT a.graph_message_id, i.incident_ref
+       FROM operations_email_incident_audit a
+       JOIN incidents i ON i.id = a.incident_id
+      WHERE a.status = 'created' AND a.incident_id IS NOT NULL
+        AND a.graph_message_id IN (${placeholders})
+      ORDER BY a.created_at DESC, a.id DESC`,
+    messageIds
+  );
+  return applyMailboxIncidentLinks(messages, links);
+}
 
 async function requireMailboxPermission(req, res, permission) {
   const [rows] = await pool.query(`SELECT 1 FROM roles r JOIN role_permissions rp ON rp.role_id = r.id WHERE r.role_key = ? AND rp.permission_key = ? LIMIT 1`, [req.user?.role, permission]);
@@ -301,7 +331,7 @@ async function listMailbox(req, res) {
   if (!await requireMailboxPermission(req, res, 'view_mailbox')) return;
   try {
     const messages = await listInboxMessages(req.query.limit, req.query.category);
-    res.json({ success: true, data: messages });
+    res.json({ success: true, data: await attachMailboxIncidentLinks(messages) });
   } catch (error) {
     console.error('Mailbox list error:', error.message);
     res.status(502).json({ success: false, message: 'Unable to load the Microsoft 365 mailbox.' });
@@ -328,7 +358,11 @@ async function getMailboxOperationsCounts(req, res) {
 
 async function getMailboxMessage(req, res) {
   if (!await requireMailboxPermission(req, res, 'view_mailbox')) return;
-  try { res.json({ success: true, data: await getInboxMessage(req.params.id) }); }
+  try {
+    const message = await getInboxMessage(req.params.id);
+    const [linkedMessage] = await attachMailboxIncidentLinks([message]);
+    res.json({ success: true, data: linkedMessage });
+  }
   catch (error) {
     console.error('Mailbox message error:', error.message);
     res.status(502).json({ success: false, message: 'Unable to load the mailbox message.' });
@@ -405,6 +439,18 @@ async function markMailboxMessageRead(req, res) {
   catch (error) { res.status(400).json({ success: false, message: error.message || 'Unable to mark email as read.' }); }
 }
 
+async function setMailboxMessageReadState(req, res) {
+  if (!await requireMailboxPermission(req, res, 'view_mailbox')) return;
+  const isRead = req.body?.isRead;
+  if (typeof isRead !== 'boolean') return res.status(400).json({ success: false, message: 'isRead must be true or false.' });
+  try {
+    const data = await setInboxMessageReadState(req.params.id, isRead);
+    if (isRead) await markMailboxNotificationsRead(req.params.id);
+    res.json({ success: true, data });
+  }
+  catch (error) { res.status(400).json({ success: false, message: error.message || 'Unable to update email read state.' }); }
+}
+
 async function downloadMailboxAttachment(req, res) {
   if (!await requireMailboxPermission(req, res, 'view_mailbox')) return;
   try {
@@ -455,4 +501,4 @@ function startMailboxNotificationPolling() {
   mailboxPollTimer = setInterval(pollMailboxForNotifications, 60000);
 }
 
-module.exports = { conciseAlertDescription, containsCustomerName, deleteMailboxMessage, deleteMailboxSignatureAsAdmin, deleteOwnMailboxSignature, downloadMailboxAttachment, getMailboxMessage, getMailboxOperationsCounts, getOwnMailboxSignature, isNoHistorianReadAlert, listMailbox, listMailboxSignatures, listSentMailbox, markMailboxMessageRead, matchingCustomersByName, noHistorianAlertFields, parseNoHistorianReadAlert, parseOperationsAlert, prepareMailboxIncident, replyToMailboxMessage, saveOwnMailboxSignature, sendNewMailbox, startMailboxNotificationPolling, withUserSignature };
+module.exports = { applyMailboxIncidentLinks, attachMailboxIncidentLinks, conciseAlertDescription, containsCustomerName, deleteMailboxMessage, deleteMailboxSignatureAsAdmin, deleteOwnMailboxSignature, downloadMailboxAttachment, getMailboxMessage, getMailboxOperationsCounts, getOwnMailboxSignature, isNoHistorianReadAlert, listMailbox, listMailboxSignatures, listSentMailbox, markMailboxMessageRead, matchingCustomersByName, noHistorianAlertFields, parseNoHistorianReadAlert, parseOperationsAlert, prepareMailboxIncident, replyToMailboxMessage, saveOwnMailboxSignature, sendNewMailbox, setMailboxMessageReadState, startMailboxNotificationPolling, withUserSignature };

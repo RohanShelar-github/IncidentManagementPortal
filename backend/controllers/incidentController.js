@@ -307,18 +307,27 @@ const createIncident = async (req, res) => {
       mentionText: (Array.isArray(b.tags) ? b.tags : []).join(' ')
     });
 
+    let operationsEmailLink = null;
+    let operationsEmailLinkError = false;
     const [created] = await pool.query('SELECT id FROM incidents WHERE incident_ref = ?', [incidentRef]);
     if (created.length) {
       await pool.query('INSERT INTO activity_logs (incident_id, action_type, action_by, detail) VALUES (?, ?, ?, ?)', [created[0].id, 'create', req.user.id, 'Incident created']);
       const operationsAuditId = Number(b.operations_email_audit_id);
       if (Number.isInteger(operationsAuditId) && operationsAuditId > 0) {
         try {
-          await pool.query('UPDATE operations_email_incident_audit SET incident_id = ?, status = ? WHERE id = ? AND requested_by = ? AND incident_id IS NULL', [created[0].id, 'created', operationsAuditId, req.user.id]);
-          await pool.query('INSERT INTO activity_logs (incident_id, action_type, action_by, detail) VALUES (?, ?, ?, ?)', [created[0].id, 'operations_email_incident_created', req.user.id, `Incident created from Operations email audit ${operationsAuditId}`]);
+          const [auditUpdate] = await pool.query('UPDATE operations_email_incident_audit SET incident_id = ?, status = ?, created_at = CURRENT_TIMESTAMP WHERE id = ? AND requested_by = ? AND incident_id IS NULL', [created[0].id, 'created', operationsAuditId, req.user.id]);
+          if (auditUpdate.affectedRows) {
+            const [auditRows] = await pool.query('SELECT graph_message_id FROM operations_email_incident_audit WHERE id = ? AND incident_id = ? LIMIT 1', [operationsAuditId, created[0].id]);
+            if (auditRows.length) {
+              operationsEmailLink = { message_id: auditRows[0].graph_message_id, incident_ref: incidentRef };
+              await pool.query('INSERT INTO activity_logs (incident_id, action_type, action_by, detail) VALUES (?, ?, ?, ?)', [created[0].id, 'operations_email_incident_created', req.user.id, `Incident created from Operations email audit ${operationsAuditId}`]);
+            }
+          }
         } catch (auditError) {
           // Do not affect the established incident workflow if an optional
           // Operations audit record cannot be persisted.
           console.error('Operations email incident audit update failed:', auditError.message);
+          operationsEmailLinkError = true;
         }
       }
     }
@@ -353,7 +362,7 @@ const createIncident = async (req, res) => {
       console.error(`Incident ${incidentRef} email failed:`, mailError.message);
       email = { sent: false, skipped: false, message: mailError.message };
     }
-    return res.status(201).json({ success: true, message: 'Incident created successfully', data: { id: incidentRef, email } });
+    return res.status(201).json({ success: true, message: 'Incident created successfully', data: { id: incidentRef, email, operations_email_link: operationsEmailLink, operations_email_link_error: operationsEmailLinkError } });
   } catch (error) {
     console.error('Create incident error:', error);
     return res.status(500).json({ success: false, message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });

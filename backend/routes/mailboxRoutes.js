@@ -1,7 +1,7 @@
 'use strict';
 const express = require('express');
 const { authenticateToken } = require('../middleware/auth');
-const { deleteMailboxMessage, deleteMailboxSignatureAsAdmin, deleteOwnMailboxSignature, downloadMailboxAttachment, getMailboxMessage, getMailboxOperationsCounts, getOwnMailboxSignature, listMailbox, listMailboxSignatures, listSentMailbox, markMailboxMessageRead, prepareMailboxIncident, replyToMailboxMessage, saveOwnMailboxSignature, sendNewMailbox } = require('../controllers/mailboxController');
+const { deleteMailboxMessage, deleteMailboxSignatureAsAdmin, deleteOwnMailboxSignature, downloadMailboxAttachment, getMailboxMessage, getMailboxOperationsCounts, getOwnMailboxSignature, listMailbox, listMailboxSignatures, listSentMailbox, markMailboxMessageRead, prepareMailboxIncident, replyToMailboxMessage, saveOwnMailboxSignature, sendNewMailbox, setMailboxMessageReadState } = require('../controllers/mailboxController');
 const router = express.Router();
 router.use(authenticateToken);
 router.get('/inbox', listMailbox);
@@ -16,6 +16,7 @@ router.post('/send', sendNewMailbox);
 router.post('/inbox/:id/incident-prefill', prepareMailboxIncident);
 router.post('/inbox/:id/reply', replyToMailboxMessage);
 router.patch('/inbox/:id/read', markMailboxMessageRead);
+router.patch('/inbox/:id/read-state', setMailboxMessageReadState);
 router.delete('/inbox/:id', deleteMailboxMessage);
 router.get('/inbox/:id/attachments/:attachmentId/download', downloadMailboxAttachment);
 router.get('/inbox/:id', getMailboxMessage);
