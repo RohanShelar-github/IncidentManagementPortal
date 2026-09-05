@@ -27,5 +27,8 @@ test('mailbox link is persisted after incident creation and exposed in the mailb
   assert.match(incidentController, /operations_email_link: operationsEmailLink/);
   assert.match(frontend, /function mailboxIncidentCreatedBadge/);
   assert.match(frontend, /Incident Created · /);
+  assert.match(frontend, /function mailboxIncidentCreatedAction/);
+  assert.match(frontend, /Incident Created from this email/);
+  assert.match(frontend, /latest\.incidentCreated \? mailboxIncidentCreatedAction/);
   assert.match(frontend, /operations_email_link_error/);
 });

@@ -40,6 +40,25 @@ test('Operations endpoints reuse the protected mailbox routes for counts, Sent I
   assert.match(service, /query\.delete\('\$orderby'\)/);
 });
 
+test('Sent Items supports the same reply, reply-all, forward, and attachment actions as Inbox', () => {
+  const routes = fs.readFileSync('backend/routes/mailboxRoutes.js', 'utf8');
+  const service = fs.readFileSync('backend/services/emailService.js', 'utf8');
+  const ui = fs.readFileSync('js/app.js', 'utf8');
+  const selectedMessageRenderer = ui.slice(ui.lastIndexOf('function openMailboxMessage(id)'));
+  assert.match(routes, /router\.post\('\/sent\/:id\/reply', replyToMailboxMessage\)/);
+  assert.match(routes, /router\.get\('\/sent\/:id\/attachments\/:attachmentId\/download', downloadMailboxAttachment\)/);
+  assert.match(routes, /router\.get\('\/sent\/:id', getMailboxMessage\)/);
+  assert.match(service, /cc: \(message\?\.ccRecipients \|\| \[\]\)/);
+  assert.match(service, /if \(to\) updates\.toRecipients = graphRecipients\(to\);/);
+  assert.match(ui, /function mailboxMessageFolder\(message\)/);
+  assert.match(ui, /var sentItem = mailboxMessageFolder\(message\) === 'sent';/);
+  assert.match(ui, /to\.value = sentItem \? \(message\.to \|\| ''\) : \(message\.from \|\| ''\)/);
+  assert.match(ui, /Original To and CC recipients are included/);
+  assert.match(ui, /mailboxMessagePath\(message, '\/reply'\)/);
+  assert.match(selectedMessageRenderer, /mailboxMessagePath\(selectedMessage\)/);
+  assert.match(selectedMessageRenderer, /if \(hasMailboxPermission\('send_mailbox'\)\) actions\.append/);
+});
+
 test('Operations mailbox provides an Outlook-style read filter with a persistent unread action', () => {
   const ui = fs.readFileSync('js/app.js', 'utf8');
   assert.match(ui, /function ensureMailboxReadFilterUi/);

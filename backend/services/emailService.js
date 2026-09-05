@@ -322,6 +322,7 @@ function mailboxDto(message, includeBody, attachments = []) {
     preview: String(message?.bodyPreview || ''), hasAttachments: Boolean(message?.hasAttachments),
     conversationId: String(message?.conversationId || ''), internetMessageId: String(message?.internetMessageId || ''),
     to: (message?.toRecipients || []).map((recipient) => String(recipient?.emailAddress?.address || '')).filter(Boolean).join(', '),
+    cc: (message?.ccRecipients || []).map((recipient) => String(recipient?.emailAddress?.address || '')).filter(Boolean).join(', '),
     sentAt: message?.sentDateTime || null
   };
   Object.assign(dto, classifyOperationsMessage(dto));
@@ -475,7 +476,7 @@ async function getOperationsMailboxCounts() {
 
 async function getInboxMessage(id) {
   if (!validMailboxId(id)) throw new Error('Invalid mailbox message identifier');
-  const query = new URLSearchParams({ '$select': 'id,subject,from,toRecipients,ccRecipients,receivedDateTime,isRead,bodyPreview,hasAttachments,body,conversationId,internetMessageId' });
+  const query = new URLSearchParams({ '$select': 'id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,bodyPreview,hasAttachments,body,conversationId,internetMessageId' });
   const data = await graphInboxRequest(`/messages/${encodeURIComponent(id)}?${query}`);
   let attachmentValues = [];
   if (data?.body?.content && /cid:/i.test(data.body.content)) {
@@ -517,7 +518,8 @@ async function replyToInboxMessage(id, comment) {
   if (!draft?.id || !validMailboxId(draft.id)) throw new Error('Microsoft 365 could not create the mail draft');
   const inline = inlineDataImagesForEmail(html);
   const updates = { body: { contentType: 'HTML', content: inline.html } };
-  if (mode === 'forward') updates.toRecipients = graphRecipients(to);
+  // Reply recipients are editable in the UI, including for Sent Items.
+  if (to) updates.toRecipients = graphRecipients(to);
   if (cc) updates.ccRecipients = graphRecipients(cc);
   if (bcc) updates.bccRecipients = graphRecipients(bcc);
   if (options.subject) updates.subject = String(options.subject).replace(/[\r\n]+/g, ' ').trim().slice(0, 255);
