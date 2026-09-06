@@ -59,6 +59,17 @@ test('Sent Items supports the same reply, reply-all, forward, and attachment act
   assert.match(selectedMessageRenderer, /if \(hasMailboxPermission\('send_mailbox'\)\) actions\.append/);
 });
 
+test('Sent Items supports permission-controlled single and bulk deletion to Deleted Items', () => {
+  const routes = fs.readFileSync('backend/routes/mailboxRoutes.js', 'utf8');
+  const ui = fs.readFileSync('js/app.js', 'utf8');
+  const selectedMessageRenderer = ui.slice(ui.lastIndexOf('function openMailboxMessage(id)'));
+  assert.match(routes, /router\.delete\('\/sent\/:id', deleteMailboxMessage\)/);
+  assert.match(ui, /folder = mailboxActiveView === 'sent' \? 'sent' : 'inbox'/);
+  assert.match(ui, /mailboxActiveView === 'sent' \? mailboxVisibleMessages\(\)/);
+  assert.match(ui, /mailboxMessagePath\(message\), \{ method: 'DELETE'/);
+  assert.match(selectedMessageRenderer, /if \(hasMailboxPermission\('delete_mailbox'\)\) actions\.appendChild/);
+});
+
 test('Operations mailbox provides an Outlook-style read filter with a persistent unread action', () => {
   const ui = fs.readFileSync('js/app.js', 'utf8');
   assert.match(ui, /function ensureMailboxReadFilterUi/);
