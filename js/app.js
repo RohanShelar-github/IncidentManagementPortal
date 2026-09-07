@@ -610,6 +610,32 @@ function sortIncidents(col) {
 }
 
 let users = [];
+let recipientDirectory = [];
+let recipientDirectoryLoading = false;
+let recipientDirectoryCallbacks = [];
+
+function loadRecipientDirectory(callback) {
+  if (!window.APP_CONFIG || !window.APP_CONFIG.ENABLE_BACKEND) {
+    if (callback) callback();
+    return;
+  }
+  const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) { if (callback) callback(); return; }
+  if (callback) recipientDirectoryCallbacks.push(callback);
+  if (recipientDirectoryLoading) return;
+  recipientDirectoryLoading = true;
+  fetch(window.APP_CONFIG.API_BASE_URL + '/incidents/recipient-directory', {
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
+  })
+    .then(r => r.ok ? r.json() : Promise.reject(new Error('Recipient directory lookup failed')))
+    .then(data => { recipientDirectory = Array.isArray(data?.data) ? data.data : []; })
+    .catch(() => { recipientDirectory = []; })
+    .finally(() => {
+      recipientDirectoryLoading = false;
+      const callbacks = recipientDirectoryCallbacks.splice(0);
+      callbacks.forEach(fn => fn());
+    });
+}
 
 
 
@@ -694,7 +720,13 @@ var incidentComments = {};
 var currentNotificationIncidentId = null;
 var pendingIncidentEmail = null;
 var pendingOperationsEmailAuditId = null;
+var pendingOperationsEmailSource = null;
+var pendingIncidentDraftId = null;
+var incidentDrafts = [];
+var incidentDraftCountdownTimer = null;
+var selectedIncidentDraftIds = new Set();
 var preSendRecipients = { to: [], cc: [] };
+var preSendRecipientDrag = null;
 
 // Activity data is loaded from database-backed incident actions
 
@@ -774,9 +806,9 @@ function getCriticalOnlyReportValue(inc, value) {
 }
 
 function getCriticalReportLabels(inc) {
-  return isCriticalSeverity(inc)
-    ? { sla: 'Critical SLA', mttr: 'Critical MTTR' }
-    : { sla: 'Total Downtime', mttr: 'Mean Time to Resolve (MTTR)' };
+  // This report field always displays recorded downtime. SLA is a separate
+  // target and must not be presented as a duration that was actually lost.
+  return { sla: 'Total Downtime', mttr: 'Mean Time to Resolve (MTTR)' };
 }
 
 function getIncidentTimestamp(inc, fields) {
@@ -1508,7 +1540,7 @@ function renderDataManagement() {
       var inUse = incidents.some(function (i) { return i.customer === c; });
       return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">'
         + '<span style="font-size:13px;color:var(--text)">' + c + '</span>'
-        + (!inUse ? '<button onclick="removeCustomer(\'' + c + '\')" style="background:rgba(247,92,124,0.1);border:1px solid rgba(247,92,124,0.3);color:#f75c7c;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer">Remove</button>' : '<span style="font-size:11px;color:var(--text-muted)">In use</span>')
+        + (!inUse ? '<button onclick="removeCustomer(\'' + c + '\')" style="background:transparent;color:#f75c7c;border:none;font-size:15px;padding:3px 7px;cursor:pointer" title="Remove customer" aria-label="Remove customer">&#128465;</button>' : '<span style="font-size:11px;color:var(--text-muted)">In use</span>')
         + '</div>';
     }).join('');
   }
@@ -1517,7 +1549,7 @@ function renderDataManagement() {
       var inUse = incidents.some(function (i) { return i.area === a; });
       return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">'
         + '<span style="font-size:13px;color:var(--text)">' + a + '</span>'
-        + (!inUse ? '<button onclick="removeArea(\'' + a + '\')" style="background:rgba(247,92,124,0.1);border:1px solid rgba(247,92,124,0.3);color:#f75c7c;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer">Remove</button>' : '<span style="font-size:11px;color:var(--text-muted)">In use</span>')
+        + (!inUse ? '<button onclick="removeArea(\'' + a + '\')" style="background:transparent;color:#f75c7c;border:none;font-size:15px;padding:3px 7px;cursor:pointer" title="Remove area" aria-label="Remove area">&#128465;</button>' : '<span style="font-size:11px;color:var(--text-muted)">In use</span>')
         + '</div>';
     }).join('');
   }
@@ -2677,6 +2709,7 @@ function navigateInternal(page, el) {
     incidents: 'view_incidents',
     reports: 'view_reports',
     mailbox: 'view_mailbox',
+    drafts: 'view_drafts',
     users: 'manage_users',
     roles: 'manage_roles',
     customer360: 'view_customer360',
@@ -2700,12 +2733,13 @@ function navigateInternal(page, el) {
   pageEl.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   if (el) el.classList.add('active');
-  const titles = { home: 'Home', dashboard: 'Dashboard', incidents: 'Incident Management', mailbox: 'Operations', reports: 'Reports', users: 'User Management', roles: 'Role Management', customer360: 'Customer 360' };
+  const titles = { home: 'Home', dashboard: 'Dashboard', incidents: 'Incident Management', mailbox: 'Operations', drafts: 'Draft Review', reports: 'Reports', users: 'User Management', roles: 'Role Management', customer360: 'Customer 360' };
   if (page === 'home') renderHomePage();
   var _tbt = document.getElementById('topbarTitle'); if (_tbt) _tbt.textContent = titles[page] || page;
   if (page === 'incidents') renderIncidentTable();
   if (page === 'mailbox') startMailboxPolling();
   else stopMailboxPolling();
+  if (page === 'drafts') loadIncidentDrafts();
   if (page === 'users') { renderUsersTable(); }
   if (page === 'roles') { renderRolesGrid(); }
   if (page === 'reports') {
@@ -2836,7 +2870,7 @@ function addMailboxComposeImageTools(toolbar, editor) {
 
 function openMailboxSignatureManager() {
   var modal = document.createElement('div'); modal.className = 'modal-overlay open'; modal.id = 'mailboxSignatureModal';
-  modal.innerHTML = '<div class="modal" style="width:min(680px,94vw)"><div class="modal-head"><h3>✍ Email Signature</h3><button class="modal-close" type="button">×</button></div><div class="modal-body"><p style="margin-top:0;color:var(--text-muted);font-size:13px">Use the <strong>Signature</strong> button in a new, reply, or forward draft to add this signature when needed. It is private to your account.</p><div id="mailboxSignatureEditor" contenteditable="true" class="mailbox-rich-editor" style="min-height:160px"></div><div id="mailboxSignatureAdmin" style="margin-top:18px"></div></div><div class="modal-footer"><button type="button" class="btn btn-danger" id="mailboxSignatureDelete">Remove</button><button type="button" class="btn btn-primary" id="mailboxSignatureSave">Save Signature</button></div></div>';
+  modal.innerHTML = '<div class="modal" style="width:min(680px,94vw)"><div class="modal-head"><h3>✍ Email Signature</h3><button class="modal-close" type="button">×</button></div><div class="modal-body"><p style="margin-top:0;color:var(--text-muted);font-size:13px">Use the <strong>Signature</strong> button in a new, reply, or forward draft to add this signature when needed. It is private to your account.</p><div id="mailboxSignatureEditor" contenteditable="true" class="mailbox-rich-editor" style="min-height:160px"></div><div id="mailboxSignatureAdmin" style="margin-top:18px"></div></div><div class="modal-footer"><button type="button" class="btn btn-sm" id="mailboxSignatureDelete" style="background:transparent;color:#f75c7c;border:none;font-size:15px;padding:3px 7px;" title="Remove signature" aria-label="Remove signature">&#128465;</button><button type="button" class="btn btn-primary" id="mailboxSignatureSave">Save Signature</button></div></div>';
   document.body.appendChild(modal); var close = function () { modal.remove(); }; modal.querySelector('.modal-close').onclick = close;
   var editor = modal.querySelector('#mailboxSignatureEditor'); var token = mailboxToken();
   fetch(window.APP_CONFIG.API_BASE_URL + '/mailbox/signature', { headers: { Authorization: 'Bearer ' + token } }).then(function (r) { return r.json(); }).then(function (data) { editor.innerHTML = data?.data?.html || ''; });
@@ -2846,7 +2880,7 @@ function openMailboxSignatureManager() {
     var host = modal.querySelector('#mailboxSignatureAdmin'); var rows = data?.data || [];
     host.innerHTML = '<h4 style="margin:0 0 8px">User signatures</h4>' + (rows.length ? rows.map(function (row) {
       var id = Number(row.user_id);
-      return '<div data-signature-record="' + id + '" style="padding:8px 0;border-top:1px solid var(--border)"><div style="display:flex;justify-content:space-between;gap:10px"><span><strong>' + escapeMetricHtml(row.name) + '</strong><br><small>' + escapeMetricHtml(row.email) + '</small></span><span style="display:flex;gap:6px;align-items:start"><button class="btn btn-secondary btn-sm" data-view-signature="' + id + '">View</button><button class="btn btn-danger btn-sm" data-delete-signature="' + id + '">Remove</button></span></div></div>';
+      return '<div data-signature-record="' + id + '" style="padding:8px 0;border-top:1px solid var(--border)"><div style="display:flex;justify-content:space-between;gap:10px"><span><strong>' + escapeMetricHtml(row.name) + '</strong><br><small>' + escapeMetricHtml(row.email) + '</small></span><span style="display:flex;gap:6px;align-items:start"><button class="btn btn-secondary btn-sm" data-view-signature="' + id + '">View</button><button class="btn btn-sm" data-delete-signature="' + id + '" style="background:transparent;color:#f75c7c;border:none;font-size:15px;padding:3px 7px;" title="Remove signature" aria-label="Remove signature">&#128465;</button></span></div></div>';
     }).join('') : '<small>No saved user signatures.</small>');
     host.querySelectorAll('button[data-view-signature]').forEach(function (button) { button.onclick = function () {
       var id = Number(button.dataset.viewSignature); var record = host.querySelector('[data-signature-record="' + id + '"]'); var existing = record.querySelector('.admin-signature-preview');
@@ -3093,7 +3127,7 @@ renderMailboxList = function () {
     var from = document.createElement('div'); from.className = 'mailbox-from'; from.textContent = latest.mailboxSource === 'sent' ? ('To: ' + (latest.to || 'No recipient')) : (latest.fromName || latest.from);
     var subject = document.createElement('div'); subject.className = 'mailbox-subject'; subject.textContent = latest.subject || '(No subject)'; if (thread.messages.length > 1) { var total = document.createElement('span'); total.className = 'mailbox-category'; total.textContent = thread.messages.length + ' messages'; subject.appendChild(total); }
     var meta = document.createElement('div'); meta.className = 'mailbox-meta'; meta.textContent = mailboxDate(latest.sentAt || latest.receivedAt); var preview = document.createElement('div'); preview.className = 'mailbox-meta'; preview.textContent = mailboxPlainText(latest.preview || ''); if (isConversation) row.appendChild(toggle); row.append(from, subject, meta, preview);
-    if (mailboxActiveView !== 'sent' && hasPermission('create_incidents') && latest.mailboxSource !== 'sent') { var create = latest.incidentCreated ? mailboxIncidentCreatedAction(latest) : mailboxCreateIncidentButton(latest); create.classList.add('mailbox-row-create-incident'); row.appendChild(create); }
+    if (mailboxActiveView !== 'sent' && hasPermission('create_incidents') && latest.mailboxSource !== 'sent') { var create = latest.incidentCreated ? mailboxIncidentCreatedAction(latest) : latest.incidentDraft ? mailboxIncidentDraftAction(latest) : mailboxCreateIncidentButton(latest); create.classList.add('mailbox-row-create-incident'); row.appendChild(create); }
     list.appendChild(row);
     if (isConversation && expanded) thread.messages.forEach(function (message) { var child = document.createElement('div'); child.className = 'mailbox-thread-message' + (!message.isRead && message.mailboxSource !== 'sent' ? ' unread' : '') + (message.id === selectedMailboxId ? ' active' : ''); child.onclick = function () { openMailboxMessage(message.id); }; var sender = document.createElement('div'); sender.className = 'mailbox-from'; sender.textContent = message.mailboxSource === 'sent' ? ('To: ' + (message.to || 'No recipient')) : (message.fromName || message.from); var line = document.createElement('div'); line.className = 'mailbox-meta'; line.textContent = mailboxPlainText(message.preview || ''); var source = document.createElement('span'); source.className = 'mailbox-category'; source.textContent = message.mailboxSource === 'sent' ? 'Sent' : 'Inbox'; var childIncidentBadge = mailboxIncidentCreatedBadge(message); child.append(sender, line, source); if (childIncidentBadge) child.appendChild(childIncidentBadge); list.appendChild(child); });
   });
@@ -3167,6 +3201,11 @@ function openCreateIncidentFromOperationsEmail(message, button) {
       selectedTZ = 'IST'; renderTZSelector('createTZSelector', 'IST', 'changeCreateTZ(this.value)');
       var dateHint = document.getElementById('f_date_tz_hint'); if (dateHint) dateHint.textContent = 'Email received time (IST); converted after customer selection.';
       pendingOperationsEmailAuditId = prefill.audit_id || null;
+      pendingOperationsEmailSource = { id: prefill.email_id || message.id, receivedAt: prefill.received_at || message.receivedAt || null };
+      pendingIncidentDraftId = null;
+      var reviewElapsed = isOperationsEmailReviewElapsed(pendingOperationsEmailSource);
+      var draftButton = document.getElementById('saveDraftBtn'); if (draftButton) draftButton.style.display = reviewElapsed ? 'none' : '';
+      var createButton = document.getElementById('saveIncidentBtn'); if (createButton) createButton.textContent = 'Create Incident';
       var autoSelectionHint = applyOperationsIncidentAutoSelection(prefill.auto_selection);
       if (prefill.customer) {
         var customerSelect = document.getElementById('f_customer'); customerSelect.value = prefill.customer.name;
@@ -3192,6 +3231,27 @@ function mailboxIncidentCreatedBadge(message) {
   return badge;
 }
 
+function draftReviewRemaining(deadline) {
+  var milliseconds = new Date(deadline || 0).getTime() - Date.now();
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0) return '';
+  var totalSeconds = Math.ceil(milliseconds / 1000), minutes = Math.floor(totalSeconds / 60), seconds = totalSeconds % 60;
+  return String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+}
+
+function isOperationsEmailReviewElapsed(source) {
+  var receivedAt = new Date(source?.receivedAt || 0).getTime();
+  return Number.isFinite(receivedAt) && receivedAt > 0 && Date.now() - receivedAt >= 10 * 60 * 1000;
+}
+
+function mailboxIncidentDraftAction(message) {
+  var button = document.createElement('button'); button.type = 'button'; button.className = 'mailbox-incident-created-action';
+  var status = effectiveDraftStatus({ status: message?.draftStatus, review_deadline_at: message?.reviewDeadlineAt });
+  button.textContent = status === 'ready' ? 'Ready to Create' : status === 'resolved' ? 'Resolved' : 'Reviewing · ' + (draftReviewRemaining(message?.reviewDeadlineAt) || '00:00');
+  button.title = status === 'ready' ? 'Review this draft and prepare the notification email' : status === 'resolved' ? 'This draft was marked resolved; no incident has been created.' : 'Draft saved; review period is calculated from the email received time.';
+  button.onclick = function (event) { event.stopPropagation(); navigate('drafts', document.getElementById('draftsNav')); };
+  return button;
+}
+
 function mailboxIncidentCreatedAction(message) {
   var indicator = document.createElement('div'); indicator.className = 'mailbox-incident-created-action'; indicator.textContent = '✓ Incident Created · ' + message.incidentRef; indicator.title = 'An incident has already been created from this email';
   return indicator;
@@ -3201,6 +3261,153 @@ function mailboxIncidentCreatedNotice(message) {
   if (!message || !message.incidentCreated || !message.incidentRef) return null;
   var notice = document.createElement('div'); notice.className = 'mailbox-incident-created-notice'; notice.textContent = '✓ Incident Created from this email · ' + message.incidentRef;
   return notice;
+}
+
+function draftStatusLabel(draft) {
+  var status = effectiveDraftStatus(draft);
+  if (status === 'ready') return 'Ready to Create';
+  if (status === 'resolved') return 'Resolved';
+  if (status === 'finalized') return 'Created · ' + (draft.finalized_incident_ref || 'Incident');
+  return 'Reviewing · ' + (draftReviewRemaining(draft.review_deadline_at) || '00:00');
+}
+
+function effectiveDraftStatus(draft) {
+  return draft?.status === 'reviewing' && !draftReviewRemaining(draft?.review_deadline_at) ? 'ready' : String(draft?.status || 'reviewing');
+}
+
+function loadIncidentDrafts() {
+  var host = document.getElementById('draftReviewList');
+  if (!host || !window.APP_CONFIG?.ENABLE_BACKEND) return;
+  host.innerHTML = '<div class="mailbox-empty">Loading drafts…</div>';
+  fetch(window.APP_CONFIG.API_BASE_URL + '/incidents/drafts', { headers: { Authorization: 'Bearer ' + sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY) } })
+    .then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to load draft incidents'); return data.data || []; }); })
+    .then(function (drafts) { incidentDrafts = drafts; renderIncidentDrafts(); })
+    .catch(function (error) { host.innerHTML = '<div class="mailbox-empty"></div>'; host.firstChild.textContent = error.message; });
+}
+
+function renderIncidentDrafts() {
+  var host = document.getElementById('draftReviewList'), banner = document.getElementById('draftReviewBanner');
+  if (!host) return;
+  var canDelete = hasPermission('delete_drafts');
+  var availableIds = new Set(incidentDrafts.map(function (draft) { return Number(draft.id); }));
+  selectedIncidentDraftIds.forEach(function (id) { if (!availableIds.has(Number(id))) selectedIncidentDraftIds.delete(id); });
+  var reviewing = incidentDrafts.filter(function (draft) { return effectiveDraftStatus(draft) === 'reviewing'; }).length;
+  if (banner) { banner.style.display = reviewing ? '' : 'none'; banner.textContent = reviewing ? reviewing + ' draft' + (reviewing === 1 ? '' : 's') + ' still in review. Timers are calculated from the source email received time.' : ''; }
+  if (!incidentDrafts.length) { host.innerHTML = '<div class="mailbox-empty">No draft incidents need review.</div>'; updateDraftBulkControls(); return; }
+  host.innerHTML = incidentDrafts.map(function (draft) {
+    var effectiveStatus = effectiveDraftStatus(draft), status = draftStatusLabel(draft), color = effectiveStatus === 'ready' ? 'var(--success)' : effectiveStatus === 'resolved' ? 'var(--warning)' : 'var(--accent)';
+    var action = effectiveStatus === 'ready' ? '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();prepareIncidentDraft(' + Number(draft.id) + ')">Email and Create Incident</button>' : '';
+    var resolve = effectiveStatus === 'reviewing' || effectiveStatus === 'ready' ? '<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();markIncidentDraftResolved(' + Number(draft.id) + ')">Mark Resolved</button>' : '';
+    var remove = canDelete && effectiveStatus !== 'finalized' ? '<button class="btn btn-sm" onclick="event.stopPropagation();deleteIncidentDraft(' + Number(draft.id) + ')" style="background:transparent;color:#f75c7c;border:none;font-size:15px;padding:3px 7px;" title="Delete draft" aria-label="Delete draft">&#128465;</button>' : '';
+    var selector = canDelete ? '<input class="draft-review-select" type="checkbox" data-draft-select="' + Number(draft.id) + '" aria-label="Select draft" ' + (selectedIncidentDraftIds.has(Number(draft.id)) ? 'checked' : '') + '/>' : '';
+    return '<article class="draft-review-card" data-draft-card="' + Number(draft.id) + '" tabindex="0" role="button" aria-label="Open draft" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;display:flex;gap:16px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;cursor:pointer">'
+      + '<div style="min-width:250px;flex:1"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' + selector + '<strong style="color:var(--text)">' + escapeMetricHtml(draft.title || 'Untitled alert') + '</strong><span class="badge" style="color:' + color + ';border-color:' + color + '">' + escapeMetricHtml(status) + '</span></div>'
+      + '<div style="margin-top:7px;color:var(--text-muted);font-size:12px">' + escapeMetricHtml(draft.draft_ref) + ' · ' + escapeMetricHtml(draft.customer || 'Customer not selected') + ' · ' + escapeMetricHtml(draft.severity || 'Severity not selected') + '</div>'
+      + '<div style="margin-top:6px;color:var(--text-muted);font-size:11px">' + (draft.is_manual ? 'Manual draft · ready when saved' : 'Email received: ' + escapeMetricHtml(mailboxDate(draft.source_received_at)) + ' · Review ends: ' + escapeMetricHtml(mailboxDate(draft.review_deadline_at))) + '</div></div>'
+      + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + action + resolve + remove + '</div></article>';
+  }).join('');
+  host.querySelectorAll('[data-draft-card]').forEach(function (card) {
+    function open(event) { if (!event.target.closest('button,input,label')) viewIncidentDraft(Number(card.dataset.draftCard)); }
+    card.onclick = open;
+    card.onkeydown = function (event) {
+      if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('button,input,label')) {
+        event.preventDefault();
+        viewIncidentDraft(Number(card.dataset.draftCard));
+      }
+    };
+  });
+  host.querySelectorAll('[data-draft-select]').forEach(function (checkbox) {
+    checkbox.onclick = function (event) { event.stopPropagation(); };
+    checkbox.onchange = function () {
+      var id = Number(checkbox.dataset.draftSelect);
+      if (checkbox.checked) selectedIncidentDraftIds.add(id); else selectedIncidentDraftIds.delete(id);
+      updateDraftBulkControls();
+    };
+  });
+  updateDraftBulkControls();
+  if (incidentDraftCountdownTimer) clearInterval(incidentDraftCountdownTimer);
+  if (reviewing) incidentDraftCountdownTimer = setInterval(function () { var page = document.getElementById('page-drafts'); if (!page?.classList.contains('active')) { clearInterval(incidentDraftCountdownTimer); incidentDraftCountdownTimer = null; return; } renderIncidentDrafts(); }, 1000);
+}
+
+function updateDraftBulkControls() {
+  var enabled = hasPermission('delete_drafts'), button = document.getElementById('draftBulkDeleteBtn'), all = document.getElementById('draftSelectAll'), wrap = document.getElementById('draftSelectAllWrap');
+  if (button) { button.style.display = enabled && selectedIncidentDraftIds.size ? '' : 'none'; button.textContent = 'Delete selected (' + selectedIncidentDraftIds.size + ')'; }
+  if (wrap) wrap.style.display = enabled && incidentDrafts.length ? '' : 'none';
+  if (all) {
+    all.checked = enabled && incidentDrafts.length > 0 && selectedIncidentDraftIds.size === incidentDrafts.length;
+    all.indeterminate = enabled && selectedIncidentDraftIds.size > 0 && selectedIncidentDraftIds.size < incidentDrafts.length;
+  }
+}
+
+function toggleDraftSelectAll(checked) {
+  if (!hasPermission('delete_drafts')) return;
+  incidentDrafts.forEach(function (draft) { if (checked) selectedIncidentDraftIds.add(Number(draft.id)); else selectedIncidentDraftIds.delete(Number(draft.id)); });
+  renderIncidentDrafts();
+}
+
+async function deleteSelectedIncidentDrafts() {
+  var ids = Array.from(selectedIncidentDraftIds);
+  if (!ids.length || !hasPermission('delete_drafts')) return;
+  var confirmed = await showConfirm({ title: 'Delete selected drafts?', msg: ids.length + ' draft' + (ids.length === 1 ? '' : 's') + ' will be permanently removed. No incident or notification email has been created for these drafts.', ok: 'Delete Drafts', danger: true, icon: 'ðŸ—‘' });
+  if (!confirmed) return;
+  Promise.all(ids.map(function (id) {
+    return fetch(window.APP_CONFIG.API_BASE_URL + '/incidents/drafts/' + encodeURIComponent(id), { method: 'DELETE', headers: { Authorization: 'Bearer ' + sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY) } })
+      .then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to delete draft'); }); });
+  }))
+    .then(function () { selectedIncidentDraftIds.clear(); showToast(ids.length + ' draft' + (ids.length === 1 ? '' : 's') + ' deleted.', 'success'); loadIncidentDrafts(); loadMailbox({ silent: true }); })
+    .catch(function (error) { showToast(error.message, 'error'); loadIncidentDrafts(); });
+}
+
+function viewIncidentDraft(id) {
+  var draft = incidentDrafts.find(function (item) { return Number(item.id) === Number(id); });
+  if (!draft) return;
+  var existing = document.getElementById('incidentDraftDetailModal'); if (existing) existing.remove();
+  var modal = document.createElement('div'); modal.id = 'incidentDraftDetailModal'; modal.className = 'modal-overlay open';
+  var timing = draft.is_manual ? 'Manual draft. It is ready to create and no notification email has been sent.' : 'Source email received: ' + escapeMetricHtml(mailboxDate(draft.source_received_at)) + '. The 10-minute review deadline is ' + escapeMetricHtml(mailboxDate(draft.review_deadline_at)) + '.';
+  modal.innerHTML = '<div class="modal" style="width:min(680px,94vw)"><div class="modal-header"><div class="modal-title">Draft Incident</div><button class="modal-close" type="button">×</button></div><div class="modal-body"><div style="margin-bottom:14px;color:var(--accent);font-size:13px;font-weight:700">' + escapeMetricHtml(draftStatusLabel(draft)) + '</div><div class="form-grid"><div class="form-group form-full"><label class="form-label">Title</label><div style="color:var(--text)">' + escapeMetricHtml(draft.title || '') + '</div></div><div class="form-group"><label class="form-label">Customer</label><div style="color:var(--text)">' + escapeMetricHtml(draft.customer || '') + '</div></div><div class="form-group"><label class="form-label">Severity</label><div style="color:var(--text)">' + escapeMetricHtml(draft.severity || '') + '</div></div><div class="form-group form-full"><label class="form-label">Description</label><div style="white-space:pre-wrap;color:var(--text);line-height:1.5">' + escapeMetricHtml(mailboxPlainText(draft.payload?.description || '')) + '</div></div></div><div style="margin-top:14px;font-size:12px;color:var(--text-muted)">' + timing + '</div></div><div class="modal-footer"><button class="btn btn-secondary" type="button">Close</button></div></div>';
+  function close() { modal.remove(); } modal.addEventListener('click', function (event) { if (event.target === modal) close(); }); modal.querySelectorAll('button').forEach(function (button) { if (button.textContent === '×' || button.textContent === 'Close') button.onclick = close; }); document.body.appendChild(modal);
+}
+
+function prepareIncidentDraft(id) {
+  fetch(window.APP_CONFIG.API_BASE_URL + '/incidents/drafts/' + encodeURIComponent(id), { headers: { Authorization: 'Bearer ' + sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY) } })
+    .then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to load draft'); return data.data; }); })
+    .then(function (draft) {
+      if (draft.status !== 'ready') { showToast(draft.status === 'reviewing' ? 'This draft is still in review.' : 'This draft cannot be created.', 'error'); loadIncidentDrafts(); return; }
+      openCreateIncidentModal();
+      var payload = draft.payload || {}; pendingIncidentDraftId = draft.id; pendingOperationsEmailAuditId = draft.operations_email_audit_id || null; pendingOperationsEmailSource = null;
+      document.getElementById('f_title').value = payload.title || ''; document.getElementById('f_customer').value = payload.customer || ''; document.getElementById('f_project').value = payload.project || '';
+      document.getElementById('f_severity').value = payload.severity || ''; document.getElementById('f_status').value = payload.status || 'New';
+      // The create modal loads engineers asynchronously. Apply the saved
+      // assignee after the list is rebuilt, not while it still says Loading.
+      ensureEngineerDropdownsLoaded(function () { var engineerSelect = document.getElementById('f_engineer'); if (engineerSelect) engineerSelect.value = payload.engineer || ''; });
+      document.getElementById('f_area').value = payload.area || ''; var fpl = document.getElementById('f_product_line'); if (fpl) fpl.value = payload.product_line || 'Application'; var fsf = document.getElementById('f_sf_case'); if (fsf) fsf.value = payload.sf_case || ''; var frd = document.getElementById('f_rd_tickets'); if (frd) frd.value = payload.rd_tickets || '';
+      document.getElementById('f_date').value = String(payload.startDT || payload.date_time_opened || '').replace(' ', 'T').slice(0, 16); selectedTZ = payload.timezone || 'IST'; renderTZSelector('createTZSelector', selectedTZ, 'changeCreateTZ(this.value)');
+      setDescriptionEditorValue(payload.description || ''); createModalTags = Array.isArray(payload.tags) ? payload.tags.slice() : []; renderCreateTagChips();
+      var mainButton = document.getElementById('saveIncidentBtn'); if (mainButton) mainButton.textContent = 'Prepare Email'; var draftButton = document.getElementById('saveDraftBtn'); if (draftButton) draftButton.style.display = 'none';
+    }).catch(function (error) { showToast(error.message, 'error'); });
+}
+
+function markIncidentDraftResolved(id) {
+  fetch(window.APP_CONFIG.API_BASE_URL + '/incidents/drafts/' + encodeURIComponent(id) + '/resolve', { method: 'POST', headers: { Authorization: 'Bearer ' + sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY) } })
+    .then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to update draft'); return data; }); })
+    .then(function () { showToast('Draft marked resolved. Delete it if no incident is needed.', 'success'); loadIncidentDrafts(); loadMailbox({ silent: true }); })
+    .catch(function (error) { showToast(error.message, 'error'); });
+}
+
+async function deleteIncidentDraft(id) {
+  if (!hasPermission('delete_drafts')) { showToast('Your role cannot delete draft incidents.', 'error'); return; }
+  var confirmed = await showConfirm({
+    title: 'Delete Draft?',
+    msg: 'No incident or notification email has been created. This draft will be permanently removed.',
+    ok: 'Delete Draft',
+    danger: true,
+    icon: '🗑'
+  });
+  if (!confirmed) return;
+  fetch(window.APP_CONFIG.API_BASE_URL + '/incidents/drafts/' + encodeURIComponent(id), { method: 'DELETE', headers: { Authorization: 'Bearer ' + sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY) } })
+    .then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to delete draft'); return data; }); })
+    .then(function () { showToast('Draft deleted. No incident or notification email was created.', 'success'); loadIncidentDrafts(); loadMailbox({ silent: true }); })
+    .catch(function (error) { showToast(error.message, 'error'); });
 }
 
 function mailboxComposeToolbar(editor) {
@@ -3306,6 +3513,9 @@ function switchRole(role) {
   el = document.getElementById('mailboxNav');
   if (el) el.style.display = can('view_mailbox') ? '' : 'none';
 
+  el = document.getElementById('draftsNav');
+  if (el) el.style.display = can('view_drafts') ? '' : 'none';
+
   // Reports nav section — only if can view reports
   el = document.getElementById('reportsNav');
   if (el) el.style.display = can('view_reports') ? '' : 'none';
@@ -3364,6 +3574,7 @@ function switchRole(role) {
   if (page === 'reports' && !can('view_reports')) forbidden = true;
   if (page === 'incidents' && !can('view_incidents')) forbidden = true;
   if (page === 'mailbox' && !can('view_mailbox')) forbidden = true;
+  if (page === 'drafts' && !can('view_drafts')) forbidden = true;
   if (page === 'users' && !can('manage_users')) forbidden = true;
   if (page === 'roles' && !can('manage_roles')) forbidden = true;
   // Redirect if on a now-forbidden page (e.g. role permissions were just changed)
@@ -3417,6 +3628,8 @@ const PERM_LABELS = {
   view_mailbox: 'View Operations',
   send_mailbox: 'Send Operations Mail',
   delete_mailbox: 'Delete Operations Emails',
+  view_drafts: 'View Drafts',
+  delete_drafts: 'Delete Drafts',
   manage_users: 'Manage Users',
   manage_roles: 'Manage Roles',
   assign_roles: 'Assign Roles',
@@ -3427,7 +3640,7 @@ let roles = [
   {
     key: 'admin', name: 'Admin', icon: '🛡', color: 'purple', system: true,
     desc: 'Full access to all portal features including user and role management.',
-    perms: ['view_dashboard', 'view_incidents', 'create_incidents', 'edit_incidents', 'close_incidents', 'delete_incidents', 'view_reports', 'export_reports', 'view_customer360', 'view_mailbox', 'send_mailbox', 'delete_mailbox', 'manage_users', 'manage_roles', 'assign_roles', 'manage_data']
+    perms: ['view_dashboard', 'view_incidents', 'create_incidents', 'edit_incidents', 'close_incidents', 'delete_incidents', 'view_reports', 'export_reports', 'view_customer360', 'view_mailbox', 'send_mailbox', 'delete_mailbox', 'view_drafts', 'delete_drafts', 'manage_users', 'manage_roles', 'assign_roles', 'manage_data']
   },
   {
     key: 'cso', name: 'CSO', icon: '🌐', color: 'green', system: false,
@@ -3710,7 +3923,7 @@ function renderRolesGrid() {
         </div>
         <div class="role-card-actions">
           <button class="btn btn-secondary btn-sm" onclick="openRoleModal('${r.key}')">✏ Edit</button>
-          ${!r.system ? `<button class="btn btn-danger btn-sm" onclick="deleteRole('${r.key}')">✕</button>` : ''}
+          ${!r.system ? `<button class="btn btn-sm" onclick="deleteRole('${r.key}')" style="background:transparent;color:#f75c7c;border:none;font-size:15px;padding:3px 7px;" title="Delete role" aria-label="Delete role">&#128465;</button>` : ''}
         </div>
       </div>
       <div class="role-card-desc">${r.desc}</div>
@@ -3904,6 +4117,16 @@ function applyFilters() {
   filteredIncidents = getSortedIncidents(filteredIncidents);
   currentPage = 1;
   renderIncidentTable();
+  updateIncidentClearButton();
+}
+
+function updateIncidentClearButton() {
+  var button = document.getElementById('incidentClearFiltersBtn');
+  if (!button) return;
+  var hasSelection = ['severityFilter', 'statusFilter', 'customerFilter', 'areaFilter', 'assigneeFilter'].some(function (id) { return getMsValues(id).length > 0; });
+  var hasSearch = String(document.getElementById('searchFilter')?.value || '').trim().length > 0;
+  var hasDate = Boolean(document.getElementById('dateFrom')?.value || document.getElementById('dateTo')?.value);
+  button.style.display = hasSelection || hasSearch || hasDate ? '' : 'none';
 }
 
 function clearDrillDown() {
@@ -3925,6 +4148,7 @@ function clearFilters() {
   filteredIncidents = [...incidents];
   currentPage = 1;
   renderIncidentTable();
+  updateIncidentClearButton();
   var badge = document.getElementById('drillDownBadge');
   if (badge) badge.style.display = 'none';
 }
@@ -4529,6 +4753,7 @@ function openModal(id) {
     var _imt = document.getElementById('incidentModalTitle'); if (_imt) _imt.textContent = 'Create New Incident';
     createModalTags = []; renderCreateTagChips();
     var _sib = document.getElementById('saveIncidentBtn'); if (_sib) _sib.textContent = 'Create Incident';
+    var _sdb = document.getElementById('saveDraftBtn'); if (_sdb) _sdb.style.display = '';
     ['f_title', 'f_customer', 'f_project', 'f_product_line', 'f_severity', 'f_status', 'f_engineer', 'f_sf_case', 'f_rd_tickets', 'f_area'].forEach(f => {
       const el = document.getElementById(f);
       if (el) el.value = f === 'f_status' ? 'New' : '';
@@ -4546,6 +4771,8 @@ function openModal(id) {
 
 function openCreateIncidentModal() {
   editingId = null;
+  pendingIncidentDraftId = null;
+  pendingOperationsEmailSource = null;
   createModalTags = [];
   renderCreateTagChips();
   var tagInput = document.getElementById('f_tag_input');
@@ -4563,7 +4790,7 @@ function closeModal(id) {
     if (tagInput) tagInput.value = '';
     closeCreateTagSuggestions();
   }
-  if (id === 'incidentModal') pendingOperationsEmailAuditId = null;
+  if (id === 'incidentModal') { pendingOperationsEmailAuditId = null; pendingOperationsEmailSource = null; pendingIncidentDraftId = null; }
   editingId = null;
 }
 
@@ -4985,6 +5212,45 @@ function confirmCloseIncident() {
   showToast(`${id} closed — downtime recorded: ${inc.downtimeStr}`, 'success');
 }
 
+function saveIncidentDraft() {
+  if (!hasPermission('create_incidents')) { showToast('Access denied', 'error'); return; }
+  var manualDraft = !pendingOperationsEmailSource?.id || !pendingOperationsEmailSource?.receivedAt;
+  var title = document.getElementById('f_title').value.trim();
+  var customer = document.getElementById('f_customer').value;
+  var project = document.getElementById('f_project').value;
+  var productLine = document.getElementById('f_product_line')?.value || '';
+  var severity = document.getElementById('f_severity').value;
+  var status = document.getElementById('f_status').value;
+  var engineer = document.getElementById('f_engineer').value;
+  var dateRaw = document.getElementById('f_date').value;
+  var openedAt = toMysqlDatetime(dateRaw || '');
+  var mttdH = parseInt(document.getElementById('f_mttd_h')?.value) || 0;
+  var mttdM = parseInt(document.getElementById('f_mttd_m')?.value) || 0;
+  var mttdMinutes = (mttdH * 60) + mttdM;
+  if (!title || !customer || !severity || !engineer) { showToast('Please fill in all required fields', 'error'); return; }
+  var draftButton = document.getElementById('saveDraftBtn');
+  if (draftButton) { draftButton.disabled = true; draftButton.textContent = 'Saving…'; }
+  var payload = {
+    title: title, customer: customer, project: project, product_line: productLine, severity: severity, status: status,
+    engineer: engineer, date_created: openedAt, startDT: openedAt, date_time_opened: openedAt, timezone: selectedTZ,
+    mttd_minutes: mttdMinutes > 0 ? mttdMinutes : null, mttdStr: mttdMinutes > 0 ? minutesToHM(mttdMinutes) : '',
+    sf_case: (document.getElementById('f_sf_case')?.value || '').trim(), rd_tickets: (document.getElementById('f_rd_tickets')?.value || '').trim(),
+    description: descriptionEditorValue(), area: document.getElementById('f_area')?.value || '', tags: createModalTags.slice(),
+    operations_email_audit_id: pendingOperationsEmailAuditId, manual_draft: manualDraft,
+    source_message_id: manualDraft ? null : pendingOperationsEmailSource.id,
+    source_received_at: manualDraft ? null : pendingOperationsEmailSource.receivedAt
+  };
+  fetch(window.APP_CONFIG.API_BASE_URL + '/incidents/drafts', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY) }, body: JSON.stringify(payload)
+  }).then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to save draft'); return data.data; }); })
+    .then(function (draft) {
+      mailboxMessages.forEach(function (message) { if (!draft.is_manual && message.id === draft.source_message_id) { message.incidentDraft = true; message.draftId = draft.id; message.draftRef = draft.draft_ref; message.draftStatus = draft.status; message.reviewDeadlineAt = draft.review_deadline_at; } });
+      renderMailboxList(); closeModal('incidentModal'); loadIncidentDrafts();
+      showToast(draft.is_manual ? 'Manual draft saved. It is ready to create.' : draft.status === 'ready' ? 'Draft saved. It is ready to create.' : 'Draft saved. Review time is based on the email received time.', 'success');
+    }).catch(function (error) { showToast(error.message, 'error'); })
+    .finally(function () { if (draftButton) { draftButton.disabled = false; draftButton.textContent = 'Save Draft'; } });
+}
+
 function saveIncident() {
   if (!editingId && !hasPermission('create_incidents')) { showToast('Access denied', 'error'); return; }
   if (editingId && !hasPermission('edit_incidents')) { showToast('Access denied', 'error'); return; }
@@ -5014,6 +5280,22 @@ function saveIncident() {
   const resolvedBy = document.getElementById('f_resolved_by')?.value || '';
   const sfCase = (document.getElementById('f_sf_case')?.value || '').trim();
   const rdTickets = (document.getElementById('f_rd_tickets')?.value || '').trim();
+
+  if (!editingId && !pendingIncidentEmail && pendingIncidentDraftId) {
+    showPreSendEmailPreview({ title, customer, project, product_line: productLine, severity, status, engineer, startDT: openedAt, timezone: selectedTZ, description: desc, area });
+    return;
+  }
+
+  if (!editingId && !pendingIncidentEmail && pendingOperationsEmailSource && isOperationsEmailReviewElapsed(pendingOperationsEmailSource)) {
+    showPreSendEmailPreview({ title, customer, project, product_line: productLine, severity, status,
+      engineer, startDT: openedAt, timezone: selectedTZ, description: desc, area });
+    return;
+  }
+
+  if (!editingId && !pendingIncidentEmail && pendingOperationsEmailSource) {
+    saveIncidentDraft();
+    return;
+  }
 
   if (!editingId && !pendingIncidentEmail) {
     showPreSendEmailPreview({ title, customer, project, product_line: productLine, severity, status,
@@ -5116,6 +5398,7 @@ function saveIncident() {
         area,
         tags: createModalTags.slice(),
         operations_email_audit_id: pendingOperationsEmailAuditId,
+        draft_id: pendingIncidentDraftId,
         notification_email: pendingIncidentEmail
       };
 
@@ -5144,6 +5427,8 @@ function saveIncident() {
             }
             pendingIncidentEmail = null;
             pendingOperationsEmailAuditId = null;
+            pendingOperationsEmailSource = null;
+            pendingIncidentDraftId = null;
             showToast(`${data.data.id} created successfully`, 'success');
             if (data.data.email && data.data.email.sent) {
               showToast(`Email sent to ${data.data.email.to}`, 'success');
@@ -5225,7 +5510,7 @@ function renderUsersTable() {
           <button class="btn btn-secondary btn-sm" onclick="editUserRole('${u.id}')">Change Role</button>
           <button class="btn btn-secondary btn-sm" onclick="changeUserPassword('${u.id}')">Change Password</button>
           <button class="btn btn-danger btn-sm" onclick="toggleUser('${u.id}')">${u.active ? 'Deactivate' : 'Activate'}</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteUser('${u.id}')">Delete</button>
+          <button class="btn btn-sm" onclick="deleteUser('${u.id}')" style="background:transparent;color:#f75c7c;border:none;font-size:15px;padding:3px 7px;" title="Delete user" aria-label="Delete user">&#128465;</button>
         </div>
       </td>
     </tr>
@@ -5812,6 +6097,7 @@ function setPageRefreshState(page, isLoading, errorMessage) {
 function renderPageAfterRefresh(page) {
   if (page === 'home') { renderHomePage(); return; }
   if (page === 'mailbox') { loadMailbox(); return; }
+  if (page === 'drafts') { loadIncidentDrafts(); return; }
   if (page === 'incidents') {
     if (typeof applyFilters === 'function') applyFilters();
     else renderIncidentTable();
@@ -5918,6 +6204,10 @@ function refreshDashboardData(options) {
 }
 function updateStats() {
   var data = getDashboardFilteredIncidents();
+  var selectedCustomers = getMsValues('df_customer');
+  var historianCard = document.getElementById('statHistorianDowntimeCard');
+  var showHistorianCard = !selectedCustomers.length || (selectedCustomers.length === 1 && String(selectedCustomers[0] || '').trim().toLowerCase() === 'ngc');
+  if (historianCard) historianCard.style.display = showHistorianCard ? '' : 'none';
   var open = data.filter(isActiveIncident).length;
   var closed = data.filter(function (i) { return i.status === 'Closed' || i.status === 'Resolved'; }).length;
 
@@ -8192,7 +8482,7 @@ function exportIncidentPDF() {
   parts.push('<div class="field"><div class="field-lbl">Start Time (' + pdfTZ + ')</div><div class="field-val">' + startTime + '</div></div>');
   parts.push('<div class="field"><div class="field-lbl">End Time (' + pdfTZ + ')</div><div class="field-val">' + endTime + '</div></div>');
   parts.push('</div>');
-  parts.push('<div class="downtime-box"><div class="downtime-val">' + downtime + '</div><div class="downtime-lbl">' + (isCriticalSeverity(inc) ? 'Critical SLA' : 'Total Downtime') + '</div></div>');
+  parts.push('<div class="downtime-box"><div class="downtime-val">' + downtime + '</div><div class="downtime-lbl">Total Downtime</div></div>');
   parts.push('<div class="grid2" style="margin-top:12px">');
   parts.push('<div class="field"><div class="field-lbl">Mean Time to Detect (MTTD)</div><div class="field-val" style="font-weight:700;color:#2563eb">' + mttd + '</div></div>');
   parts.push('</div>');
@@ -8294,10 +8584,19 @@ function updateReportPreview() {
   } else {
     var _rpm2 = document.getElementById('reportPreviewMore'); if (_rpm2) _rpm2.textContent = '';
   }
+  updateReportClearButton();
+}
+
+function updateReportClearButton() {
+  var button = document.getElementById('reportClearFiltersBtn');
+  if (!button) return;
+  var hasFilter = ['reportCustomerFilter', 'reportSeverityFilter', 'reportStatusFilter', 'reportAreaFilter', 'reportDateFrom', 'reportDateTo']
+    .some(function (id) { return Boolean(document.getElementById(id)?.value); });
+  button.style.display = hasFilter ? '' : 'none';
 }
 
 function clearReportFilters() {
-  ['reportCustomerFilter', 'reportSeverityFilter', 'reportStatusFilter', 'reportDateFrom', 'reportDateTo'].forEach(id => {
+  ['reportCustomerFilter', 'reportSeverityFilter', 'reportStatusFilter', 'reportAreaFilter', 'reportDateFrom', 'reportDateTo'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -9393,6 +9692,7 @@ function showPreSendEmailPreview(inc) {
   // modals and prevents a brief reappearance of the create form on submit.
   document.getElementById('incidentModal')?.classList.remove('open');
   const isCritical = String(inc.severity || '').toLowerCase() === 'critical';
+  loadRecipientDirectory();
   const historianRecipients = historianMailRecipientPreset(inc);
   const render = function (config) {
   const recipientConfig = historianRecipients || config;
@@ -9402,21 +9702,23 @@ function showPreSendEmailPreview(inc) {
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">${historianRecipients ? 'Historian notification recipients were prefilled. You may edit the draft before sending.' : (isCritical ? (config?.configured ? 'Critical incident recipients were loaded from the customer configuration. You may edit the draft before sending.' : 'No customer recipient configuration exists yet. Enter recipients manually before sending this critical incident notification.') : 'The notification defaults to your signed-in email address with the operations team copied. You may edit the recipients, subject, and message.')}</div>
     <div style="margin-bottom:12px">
       <label class="form-label required" for="notificationEmailToInput">To</label>
-      <div id="notificationEmailToChips" aria-label="To recipients" style="display:flex;flex-wrap:wrap;gap:6px;min-height:40px;padding:7px;border:1px solid var(--border);border-radius:7px;background:var(--surface2)"></div>
-      <div style="display:flex;gap:6px;margin-top:6px">
-        <input id="notificationEmailToInput" type="email" list="notificationRecipientSuggestions" style="flex:1;min-width:0" placeholder="Add recipient email" onkeydown="handlePreSendRecipientKeydown(event, 'to')">
+      <div id="notificationEmailToChips" class="notification-recipient-chips" aria-label="To recipients" style="display:flex;flex-wrap:wrap;gap:6px;min-height:40px;padding:7px;border:1px solid var(--border);border-radius:7px;background:var(--surface2)"></div>
+      <div style="display:flex;gap:6px;margin-top:6px;position:relative">
+        <input id="notificationEmailToInput" type="text" autocomplete="off" style="flex:1;min-width:0" placeholder="Add recipient email" oninput="showPreSendRecipientSuggestions('to')" onkeydown="handlePreSendRecipientKeydown(event, 'to')" onblur="hidePreSendRecipientSuggestions('to')">
+        <div id="notificationEmailToSuggestions" class="notification-recipient-suggestions" role="listbox" aria-label="To recipient suggestions"></div>
         <button type="button" class="btn btn-secondary btn-sm" onclick="addPreSendRecipient('to')">Add</button>
       </div>
     </div>
     <div style="margin-bottom:12px">
       <label class="form-label" for="notificationEmailCcInput">CC</label>
-      <div id="notificationEmailCcChips" aria-label="CC recipients" style="display:flex;flex-wrap:wrap;gap:6px;min-height:40px;padding:7px;border:1px solid var(--border);border-radius:7px;background:var(--surface2)"></div>
-      <div style="display:flex;gap:6px;margin-top:6px">
-        <input id="notificationEmailCcInput" type="email" list="notificationRecipientSuggestions" style="flex:1;min-width:0" placeholder="Add recipient email" onkeydown="handlePreSendRecipientKeydown(event, 'cc')">
+      <div id="notificationEmailCcChips" class="notification-recipient-chips" aria-label="CC recipients" style="display:flex;flex-wrap:wrap;gap:6px;min-height:40px;padding:7px;border:1px solid var(--border);border-radius:7px;background:var(--surface2)"></div>
+      <div style="display:flex;gap:6px;margin-top:6px;position:relative">
+        <input id="notificationEmailCcInput" type="text" autocomplete="off" style="flex:1;min-width:0" placeholder="Add recipient email" oninput="showPreSendRecipientSuggestions('cc')" onkeydown="handlePreSendRecipientKeydown(event, 'cc')" onblur="hidePreSendRecipientSuggestions('cc')">
+        <div id="notificationEmailCcSuggestions" class="notification-recipient-suggestions" role="listbox" aria-label="CC recipient suggestions"></div>
         <button type="button" class="btn btn-secondary btn-sm" onclick="addPreSendRecipient('cc')">Add</button>
       </div>
     </div>
-    <datalist id="notificationRecipientSuggestions"></datalist>
+    <div class="notification-recipient-help">Drag a recipient between To and CC, or start typing to search known email addresses.</div>
     <input id="notificationEmailTo" type="hidden">
     <input id="notificationEmailCc" type="hidden">
     <label class="form-label required" for="notificationEmailSubject">Subject</label>
@@ -9443,7 +9745,11 @@ function showPreSendEmailPreview(inc) {
   const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
   fetch(window.APP_CONFIG.API_BASE_URL + '/incidents/critical-email-recipients?customer=' + encodeURIComponent(inc.customer || ''), { headers: { Authorization: `Bearer ${token}` } })
     .then(r => r.ok ? r.json() : Promise.reject(new Error('Configuration lookup failed')))
-    .then(data => render(data?.data || null))
+    .then(data => {
+      const config = data?.data || null;
+      if (Array.isArray(config?.directory)) recipientDirectory = config.directory;
+      render(config);
+    })
     .catch(() => { showToast('Recipient configuration could not be loaded. Please enter recipients manually.', 'error'); render(null); });
 }
 
@@ -9479,15 +9785,41 @@ function renderPreSendRecipientEditors() {
     if (!host) return;
     const recipients = preSendRecipients[group] || [];
     host.innerHTML = recipients.length
-      ? recipients.map((email, index) => `<span title="${escapePreSendRecipientHtml(email)}" style="display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:4px 6px 4px 8px;border:1px solid color-mix(in srgb, var(--accent) 35%, var(--border));border-radius:14px;background:color-mix(in srgb, var(--accent) 9%, var(--surface));font-size:11px;color:var(--text)"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><strong>${escapePreSendRecipientHtml(preSendRecipientLabel(email))}</strong> <span style="color:var(--text-muted)">&lt;${escapePreSendRecipientHtml(email)}&gt;</span></span><button type="button" aria-label="Remove ${escapePreSendRecipientHtml(email)}" onclick="removePreSendRecipient('${group}', ${index})" style="border:0;background:transparent;color:var(--text-muted);padding:0 2px;font:inherit;font-size:15px;line-height:1;cursor:pointer" title="Remove recipient">×</button></span>`).join('')
+      ? recipients.map((email, index) => `<span class="notification-recipient-chip" draggable="true" data-recipient-group="${group}" data-recipient-email="${escapePreSendRecipientHtml(email)}" title="Drag to ${group === 'to' ? 'CC' : 'To'}"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><strong>${escapePreSendRecipientHtml(preSendRecipientLabel(email))}</strong> <span style="color:var(--text-muted)">&lt;${escapePreSendRecipientHtml(email)}&gt;</span></span><button type="button" aria-label="Remove ${escapePreSendRecipientHtml(email)}" onclick="removePreSendRecipient('${group}', ${index})" title="Remove recipient">×</button></span>`).join('')
       : `<span style="align-self:center;color:var(--text-muted);font-size:12px;padding:4px">No recipients added</span>`;
   });
-  const suggestions = document.getElementById('notificationRecipientSuggestions');
-  if (suggestions) {
-    const addresses = parsePreSendRecipientList([...(preSendRecipients.to || []), ...(preSendRecipients.cc || [])].join(','));
-    suggestions.innerHTML = addresses.map(email => `<option value="${escapePreSendRecipientHtml(email)}">${escapePreSendRecipientHtml(preSendRecipientLabel(email))}</option>`).join('');
-  }
+  bindPreSendRecipientDragAndDrop();
   syncPreSendRecipientFields();
+}
+
+function bindPreSendRecipientDragAndDrop() {
+  ['to', 'cc'].forEach(group => {
+    const host = document.getElementById(group === 'to' ? 'notificationEmailToChips' : 'notificationEmailCcChips');
+    if (!host) return;
+    host.ondragover = function (event) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; host.classList.add('recipient-drop-target'); };
+    host.ondragleave = function (event) { if (!host.contains(event.relatedTarget)) host.classList.remove('recipient-drop-target'); };
+    host.ondrop = function (event) { event.preventDefault(); host.classList.remove('recipient-drop-target'); movePreSendRecipientToGroup(group); };
+  });
+  document.querySelectorAll('.notification-recipient-chip').forEach(chip => {
+    chip.ondragstart = function (event) {
+      preSendRecipientDrag = { group: chip.dataset.recipientGroup, email: chip.dataset.recipientEmail };
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', JSON.stringify(preSendRecipientDrag));
+      chip.classList.add('dragging');
+    };
+    chip.ondragend = function () { chip.classList.remove('dragging'); document.querySelectorAll('.recipient-drop-target').forEach(host => host.classList.remove('recipient-drop-target')); };
+  });
+}
+
+function movePreSendRecipientToGroup(targetGroup) {
+  const dragged = preSendRecipientDrag;
+  preSendRecipientDrag = null;
+  if (!dragged || !dragged.email || dragged.group === targetGroup) return;
+  const key = dragged.email.toLowerCase();
+  preSendRecipients[dragged.group] = (preSendRecipients[dragged.group] || []).filter(email => email.toLowerCase() !== key);
+  preSendRecipients[targetGroup] = (preSendRecipients[targetGroup] || []).filter(email => email.toLowerCase() !== key);
+  preSendRecipients[targetGroup].push(dragged.email);
+  renderPreSendRecipientEditors();
 }
 
 function addPreSendRecipient(group) {
@@ -9503,6 +9835,7 @@ function addPreSendRecipient(group) {
     if (!preSendRecipients[group].some(existing => existing.toLowerCase() === key)) preSendRecipients[group].push(email);
   });
   if (input) input.value = '';
+  hidePreSendRecipientSuggestions(group);
   renderPreSendRecipientEditors();
 }
 
@@ -9511,11 +9844,64 @@ function removePreSendRecipient(group, index) {
   renderPreSendRecipientEditors();
 }
 
+function preSendRecipientDirectory() {
+  const directory = new Map();
+  const add = function (email, name) {
+    const address = String(email || '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) return;
+    const key = address.toLowerCase();
+    if (!directory.has(key)) directory.set(key, { email: address, name: String(name || preSendRecipientLabel(address)).trim() });
+  };
+  (Array.isArray(recipientDirectory) ? recipientDirectory : []).forEach(entry => add(entry?.email, entry?.name));
+  (Array.isArray(users) ? users : []).forEach(user => add(user?.email, user?.name));
+  add(currentUserProfile?.email, currentUserProfile?.name);
+  [...(preSendRecipients.to || []), ...(preSendRecipients.cc || [])].forEach(email => add(email));
+  return Array.from(directory.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function showPreSendRecipientSuggestions(group) {
+  const input = document.getElementById(group === 'to' ? 'notificationEmailToInput' : 'notificationEmailCcInput');
+  const menu = document.getElementById(group === 'to' ? 'notificationEmailToSuggestions' : 'notificationEmailCcSuggestions');
+  if (!input || !menu) return;
+  const query = input.value.trim().toLowerCase();
+  if (!query) { menu.style.display = 'none'; menu.innerHTML = ''; return; }
+  const matches = preSendRecipientDirectory().filter(entry => entry.email.toLowerCase().includes(query) || entry.name.toLowerCase().includes(query)).slice(0, 8);
+  if (!matches.length && (recipientDirectoryLoading || !recipientDirectory.length)) {
+    menu.innerHTML = '<div class="notification-recipient-suggestion notification-recipient-suggestion-loading">Searching known email addresses…</div>';
+    menu.style.display = 'block';
+    loadRecipientDirectory(function () { showPreSendRecipientSuggestions(group); });
+    return;
+  }
+  if (!matches.length) { menu.style.display = 'none'; menu.innerHTML = ''; return; }
+  menu.innerHTML = matches.map(entry => '<button type="button" class="notification-recipient-suggestion" role="option" data-recipient-email="' + escapePreSendRecipientHtml(entry.email) + '"><strong>' + escapePreSendRecipientHtml(entry.name) + '</strong><span>' + escapePreSendRecipientHtml(entry.email) + '</span></button>').join('');
+  // The base CSS deliberately hides the menu. Keep an explicit display value
+  // after matches are rendered so the stylesheet cannot hide valid results.
+  menu.style.display = 'block';
+  menu.querySelectorAll('[data-recipient-email]').forEach(button => {
+    button.onmousedown = function (event) { event.preventDefault(); selectPreSendRecipientSuggestion(group, button.dataset.recipientEmail); };
+  });
+}
+
+function hidePreSendRecipientSuggestions(group) {
+  setTimeout(function () {
+    const menu = document.getElementById(group === 'to' ? 'notificationEmailToSuggestions' : 'notificationEmailCcSuggestions');
+    if (menu) { menu.style.display = 'none'; menu.innerHTML = ''; }
+  }, 120);
+}
+
+function selectPreSendRecipientSuggestion(group, email) {
+  const input = document.getElementById(group === 'to' ? 'notificationEmailToInput' : 'notificationEmailCcInput');
+  if (!input) return;
+  input.value = email;
+  addPreSendRecipient(group);
+}
+
 function handlePreSendRecipientKeydown(event, group) {
   if (event.key === 'Enter' || event.key === ',') {
     event.preventDefault();
     addPreSendRecipient(group);
   }
+  if (event.key === 'Escape') hidePreSendRecipientSuggestions(group);
 }
 
 function validEmailList(value, required) {
@@ -9813,28 +10199,16 @@ function drillDownToIncidents(filters) {
   // Small delay to ensure page is active before applying filters
   setTimeout(function () {
     // Reset all filters first
-    ['searchFilter', 'severityFilter', 'statusFilter', 'customerFilter', 'areaFilter', 'dateFrom', 'dateTo'].forEach(function (id) {
-      var el = document.getElementById(id);
-      if (el) el.value = '';
-    });
+    var search = document.getElementById('searchFilter');
+    if (search) search.value = '';
+    ['severityFilter', 'statusFilter', 'customerFilter', 'areaFilter', 'assigneeFilter'].forEach(function (id) { clearMsFilter(id); });
+    ['dateFrom', 'dateTo'].forEach(function (id) { var el = document.getElementById(id); if (el) el.value = ''; });
 
     // Apply the drill-down filters
-    if (filters.severity) {
-      var el = document.getElementById('severityFilter');
-      if (el) el.value = filters.severity;
-    }
-    if (filters.customer) {
-      var el = document.getElementById('customerFilter');
-      if (el) el.value = filters.customer;
-    }
-    if (filters.area) {
-      var el = document.getElementById('areaFilter');
-      if (el) el.value = filters.area;
-    }
-    if (filters.status) {
-      var el = document.getElementById('statusFilter');
-      if (el) el.value = filters.status;
-    }
+    if (filters.severity) setMsValues('severityFilter', [filters.severity]);
+    if (filters.customer) setMsValues('customerFilter', [filters.customer]);
+    if (filters.area) setMsValues('areaFilter', [filters.area]);
+    if (filters.status) setMsValues('statusFilter', [filters.status]);
     applyFilters();
 
     // Show a toast indicating what filter was applied

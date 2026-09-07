@@ -10,8 +10,16 @@ const {
   getDashboardStats,
   addComment,
   getCriticalEmailRecipients,
+  getRecipientDirectory,
   getIncidentCommunications
 } = require('../controllers/incidentController');
+const {
+  createIncidentDraft,
+  deleteIncidentDraft,
+  getIncidentDraft,
+  listIncidentDrafts,
+  setIncidentDraftResolved
+} = require('../controllers/incidentDraftController');
 const { authenticateToken } = require('../middleware/auth');
 const { requirePermission, requireClosePermissionWhenClosing } = require('../middleware/permissions');
 
@@ -20,6 +28,14 @@ router.use(authenticateToken);
 
 // POST /api/incidents - Create incident
 router.post('/', requirePermission('create_incidents'), createIncident);
+
+// Drafts are kept separate from incidents until the user completes the
+// email-review step after the source email's ten-minute review window.
+router.get('/drafts', requirePermission('view_drafts'), listIncidentDrafts);
+router.post('/drafts', requirePermission('create_incidents'), createIncidentDraft);
+router.get('/drafts/:id', requirePermission('view_drafts'), getIncidentDraft);
+router.post('/drafts/:id/resolve', requirePermission('create_incidents'), setIncidentDraftResolved);
+router.delete('/drafts/:id', requirePermission('delete_drafts'), deleteIncidentDraft);
 
 // GET /api/incidents - Get all incidents with filters
 router.get('/', requirePermission('view_incidents'), getIncidents);
@@ -30,6 +46,7 @@ router.get('/stats/dashboard', requirePermission('view_incidents'), getDashboard
 // GET /api/incidents/activity-log - Get persistent incident activity
 router.get('/activity-log', requirePermission('view_incidents'), getActivityLog);
 router.get('/critical-email-recipients', requirePermission('create_incidents'), getCriticalEmailRecipients);
+router.get('/recipient-directory', requirePermission('create_incidents'), getRecipientDirectory);
 
 // GET /api/incidents/:id - Get incident by ID
 router.get('/:id', requirePermission('view_incidents'), getIncidentById);

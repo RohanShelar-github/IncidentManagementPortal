@@ -78,6 +78,7 @@
 <span class="nav-icon">⚠</span><span class="nav-label"> Incidents</span>
 </div>
 <div class="nav-item" id="mailboxNav" onclick="navigate('mailbox', this)"><span class="nav-icon">✉</span><span class="nav-label"> Mailbox</span></div>
+<div class="nav-item" id="draftsNav" onclick="navigate('drafts', this)"><span class="nav-icon">⌛</span><span class="nav-label"> Draft Review</span></div>
 <div class="nav-section">Reporting</div>
 <div class="nav-item" id="reportsNav" onclick="navigate('reports', this)">
 <span class="nav-icon">◈</span><span class="nav-label"> Reports</span>
@@ -396,7 +397,7 @@
 <div class="stat-value" id="statDowntime" style="color:var(--warning)">—</div>
 <div class="stat-delta" id="statDowntimeSub" style="font-size:11px;color:var(--text-muted)">application incidents only</div>
 </div>
-<div class="stat-card" style="border-color:rgba(155,89,182,0.3);background:linear-gradient(135deg,rgba(155,89,182,0.08),rgba(155,89,182,0.02))">
+<div class="stat-card" id="statHistorianDowntimeCard" style="border-color:rgba(155,89,182,0.3);background:linear-gradient(135deg,rgba(155,89,182,0.08),rgba(155,89,182,0.02))">
 <div class="stat-label" style="color:#b78ae5">Historian Downtime</div>
 <div class="stat-value" id="statHistorianDowntime" style="color:#b78ae5">—</div>
 <div class="stat-delta" id="statHistorianDowntimeSub" style="font-size:11px;color:var(--text-muted)">Historian incidents only</div>
@@ -645,6 +646,12 @@
 <div class="page-header"><div><div class="breadcrumb"><span class="breadcrumb-item" onclick="navigate('dashboard', document.getElementById('dashNav'))">Home</span><span class="breadcrumb-sep">›</span><span class="breadcrumb-item active">Mailbox</span></div><div class="page-header-title">Operations Mailbox</div><div class="page-header-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>Microsoft 365 inbox and reply workspace for the AOC service mailbox</span><span style="color:var(--text-muted)">-</span><span id="mailboxLastUpdated" style="color:var(--text-muted)">Last updated just now</span><span id="mailboxRefreshBtn" onclick="refreshPageContent(event,'mailbox')" onmouseout="this.style.color='var(--text-muted)';this.style.background='transparent'" onmouseover="this.style.color='var(--accent)';this.style.background='rgba(79,142,247,0.12)'" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--text-muted);transition:color .2s,background .2s;flex-shrink:0" title="Refresh"><svg fill="none" height="13" id="mailboxRefreshIcon" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" style="transition:transform .7s ease" viewbox="0 0 24 24" width="13"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg></span></div></div></div>
 <div class="mailbox-layout"><section class="mailbox-list-card"><div class="mailbox-list-head"><div class="mailbox-list-title"><input id="mailboxSelectAll" type="checkbox" aria-label="Select all emails" onchange="toggleMailboxSelectAll(this.checked)"/><strong>Inbox</strong></div><div class="mailbox-list-actions"><button id="mailboxBulkDeleteBtn" class="btn btn-danger btn-sm" onclick="deleteSelectedMailboxMessages()" style="display:none">Delete selected</button><span id="mailboxCount" class="mailbox-count">Loading…</span></div></div><div id="mailboxList" class="mailbox-list"><div class="mailbox-empty">Loading messages…</div></div></section><section class="mailbox-message-card" id="mailboxDetail"><div class="mailbox-empty">Select an email to read it here.</div></section></div>
 </div>
+<div class="page" id="page-drafts">
+<div class="page-header"><div><div class="breadcrumb"><span class="breadcrumb-item" onclick="navigate('dashboard', document.getElementById('dashNav'))">Home</span><span class="breadcrumb-sep">›</span><span class="breadcrumb-item active">Draft Review</span></div><div class="page-header-title">Draft Review</div><div class="page-header-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>Saved alert details waiting for the 10-minute review window. No incident or notification email has been created.</span><span style="color:var(--text-muted)">-</span><span id="draftsLastUpdated" style="color:var(--text-muted)">Last updated just now</span><span id="draftsRefreshBtn" onclick="refreshPageContent(event,'drafts')" onmouseout="this.style.color='var(--text-muted)';this.style.background='transparent'" onmouseover="this.style.color='var(--accent)';this.style.background='rgba(79,142,247,0.12)'" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--text-muted);transition:color .2s,background .2s;flex-shrink:0" title="Refresh"><svg fill="none" height="13" id="draftsRefreshIcon" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" style="transition:transform .7s ease" viewbox="0 0 24 24" width="13"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg></span></div></div></div>
+<div id="draftBulkActions" style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin:-4px 0 14px"><label id="draftSelectAllWrap" style="display:none;font-size:12px;color:var(--text-muted);cursor:pointer"><input id="draftSelectAll" type="checkbox" aria-label="Select all drafts" onchange="toggleDraftSelectAll(this.checked)"/> Select all</label><button id="draftBulkDeleteBtn" class="btn btn-danger btn-sm" onclick="deleteSelectedIncidentDrafts()" style="display:none">Delete selected</button></div>
+<div id="draftReviewBanner" style="display:none;margin-bottom:16px;padding:12px 14px;border:1px solid var(--border);border-radius:9px;background:var(--surface2);color:var(--text);font-size:13px"></div>
+<div id="draftReviewList" style="display:grid;gap:12px"><div class="mailbox-empty">Loading drafts…</div></div>
+</div>
 <div class="page" id="page-incidents">
 <div class="page-header">
 <div>
@@ -691,7 +698,7 @@
 <span class="ms-placeholder" id="severityFilter_ph">All Severities</span>
 </div>
 <div class="ms-dropdown" id="severityFilter_dd">
-<label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Critical"/> Critical</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="High"/> High</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Medium"/> Medium</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Normal"/> Normal</label>
+<label class="ms-option"><input onchange="renderMsPills('severityFilter');applyFilters()" type="checkbox" value="Critical"/> Critical</label><label class="ms-option"><input onchange="renderMsPills('severityFilter');applyFilters()" type="checkbox" value="High"/> High</label><label class="ms-option"><input onchange="renderMsPills('severityFilter');applyFilters()" type="checkbox" value="Medium"/> Medium</label><label class="ms-option"><input onchange="renderMsPills('severityFilter');applyFilters()" type="checkbox" value="Normal"/> Normal</label>
 </div>
 </div>
 </div>
@@ -702,7 +709,7 @@
 <span class="ms-placeholder" id="statusFilter_ph">All Statuses</span>
 </div>
 <div class="ms-dropdown" id="statusFilter_dd">
-<label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="New"/> New</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="In Progress"/> In Progress</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Tier 1 Level Support"/> Tier 1 Level Support</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Escalated to R&amp;D"/> Escalated to R&amp;D</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Escalated to CSO Devops"/> Escalated to CSO Devops</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Escalated to 3rd Party"/> Escalated to 3rd Party</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Further Investigation"/> Further Investigation</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Resolved"/> Resolved</label><label class="ms-option"><input onchange="applyFilters()" type="checkbox" value="Closed"/> Closed</label>
+<label class="ms-option"><input onchange="renderMsPills('statusFilter');applyFilters()" type="checkbox" value="New"/> New</label><label class="ms-option"><input onchange="renderMsPills('statusFilter');applyFilters()" type="checkbox" value="In Progress"/> In Progress</label><label class="ms-option"><input onchange="renderMsPills('statusFilter');applyFilters()" type="checkbox" value="Tier 1 Level Support"/> Tier 1 Level Support</label><label class="ms-option"><input onchange="renderMsPills('statusFilter');applyFilters()" type="checkbox" value="Escalated to R&amp;D"/> Escalated to R&amp;D</label><label class="ms-option"><input onchange="renderMsPills('statusFilter');applyFilters()" type="checkbox" value="Escalated to CSO Devops"/> Escalated to CSO Devops</label><label class="ms-option"><input onchange="renderMsPills('statusFilter');applyFilters()" type="checkbox" value="Escalated to 3rd Party"/> Escalated to 3rd Party</label><label class="ms-option"><input onchange="renderMsPills('statusFilter');applyFilters()" type="checkbox" value="Further Investigation"/> Further Investigation</label><label class="ms-option"><input onchange="renderMsPills('statusFilter');applyFilters()" type="checkbox" value="Resolved"/> Resolved</label><label class="ms-option"><input onchange="renderMsPills('statusFilter');applyFilters()" type="checkbox" value="Closed"/> Closed</label>
 </div>
 </div>
 </div>
@@ -741,8 +748,9 @@
 <div class="ms-dropdown" id="assigneeFilter_dd"></div>
 </div>
 </div>
-<div style="display:flex;align-items:flex-end">
-<button class="btn btn-secondary" onclick="clearFilters()">Clear</button>
+<div class="filter-group filter-clear-group">
+<div class="filter-label" aria-hidden="true">&nbsp;</div>
+<button class="filter-clear-icon" id="incidentClearFiltersBtn" onclick="clearFilters()" style="display:none" title="Clear filters" aria-label="Clear filters"><svg aria-hidden="true" fill="none" height="15" stroke="currentColor" stroke-linecap="round" stroke-width="2" viewBox="0 0 24 24" width="15"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
 </div>
 </div>
 <div class="table-card" id="incidentTableWrap">
@@ -845,8 +853,9 @@
 <div class="filter-label">To Date</div>
 <input id="reportDateTo" onchange="updateReportPreview()" type="date"/>
 </div>
-<div style="display:flex;align-items:flex-end">
-<button class="btn btn-secondary" onclick="clearReportFilters()">Clear</button>
+<div class="filter-group filter-clear-group">
+<div class="filter-label" aria-hidden="true">&nbsp;</div>
+<button class="filter-clear-icon" id="reportClearFiltersBtn" onclick="clearReportFilters()" style="display:none" title="Clear report filters" aria-label="Clear report filters"><svg aria-hidden="true" fill="none" height="15" stroke="currentColor" stroke-linecap="round" stroke-width="2" viewBox="0 0 24 24" width="15"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
 </div>
 </div>
 <div class="report-grid">
@@ -1355,6 +1364,7 @@
 </div>
 <div class="modal-footer">
 <button class="btn btn-secondary" onclick="closeModal('incidentModal')">Cancel</button>
+<button class="btn btn-secondary" id="saveDraftBtn" onclick="saveIncidentDraft()" style="display:none">Save Draft</button>
 <button class="btn btn-primary" id="saveIncidentBtn" onclick="saveIncident()">Create Incident</button>
 </div>
 </div>
@@ -1575,6 +1585,12 @@
             </label>
 <label class="perm-check" onclick="togglePerm(this)">
 <input type="checkbox" value="delete_mailbox"/> Delete Mailbox Emails
+            </label>
+<label class="perm-check" onclick="togglePerm(this)">
+<input type="checkbox" value="view_drafts"/> View Drafts
+            </label>
+<label class="perm-check" onclick="togglePerm(this)">
+<input type="checkbox" value="delete_drafts"/> Delete Drafts
             </label>
 <label class="perm-check" onclick="togglePerm(this)">
 <input type="checkbox" value="manage_users"/> Manage Users
@@ -2307,5 +2323,5 @@
 <div class="ai-chat-suggestions"><button onclick="askAiSuggestion(this)">Show open Critical incidents</button><button onclick="askAiSuggestion(this)">Summarize recent incidents</button></div>
 <footer class="ai-chat-compose"><textarea id="aiChatInput" rows="2" maxlength="2000" placeholder="Ask about incidents..." onkeydown="handleAiChatKey(event)"></textarea><button id="aiChatSend" onclick="sendAiChatMessage()">Send</button></footer>
 </section>
-<script src="./js/reportingMetrics.js"></script><script src="./js/incidentReportExcel.js"></script><script src="./js/app.js?v=20260905-mail-filter2"></script><script src="./config/config.js"></script></body>
+<script src="./js/reportingMetrics.js"></script><script src="./js/incidentReportExcel.js"></script><script src="./js/app.js?v=20260907-recipient-directory-v4"></script><script src="./config/config.js"></script></body>
 </html>

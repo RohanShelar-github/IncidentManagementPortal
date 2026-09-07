@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   login,
   getAllUsers,
+  getRecipientDirectory,
   createUser,
   getCurrentUser,
   updateProfile,
@@ -25,6 +26,9 @@ router.patch('/password', authenticateToken, changePassword);
 
 // GET /api/auth/users
 router.get('/users', authenticateToken, getAllUsers);
+
+// GET /api/auth/recipient-directory
+router.get('/recipient-directory', authenticateToken, getRecipientDirectory);
 
 // POST /api/auth/users
 router.post('/users', authenticateToken, createUser);

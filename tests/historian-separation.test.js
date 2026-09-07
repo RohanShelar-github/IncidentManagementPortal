@@ -1,6 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const test = require('node:test');
 const metrics = require('../js/reportingMetrics');
 
@@ -67,4 +68,13 @@ test('Customer 360 partitions NGC Historian metrics by area', () => {
 test('downtime values are clamped to non-negative totals', () => {
   assert.equal(metrics.getDowntimeMinutes({ downtimeH: -2, downtimeM: 10 }), 0);
   assert.equal(metrics.getDowntimeMinutes({ downtime_h: 0, downtime_m: 30 }), 30);
+});
+
+test('dashboard only displays Historian Downtime for All Customers or the NGC-only customer filter', () => {
+  const frontend = fs.readFileSync('js/app.js', 'utf8');
+  const html = fs.readFileSync('index.html', 'utf8');
+  assert.match(html, /id="statHistorianDowntimeCard"/);
+  assert.match(frontend, /selectedCustomers\.length === 1/);
+  assert.match(frontend, /selectedCustomers\[0\].*toLowerCase\(\) === 'ngc'/);
+  assert.match(frontend, /historianCard\.style\.display = showHistorianCard \? '' : 'none'/);
 });

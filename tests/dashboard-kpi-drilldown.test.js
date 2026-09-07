@@ -50,3 +50,12 @@ test('temporary Missed MTTR exceptions exclude only the requested incidents', ()
   assert.match(frontend, /MISSED_MTTR_EXCLUDED_INCIDENTS = new Set\(\['INC-227', 'INC-273'\]\)/);
   assert.match(frontend, /MISSED_MTTR_EXCLUDED_INCIDENTS\.has\(String\(\(inc && \(inc\.id \|\| inc\.incident_ref\)\) \|\| ''\)\)/);
 });
+
+test('incident filters visibly show selected values and drill-down selects the real multi-select inputs', () => {
+  assert.match(html, /onchange="renderMsPills\('severityFilter'\);applyFilters\(\)"/);
+  assert.match(html, /onchange="renderMsPills\('statusFilter'\);applyFilters\(\)"/);
+  assert.match(frontend, /setMsValues\('severityFilter', \[filters\.severity\]\)/);
+  assert.match(frontend, /setMsValues\('customerFilter', \[filters\.customer\]\)/);
+  assert.match(frontend, /setMsValues\('areaFilter', \[filters\.area\]\)/);
+  assert.match(frontend, /setMsValues\('statusFilter', \[filters\.status\]\)/);
+});

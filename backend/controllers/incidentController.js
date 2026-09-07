@@ -6,6 +6,7 @@ const {
 } = require('../services/incidentNormalization');
 const { notifyUsers } = require('../services/notificationService');
 const { sendIncidentClosedEmail, sendIncidentCreatedEmail, sendCriticalIncidentEmail, htmlEscape, safeIncidentEmailHtml } = require('../services/emailService');
+const { finalizeIncidentDraft, getReadyDraftForFinalization } = require('./incidentDraftController');
 const INCIDENT_NOTIFICATION_CC = 'its24x7@magicsoftware.com,cloudopssupport@magicsoftware.com';
 
 const CANONICAL_INCIDENT_FIELDS = process.env.CANONICAL_INCIDENT_FIELDS !== 'false';
@@ -246,7 +247,23 @@ function mapIncident(row) {
 
 const createIncident = async (req, res) => {
   try {
-    const b = req.body;
+    let b = req.body || {};
+    let draftForFinalization = null;
+    const draftId = Number(b.draft_id);
+    if (Number.isInteger(draftId) && draftId > 0) {
+      const draftResult = await getReadyDraftForFinalization(draftId, req.user);
+      if (draftResult.error) return res.status(draftResult.status).json({ success: false, message: draftResult.error });
+      try {
+        const savedPayload = JSON.parse(draftResult.row.payload_json || '{}');
+        // A reviewed notification may be edited immediately before the user
+        // creates the real incident. All incident fields remain the saved
+        // draft values so this endpoint cannot be used to bypass Draft Review.
+        b = { ...savedPayload, notification_email: b.notification_email, draft_id: draftId };
+        draftForFinalization = draftResult.row;
+      } catch (_) {
+        return res.status(409).json({ success: false, message: 'This draft cannot be finalized because its saved form data is invalid.' });
+      }
+    }
     if (!b.title || !b.severity) return res.status(400).json({ success: false, message: 'Title and severity are required' });
 
     b.description = sanitizeIncidentDescription(b.description);
@@ -312,6 +329,17 @@ const createIncident = async (req, res) => {
     const [created] = await pool.query('SELECT id FROM incidents WHERE incident_ref = ?', [incidentRef]);
     if (created.length) {
       await pool.query('INSERT INTO activity_logs (incident_id, action_type, action_by, detail) VALUES (?, ?, ?, ?)', [created[0].id, 'create', req.user.id, 'Incident created']);
+      if (draftForFinalization) {
+        try {
+          await finalizeIncidentDraft(draftForFinalization.id, created[0].id);
+          await pool.query('INSERT INTO activity_logs (incident_id, action_type, action_by, detail) VALUES (?, ?, ?, ?)', [created[0].id, 'draft_finalized', req.user.id, `Created from draft ${draftForFinalization.draft_ref}`]);
+        } catch (draftError) {
+          // The incident has already been safely created. Preserve the
+          // established incident workflow and flag the exceptional draft
+          // housekeeping failure for operations instead of rolling it back.
+          console.error('Incident draft finalization failed:', draftError.message);
+        }
+      }
       const operationsAuditId = Number(b.operations_email_audit_id);
       if (Number.isInteger(operationsAuditId) && operationsAuditId > 0) {
         try {
@@ -416,16 +444,28 @@ function criticalEmailHtml({ id, title, body, customer, project, severity, area,
   const portalBaseUrl = String(process.env.PORTAL_BASE_URL || '').replace(/\/$/, '');
   const incidentUrl = portalBaseUrl && id ? `${portalBaseUrl}/?incident=${encodeURIComponent(id)}#incidents` : '';
   const openIncident = incidentUrl ? `<div style="margin-top:22px;text-align:center"><a href="${htmlEscape(incidentUrl)}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:8px;font-size:14px;font-weight:700">Open Incident ${htmlEscape(id)}</a><div style="margin-top:9px;color:#64748b;font-size:11px">Sign in when prompted; the incident will open automatically.</div></div>` : '';
-  return `<!doctype html><html><body style="margin:0;padding:24px;background:#f3f6fb;font-family:Arial,Helvetica,sans-serif;color:#172033"><div style="max-width:720px;margin:0 auto;background:#ffffff;border:1px solid #dce3ee;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(15,23,42,.08)"><div style="padding:24px 28px;background:#152b5d;color:#ffffff"><div style="font-size:11px;letter-spacing:1.2px;font-weight:700;opacity:.8">AOC 24x7 · INCIDENT MANAGEMENT</div><div style="margin-top:10px;font-size:24px;line-height:1.25;font-weight:700">Critical Incident Notification</div><div style="margin-top:8px;font-size:15px;line-height:1.4;opacity:.95">${htmlEscape(title || 'Untitled incident')}</div></div><div style="padding:22px 28px"><div style="display:inline-block;padding:7px 11px;background:#fff1f2;border:1px solid #fecdd3;border-radius:999px;color:#be123c;font-size:12px;font-weight:700;letter-spacing:.3px">CRITICAL · INVESTIGATION IN PROGRESS</div><div style="margin-top:22px;font-size:14px;line-height:1.6;color:#25334a">${messageBody}</div><div style="margin-top:22px;border:1px solid #dce3ee;border-radius:8px;overflow:hidden"><div style="padding:11px 14px;background:#f8fafc;border-bottom:1px solid #dce3ee;color:#334155;font-size:12px;font-weight:700;letter-spacing:.6px">INCIDENT SUMMARY</div><table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse">${row('Incident Number', id)}${row('Customer', customer)}${row('Environment / Project', project)}${row('Area / Affected Service', area)}${row('Severity', severity || 'Critical')}${row('Assigned Engineer', engineer)}${row('Created', created)}</table></div>${openIncident}<div style="margin-top:24px;padding-top:18px;border-top:1px solid #e5e7eb;color:#475569;font-size:13px;line-height:1.5">This notification was generated by the AOC 24x7 Incident Management Portal.<br><strong style="color:#172033">${htmlEscape(user || 'AOC Operations Team')}</strong></div></div></div></body></html>`;
+  return `<!doctype html><html><body style="margin:0;padding:24px;background:#f3f6fb;font-family:Arial,Helvetica,sans-serif;color:#172033"><div style="max-width:720px;margin:0 auto;background:#ffffff;border:1px solid #dce3ee;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(15,23,42,.08)"><div style="padding:24px 28px;background:#152b5d;color:#ffffff"><div style="font-size:11px;letter-spacing:1.2px;font-weight:700;opacity:.8">AOC 24x7 · INCIDENT MANAGEMENT</div><div style="margin-top:10px;font-size:24px;line-height:1.25;font-weight:700">Critical Incident Notification</div><div style="margin-top:8px;font-size:15px;line-height:1.4;opacity:.95">${htmlEscape(title || 'Untitled incident')}</div></div><div style="padding:22px 28px"><div style="display:inline-block;padding:7px 11px;background:#fff1f2;border:1px solid #fecdd3;border-radius:999px;color:#be123c;font-size:12px;font-weight:700;letter-spacing:.3px">CRITICAL</div><div style="margin-top:22px;font-size:14px;line-height:1.6;color:#25334a">${messageBody}</div><div style="margin-top:22px;border:1px solid #dce3ee;border-radius:8px;overflow:hidden"><div style="padding:11px 14px;background:#f8fafc;border-bottom:1px solid #dce3ee;color:#334155;font-size:12px;font-weight:700;letter-spacing:.6px">INCIDENT SUMMARY</div><table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse">${row('Incident Number', id)}${row('Customer', customer)}${row('Environment / Project', project)}${row('Area / Affected Service', area)}${row('Severity', severity || 'Critical')}${row('Assigned Engineer', engineer)}${row('Created', created)}</table></div>${openIncident}<div style="margin-top:24px;padding-top:18px;border-top:1px solid #e5e7eb;color:#475569;font-size:13px;line-height:1.5">This notification was generated by the AOC 24x7 Incident Management Portal.<br><strong style="color:#172033">${htmlEscape(user || 'AOC Operations Team')}</strong></div></div></div></body></html>`;
 }
 
 async function getCriticalEmailRecipients(req, res) {
   try {
     const customer = await resolveCustomer(req.query.customer || req.query.customer_id);
-    const [rows] = await pool.query('SELECT c.customer_name, c.to_recipients, c.cc_recipients, c.is_enabled, c.effective_date, c.updated_at FROM customer_email_recipient_configs c WHERE c.customer_id = ? AND c.is_enabled = 1 AND c.effective_date <= CURDATE() LIMIT 1', [customer.id || 0]);
+    const [[rows], [directory]] = await Promise.all([
+      pool.query('SELECT c.customer_name, c.to_recipients, c.cc_recipients, c.is_enabled, c.effective_date, c.updated_at FROM customer_email_recipient_configs c WHERE c.customer_id = ? AND c.is_enabled = 1 AND c.effective_date <= CURDATE() LIMIT 1', [customer.id || 0]),
+      pool.query('SELECT email, display_name FROM email_recipient_directory WHERE is_active = 1 ORDER BY display_name, email')
+    ]);
     const config = rows[0] || null;
-    res.json({ success: true, data: { configured: Boolean(config), customer: customer.name || req.query.customer || '', to: config?.to_recipients || '', cc: config?.cc_recipients || '', effectiveDate: config?.effective_date || null } });
+    res.json({ success: true, data: { configured: Boolean(config), customer: customer.name || req.query.customer || '', to: config?.to_recipients || '', cc: config?.cc_recipients || '', effectiveDate: config?.effective_date || null, directory } });
   } catch (error) { res.status(500).json({ success: false, message: 'Unable to load critical incident recipient configuration.' }); }
+}
+
+async function getRecipientDirectory(req, res) {
+  try {
+    const [directory] = await pool.query('SELECT email, display_name FROM email_recipient_directory WHERE is_active = 1 ORDER BY display_name, email');
+    res.json({ success: true, data: directory });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Unable to load notification recipients.' });
+  }
 }
 
 async function getIncidentCommunications(req, res) {
@@ -775,6 +815,7 @@ module.exports = {
   getDashboardStats,
   addComment,
   getCriticalEmailRecipients,
+  getRecipientDirectory,
   getIncidentCommunications,
   sendDeferredIncidentEmail,
   _test: { mapIncident }

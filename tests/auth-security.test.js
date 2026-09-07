@@ -33,6 +33,16 @@ test('user management data is admin-only, while incident creators receive a limi
   assert.doesNotMatch(auth, /return \{[\s\S]{0,400}password:/);
 });
 
+test('incident creators receive a recipient-only directory for notification address suggestions', () => {
+  assert.match(auth, /const getRecipientDirectory = async/);
+  assert.match(auth, /hasRolePermission\(req\.user\.role, 'create_incidents'\)/);
+  assert.match(auth, /async function syncRecipientDirectory\(\)/);
+  assert.match(auth, /customer_email_recipient_configs/);
+  assert.match(auth, /email_recipient_directory/);
+  assert.match(auth, /await syncRecipientDirectory\(\)/);
+  assert.match(auth, /function recipientDirectoryDto/);
+});
+
 test('a successful legacy login upgrades storage to bcrypt without changing the user password', () => {
   assert.match(auth, /if \(!storedPassword\.startsWith\('\$2'\)\)/);
   assert.match(auth, /bcrypt\.hash\(password, 12\)/);

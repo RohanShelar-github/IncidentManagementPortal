@@ -14,10 +14,14 @@ test('generated report exports omit MTTR for every incident severity', () => {
   assert.doesNotMatch(excel, /'MTTR'/);
 });
 
-test('critical report labels remain available without adding MTTR to PDF exports', () => {
+test('incident reports label the recorded duration as total downtime without adding MTTR to PDF exports', () => {
   assert.match(frontend, /reportLabels = getCriticalReportLabels\(inc\)/);
-  assert.match(frontend, /Critical SLA/);
+  const labelsStart = frontend.indexOf('function getCriticalReportLabels');
+  const labelsEnd = frontend.indexOf('function getIncidentTimestamp', labelsStart);
+  assert.match(frontend.slice(labelsStart, labelsEnd), /Total Downtime/);
+  assert.doesNotMatch(frontend.slice(labelsStart, labelsEnd), /Critical SLA/);
   const pdfStart = frontend.indexOf('function exportIncidentPDF()');
   const pdfEnd = frontend.indexOf('function exportDetailPDF()', pdfStart);
+  assert.match(frontend.slice(pdfStart, pdfEnd), /downtime-lbl">Total Downtime/);
   assert.doesNotMatch(frontend.slice(pdfStart, pdfEnd), /MTTR|Time to Resolve/);
 });

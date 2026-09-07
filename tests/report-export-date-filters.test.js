@@ -28,3 +28,10 @@ test('existing customer, severity, status, and area report filters remain intact
   assert.match(frontend, /if \(stat && i\.status !== stat\) return false/);
   assert.match(frontend, /if \(area && i\.area !== area\) return false/);
 });
+
+test('Reports shows an icon-only clear control only while a report filter is active', () => {
+  assert.match(html, /class="filter-clear-icon" id="reportClearFiltersBtn"[^>]*display:none[^>]*aria-label="Clear report filters"><svg/);
+  assert.match(frontend, /function updateReportClearButton\(\)/);
+  assert.match(frontend, /reportAreaFilter', 'reportDateFrom', 'reportDateTo'/);
+  assert.match(frontend, /button\.style\.display = hasFilter \? '' : 'none'/);
+});

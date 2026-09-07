@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const frontend = fs.readFileSync(path.resolve(__dirname, '..', 'js', 'app.js'), 'utf8');
+const recipientDirectoryMigration = fs.readFileSync(path.resolve(__dirname, '..', 'backend', 'sql', '033_email_recipient_directory.sql'), 'utf8');
 
 test('pre-send email preview allows recipients, subject, and body to be edited', () => {
   assert.match(frontend, /id="notificationEmailTo"/);
@@ -47,6 +48,30 @@ test('preview uses editable recipient chips with authenticated creator and opera
   assert.match(frontend, /cloudopssupport@magicsoftware\.com/);
   assert.match(frontend, /const to = \(document\.getElementById\('notificationEmailTo'\)/);
   assert.match(frontend, /const cc = \(document\.getElementById\('notificationEmailCc'\)/);
+});
+
+test('Notification Preview supports shared email suggestions and drag-and-drop between To and CC', () => {
+  assert.match(frontend, /function preSendRecipientDirectory\(\)/);
+  assert.match(frontend, /function loadRecipientDirectory\(callback\)/);
+  assert.match(frontend, /\/incidents\/recipient-directory/);
+  assert.match(frontend, /Searching known email addresses/);
+  assert.match(frontend, /Array\.isArray\(users\)/);
+  assert.match(frontend, /function showPreSendRecipientSuggestions\(group\)/);
+  assert.match(frontend, /entry\.email\.toLowerCase\(\)\.includes\(query\)/);
+  assert.match(frontend, /menu\.style\.display = 'block';/);
+  assert.match(frontend, /function bindPreSendRecipientDragAndDrop\(\)/);
+  assert.match(frontend, /draggable="true"/);
+  assert.match(frontend, /function movePreSendRecipientToGroup\(targetGroup\)/);
+  assert.match(frontend, /Drag a recipient between To and CC/);
+});
+
+test('recipient suggestions use the dedicated database address book', () => {
+  assert.match(recipientDirectoryMigration, /CREATE TABLE IF NOT EXISTS email_recipient_directory/);
+  assert.match(recipientDirectoryMigration, /INSERT INTO email_recipient_directory/);
+  assert.match(recipientDirectoryMigration, /033_email_recipient_directory/);
+  const syncScript = fs.readFileSync(path.resolve(__dirname, '..', 'backend', 'scripts', 'sync-recipient-directory.js'), 'utf8');
+  assert.match(syncScript, /customer_email_recipient_configs/);
+  assert.match(syncScript, /is_customer_recipient = 1/);
 });
 
 test('NGC Historian mail pre-fills the required recipients for every severity while keeping them editable', () => {

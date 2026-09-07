@@ -74,6 +74,64 @@ function assigneeDto(user) {
   };
 }
 
+// Keep notification address suggestions separate from the administrator's
+// account-management directory. Incident creators only receive a name and
+// email address for active users who can be selected as recipients.
+function recipientDirectoryDto(user) {
+  return {
+    name: user.display_name || user.full_name || user.email,
+    email: user.email
+  };
+}
+
+function recipientDirectoryName(email) {
+  const local = String(email || '').split('@')[0] || '';
+  return local.replace(/[._-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function validRecipientDirectoryEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '').trim());
+}
+
+async function syncRecipientDirectory() {
+  const [[users], [recipientConfigs]] = await Promise.all([
+    pool.query(`
+      SELECT full_name, email
+        FROM users
+       WHERE is_active = 1
+         AND email IS NOT NULL
+         AND email <> ''
+    `),
+    pool.query(`
+      SELECT to_recipients, cc_recipients
+        FROM customer_email_recipient_configs
+       WHERE is_enabled = 1
+         AND effective_date <= CURDATE()
+    `)
+  ]);
+  const userRows = users
+    .filter((user) => validRecipientDirectoryEmail(user.email))
+    .map((user) => [String(user.email).trim().toLowerCase(), String(user.full_name || '').trim(), 1, 0]);
+  const configRows = [];
+  recipientConfigs.forEach((config) => {
+    [config.to_recipients, config.cc_recipients].forEach((addresses) => {
+      String(addresses || '').split(',').forEach((value) => {
+        const email = String(value || '').trim().toLowerCase();
+        if (validRecipientDirectoryEmail(email)) configRows.push([email, recipientDirectoryName(email), 0, 1]);
+      });
+    });
+  });
+  const upsert = async (rows, isUser) => {
+    if (!rows.length) return;
+    const update = isUser
+      ? 'display_name = VALUES(display_name), is_portal_user = 1, is_active = 1'
+      : "display_name = IF(display_name IS NULL OR display_name = '', VALUES(display_name), display_name), is_customer_recipient = 1, is_active = 1";
+    await pool.query(`INSERT INTO email_recipient_directory (email, display_name, is_portal_user, is_customer_recipient) VALUES ? ON DUPLICATE KEY UPDATE ${update}`, [rows]);
+  };
+  await upsert(userRows, true);
+  await upsert(configRows, false);
+}
+
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -173,6 +231,28 @@ const getCurrentUser = async (req, res) => {
     return res.status(200).json({ success: true, data: userDto(users[0]) });
   } catch (error) {
     console.error('Get current user error:', error);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+const getRecipientDirectory = async (req, res) => {
+  try {
+    const isAdmin = String(req.user.role || '').toLowerCase() === 'admin';
+    const canCreateIncidents = isAdmin || await hasRolePermission(req.user.role, 'create_incidents');
+    if (!canCreateIncidents) {
+      return res.status(403).json({ success: false, message: 'You do not have permission to address incident notifications' });
+    }
+
+    await syncRecipientDirectory();
+    const [recipients] = await pool.query(`
+      SELECT email, display_name
+        FROM email_recipient_directory
+       WHERE is_active = 1
+       ORDER BY display_name, email
+    `);
+    return res.status(200).json({ success: true, data: recipients.map(recipientDirectoryDto) });
+  } catch (error) {
+    console.error('Get recipient directory error:', error);
     return res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -429,4 +509,4 @@ const deleteUser = async (req, res) => {
   }
 };
 
-module.exports = { login, getAllUsers, createUser, getCurrentUser, updateProfile, changePassword, updateUserRole, adminChangeUserPassword, updateUserActivation, deleteUser };
+module.exports = { login, getAllUsers, getRecipientDirectory, createUser, getCurrentUser, updateProfile, changePassword, updateUserRole, adminChangeUserPassword, updateUserActivation, deleteUser };

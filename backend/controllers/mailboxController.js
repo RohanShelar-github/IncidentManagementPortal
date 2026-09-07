@@ -13,11 +13,20 @@ function applyMailboxIncidentLinks(messages, links) {
   const byMessageId = new Map();
   (links || []).forEach((link) => {
     const messageId = String(link.graph_message_id || '');
-    if (messageId && !byMessageId.has(messageId)) byMessageId.set(messageId, link.incident_ref);
+    if (messageId && !byMessageId.has(messageId)) byMessageId.set(messageId, link);
   });
   return (messages || []).map((message) => {
-    const incidentRef = byMessageId.get(String(message?.id || '')) || null;
-    return incidentRef ? { ...message, incidentCreated: true, incidentRef } : message;
+    const link = byMessageId.get(String(message?.id || '')) || null;
+    if (!link) return message;
+    if (link.incident_ref) return { ...message, incidentCreated: true, incidentRef: link.incident_ref };
+    return {
+      ...message,
+      incidentDraft: true,
+      draftId: Number(link.draft_id),
+      draftRef: link.draft_ref,
+      draftStatus: link.draft_status,
+      reviewDeadlineAt: link.review_deadline_at ? String(link.review_deadline_at).replace(' ', 'T') + 'Z' : null
+    };
   });
 }
 
@@ -27,7 +36,7 @@ async function attachMailboxIncidentLinks(messages) {
     .filter((id) => id && id.length <= 255)));
   if (!messageIds.length) return messages || [];
   const placeholders = messageIds.map(() => '?').join(', ');
-  const [links] = await pool.query(
+  const [incidentLinks] = await pool.query(
     `SELECT a.graph_message_id, i.incident_ref
        FROM operations_email_incident_audit a
        JOIN incidents i ON i.id = a.incident_id
@@ -36,7 +45,18 @@ async function attachMailboxIncidentLinks(messages) {
       ORDER BY a.created_at DESC, a.id DESC`,
     messageIds
   );
-  return applyMailboxIncidentLinks(messages, links);
+  const [draftLinks] = await pool.query(
+    `SELECT source_message_id AS graph_message_id, id AS draft_id, draft_ref,
+            status AS draft_status, review_deadline_at
+       FROM incident_drafts
+      WHERE deleted_at IS NULL AND status IN ('reviewing', 'ready', 'resolved')
+        AND source_message_id IN (${placeholders})
+      ORDER BY updated_at DESC, id DESC`,
+    messageIds
+  );
+  // A real incident has precedence over any older draft record for the same
+  // mail, so the Operations list always shows the final state.
+  return applyMailboxIncidentLinks(messages, [...incidentLinks, ...draftLinks]);
 }
 
 async function requireMailboxPermission(req, res, permission) {

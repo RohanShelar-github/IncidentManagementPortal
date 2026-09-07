@@ -13,3 +13,11 @@ test('incident filter bar no longer displays or applies a tag filter', () => {
   const end = frontend.indexOf('\nfunction ', start + 1);
   assert.doesNotMatch(frontend.slice(start, end), /tagFilter|\bi\.tags\b/);
 });
+
+test('Clear remains hidden until an Incident filter is active', () => {
+  assert.match(html, /id="incidentClearFiltersBtn"[^>]*display:none/);
+  assert.match(html, /class="filter-clear-icon" id="incidentClearFiltersBtn"[^>]*aria-label="Clear filters"><svg/);
+  assert.match(frontend, /function updateIncidentClearButton\(\)/);
+  assert.match(frontend, /hasSelection \|\| hasSearch \|\| hasDate \? '' : 'none'/);
+  assert.match(frontend, /renderIncidentTable\(\);\s*updateIncidentClearButton\(\);/);
+});

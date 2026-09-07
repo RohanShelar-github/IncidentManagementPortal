@@ -18,6 +18,11 @@ test('incident creation sends mail only after the database insert and preserves 
   assert.match(implementation, /success: true[\s\S]*data: \{ id: incidentRef, email, operations_email_link: operationsEmailLink/);
 });
 
+test('critical notification badge shows severity without an investigation-status tag', () => {
+  assert.match(controller, />CRITICAL<\/div>/);
+  assert.doesNotMatch(controller, /INVESTIGATION IN PROGRESS/);
+});
+
 test('mail is addressed through server-side environment configuration', () => {
   assert.match(example, /MAIL_FROM=/);
   assert.match(example, /MAIL_TO=/);
@@ -262,6 +267,18 @@ test('reviewed recipients are validated and forwarded to the mail service', () =
   assert.match(controller, /emailTo: b\.notification_email\?\.to \|\| req\.user\.email/);
   assert.match(controller, /emailCc: b\.notification_email\?\.cc === undefined \? INCIDENT_NOTIFICATION_CC/);
   assert.match(controller, /emailSubject: b\.notification_email\?\.subject/);
+});
+
+test('critical-recipient lookup returns the database address book with the prefilled customer recipients', () => {
+  assert.match(controller, /email_recipient_directory/);
+  assert.match(controller, /effectiveDate: config\?\.effective_date \|\| null, directory/);
+  assert.match(frontend, /if \(Array\.isArray\(config\?\.directory\)\) recipientDirectory = config\.directory/);
+});
+
+test('every notification severity can load the shared recipient directory through the incident API', () => {
+  assert.match(controller, /async function getRecipientDirectory\(req, res\)/);
+  assert.match(controller, /SELECT email, display_name FROM email_recipient_directory/);
+  assert.match(frontend, /\/incidents\/recipient-directory/);
 });
 
 test('incident mail recipients default to the authenticated creator and operations CC', () => {

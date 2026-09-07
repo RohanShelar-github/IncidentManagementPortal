@@ -13,7 +13,7 @@ const roleAlignmentMigration = fs.readFileSync(path.join(root, 'backend', 'sql',
 
 test('user management keeps deactivate and adds a distinct delete action', () => {
   assert.match(frontend, /onclick="toggleUser\('\$\{u\.id\}'\)"/);
-  assert.match(frontend, /onclick="deleteUser\('\$\{u\.id\}'\)">Delete/);
+  assert.match(frontend, /onclick="deleteUser\('\$\{u\.id\}'\)"[\s\S]*?aria-label="Delete user">&#128465;/);
 });
 
 test('deleting a user calls the protected backend endpoint and refreshes assignees', () => {
