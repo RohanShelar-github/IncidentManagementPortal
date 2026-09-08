@@ -85,6 +85,13 @@ test('Operations email creation keeps the normal incident form editable and link
   assert.match(ui, /Severity: Critical by default for incidents created from Operations email/);
 });
 
+test('resolved and deactivated Operations notifications do not offer incident creation', () => {
+  const ui = read('js/app.js');
+  assert.match(ui, /function isResolvedOperationsEmail\(message\)/);
+  assert.match(ui, /\\b\(\?:resolved\|deactivated\)\\b\/i/);
+  assert.match(ui, /latest\.mailboxSource !== 'sent' && !isResolvedOperationsEmail\(latest\)/);
+});
+
 test('Operations mailbox groups messages by Graph conversation identifier', () => {
   const ui = read('js/app.js');
   const mailService = read('backend/services/emailService.js');

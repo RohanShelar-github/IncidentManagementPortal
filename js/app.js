@@ -3022,6 +3022,11 @@ function ensureOperationsMailboxUi() {
 }
 
 var operationsIncidentActionObserver = null;
+function isResolvedOperationsEmail(message) {
+  // Resolution notifications are informational only and must not start a new
+  // incident. Match whole keywords so an unrelated subject is not hidden.
+  return /\b(?:resolved|deactivated)\b/i.test(String(message && message.subject || ''));
+}
 function ensureOperationsIncidentActions() {
   var list = document.getElementById('mailboxList');
   if (!list || operationsIncidentActionObserver) return;
@@ -3030,7 +3035,7 @@ function ensureOperationsIncidentActions() {
     list.querySelectorAll('.mailbox-row').forEach(function (row, index) {
       if (row.querySelector('.mailbox-row-create-incident')) return;
       var message = mailboxVisibleMessages()[index];
-      if (!message) return;
+      if (!message || isResolvedOperationsEmail(message)) return;
       var button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-secondary btn-sm mailbox-row-create-incident'; button.textContent = 'Create Incident';
       button.style.cssText = 'margin-top:7px;padding:4px 8px;font-size:10px';
       button.onclick = function (event) { event.stopPropagation(); openCreateIncidentFromOperationsEmail(message, button); };
@@ -3127,7 +3132,7 @@ renderMailboxList = function () {
     var from = document.createElement('div'); from.className = 'mailbox-from'; from.textContent = latest.mailboxSource === 'sent' ? ('To: ' + (latest.to || 'No recipient')) : (latest.fromName || latest.from);
     var subject = document.createElement('div'); subject.className = 'mailbox-subject'; subject.textContent = latest.subject || '(No subject)'; if (thread.messages.length > 1) { var total = document.createElement('span'); total.className = 'mailbox-category'; total.textContent = thread.messages.length + ' messages'; subject.appendChild(total); }
     var meta = document.createElement('div'); meta.className = 'mailbox-meta'; meta.textContent = mailboxDate(latest.sentAt || latest.receivedAt); var preview = document.createElement('div'); preview.className = 'mailbox-meta'; preview.textContent = mailboxPlainText(latest.preview || ''); if (isConversation) row.appendChild(toggle); row.append(from, subject, meta, preview);
-    if (mailboxActiveView !== 'sent' && hasPermission('create_incidents') && latest.mailboxSource !== 'sent') { var create = latest.incidentCreated ? mailboxIncidentCreatedAction(latest) : latest.incidentDraft ? mailboxIncidentDraftAction(latest) : mailboxCreateIncidentButton(latest); create.classList.add('mailbox-row-create-incident'); row.appendChild(create); }
+    if (mailboxActiveView !== 'sent' && hasPermission('create_incidents') && latest.mailboxSource !== 'sent' && !isResolvedOperationsEmail(latest)) { var create = latest.incidentCreated ? mailboxIncidentCreatedAction(latest) : latest.incidentDraft ? mailboxIncidentDraftAction(latest) : mailboxCreateIncidentButton(latest); create.classList.add('mailbox-row-create-incident'); row.appendChild(create); }
     list.appendChild(row);
     if (isConversation && expanded) thread.messages.forEach(function (message) { var child = document.createElement('div'); child.className = 'mailbox-thread-message' + (!message.isRead && message.mailboxSource !== 'sent' ? ' unread' : '') + (message.id === selectedMailboxId ? ' active' : ''); child.onclick = function () { openMailboxMessage(message.id); }; var sender = document.createElement('div'); sender.className = 'mailbox-from'; sender.textContent = message.mailboxSource === 'sent' ? ('To: ' + (message.to || 'No recipient')) : (message.fromName || message.from); var line = document.createElement('div'); line.className = 'mailbox-meta'; line.textContent = mailboxPlainText(message.preview || ''); var source = document.createElement('span'); source.className = 'mailbox-category'; source.textContent = message.mailboxSource === 'sent' ? 'Sent' : 'Inbox'; var childIncidentBadge = mailboxIncidentCreatedBadge(message); child.append(sender, line, source); if (childIncidentBadge) child.appendChild(childIncidentBadge); list.appendChild(child); });
   });
