@@ -45,8 +45,8 @@ test('the browser labels EST records as Eastern Time and uses the IANA zone', ()
 });
 
 test('end values are entered in IST and converted once to the incident timezone', () => {
-  assert.match(html, /id="dp_f_end_dt"[^>]*onchange="convertIncidentEndFromIST\('dp_f_end_dt','dp_end_tz_hint'\);updateCriticalEditDowntime\(\)"/);
-  assert.match(html, /id="dtm_end_time"[^>]*onchange="convertIncidentEndFromIST\('dtm_end_time','dtm_end_tz_hint'\);updateCriticalDowntime\(\)"/);
+  assert.match(html, /id="dp_f_end_dt"[^>]*onchange="convertIncidentEndFromIST\('dp_f_end_dt','dp_end_tz_hint'\);updateCriticalEditMttr\(\)"/);
+  assert.match(html, /id="dtm_end_time"[^>]*onchange="convertIncidentEndFromIST\('dtm_end_time','dtm_end_tz_hint'\);updateCriticalMttr\(\)"/);
   assert.match(html, /Enter end time in IST/);
   assert.match(frontend, /convertDatetimeLocalTZ\(field\.value, 'IST', targetTimezone\)/);
   assert.match(frontend, /field\.dataset\.inputTimezone !== 'IST'/);

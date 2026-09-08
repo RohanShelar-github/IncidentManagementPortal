@@ -1653,7 +1653,7 @@ function buildC360Metrics(incidentList) {
     if (i.status === 'Closed' || i.status === 'Resolved') return false;
     return (Date.now() - new Date(i.startDT || (i.date + 'T09:00')).getTime()) > getIncidentSlaHours(i) * 3600000;
   }).length;
-  var withDT = incidentList.filter(function (i) { return getIncDowntimeMinutes(i) > 0; });
+  var withMttr = incidentList.filter(function (i) { return getIncMttrMinutes(i) > 0; });
   return {
     total: total,
     open: open,
@@ -1663,7 +1663,7 @@ function buildC360Metrics(incidentList) {
     breached: breached,
     missedMttr: countMissedMttr(incidentList),
     missedMttd: countMissedMttd(incidentList),
-    avgMTTR: withDT.length ? Math.round(withDT.reduce(function (sum, i) { return sum + getIncDowntimeMinutes(i); }, 0) / withDT.length) : 0,
+    avgMTTR: withMttr.length ? Math.round(withMttr.reduce(function (sum, i) { return sum + getIncMttrMinutes(i); }, 0) / withMttr.length) : 0,
     resolutionRate: total ? Math.round(closed / total * 100) : 0
   };
 }
@@ -3207,12 +3207,17 @@ function openCreateIncidentFromOperationsEmail(message, button) {
       var draftButton = document.getElementById('saveDraftBtn'); if (draftButton) draftButton.style.display = reviewElapsed ? 'none' : '';
       var createButton = document.getElementById('saveIncidentBtn'); if (createButton) createButton.textContent = 'Create Incident';
       var autoSelectionHint = applyOperationsIncidentAutoSelection(prefill.auto_selection);
+      // Operations-mail incidents always start as Critical, but the normal
+      // Severity select remains available for the user to change it.
+      var mailSeverity = document.getElementById('f_severity');
+      if (mailSeverity) mailSeverity.value = 'Critical';
+      var severityDefaultHint = 'Severity: Critical by default for incidents created from Operations email. You can edit it before creating the incident.';
       if (prefill.customer) {
         var customerSelect = document.getElementById('f_customer'); customerSelect.value = prefill.customer.name;
         applyCreateCustomerTimezone(prefill.customer.name);
       }
       var hint = document.getElementById('f_operations_email_hint');
-      if (hint) { hint.textContent = [prefill.message, autoSelectionHint].filter(Boolean).join(' '); hint.style.display = hint.textContent ? '' : 'none'; }
+      if (hint) { hint.textContent = [prefill.message, autoSelectionHint, severityDefaultHint].filter(Boolean).join(' '); hint.style.display = hint.textContent ? '' : 'none'; }
       if (!prefill.customer) showToast(prefill.message || 'No matching customer found. Select a customer manually.', 'info');
     })
     .catch(function (error) { showToast(error.message, 'error'); })
@@ -5081,13 +5086,20 @@ function openDowntimeModal(id) {
     field.style.opacity = '1';
     field.style.cursor = '';
   });
-  var downtimeHint = document.getElementById('dtm_downtime_hint');
-  if (downtimeHint) downtimeHint.style.display = critical ? 'block' : 'none';
-  if (critical) updateCriticalDowntime();
+  var mttrHours = document.getElementById('dtm_mttr_hours');
+  var mttrMinutes = document.getElementById('dtm_mttr_mins');
+  [mttrHours, mttrMinutes].forEach(function (field) {
+    field.readOnly = critical;
+    field.style.opacity = critical ? '.72' : '1';
+    field.style.cursor = critical ? 'not-allowed' : '';
+  });
+  var mttrHint = document.getElementById('dtm_mttr_hint');
+  if (mttrHint) mttrHint.style.display = critical ? 'block' : 'none';
+  if (critical) updateCriticalMttr();
   modal.style.display = 'flex';
 }
 
-function updateCriticalDowntime() {
+function updateCriticalMttr() {
   const id = document.getElementById('dtm_inc_ref')?.value;
   const inc = incidents.find(function (item) { return item.id === id; });
   if (!inc || String(inc.severity || '').toLowerCase() !== 'critical') return;
@@ -5097,8 +5109,8 @@ function updateCriticalDowntime() {
   const endDate = wallClockToDate(endEl.value, endEl.dataset.inputTimezone || selectedTZ || inc.timezone || 'IST');
   if (!startDate || !endDate) return;
   const totalMinutes = Math.max(0, Math.round((endDate.getTime() - startDate.getTime()) / 60000));
-  document.getElementById('dtm_hours').value = Math.floor(totalMinutes / 60);
-  document.getElementById('dtm_mins').value = totalMinutes % 60;
+  document.getElementById('dtm_mttr_hours').value = Math.floor(totalMinutes / 60);
+  document.getElementById('dtm_mttr_mins').value = totalMinutes % 60;
 }
 
 function confirmCloseIncident() {
@@ -5116,6 +5128,7 @@ function confirmCloseIncident() {
   const rca = (document.getElementById('dtm_rca')?.innerHTML || '').trim();
   const res = (document.getElementById('dtm_resolution')?.innerHTML || '').trim();
   convertIncidentEndFromIST('dtm_end_time', 'dtm_end_tz_hint');
+  if (criticalDowntime) updateCriticalMttr();
   const endTimeRaw = document.getElementById('dtm_end_time').value;
 
   if (!endTimeRaw) { showToast('Please select the incident end date & time', 'error'); return; }
@@ -6269,12 +6282,12 @@ function updateStats() {
     : 'incidents exceeded the 15m target';
 
   // Avg MTTR (for closed incidents with downtime)
-  var withDT = closedIncs.filter(function (i) { return getIncDowntimeMinutes(i) > 0; });
-  var avgMTTR = withDT.length > 0 ? Math.round(withDT.reduce(function (s, i) { return s + getIncDowntimeMinutes(i); }, 0) / withDT.length) : 0;
+  var withMttr = closedIncs.filter(function (i) { return getIncMttrMinutes(i) > 0; });
+  var avgMTTR = withMttr.length > 0 ? Math.round(withMttr.reduce(function (s, i) { return s + getIncMttrMinutes(i); }, 0) / withMttr.length) : 0;
   var mtEl = document.getElementById('statAvgMTTR');
   var mtSub = document.getElementById('statAvgMTTRSub');
   if (mtEl) mtEl.textContent = avgMTTR > 0 ? minutesToHM(avgMTTR) : '—';
-  if (mtSub) mtSub.textContent = withDT.length + ' incident' + (withDT.length !== 1 ? 's' : '') + ' measured';
+  if (mtSub) mtSub.textContent = withMttr.length + ' incident' + (withMttr.length !== 1 ? 's' : '') + ' measured';
 
   // Resolution rate
   var resRate = data.length > 0 ? Math.round(closed / data.length * 1000) / 10 : 0;
@@ -8829,9 +8842,16 @@ function populateEditForm(inc) {
     field.style.cursor = '';
   });
   // Keep the saved downtime when reopening an incident. Critical-incident
-  // downtime is recalculated only when an operator changes its start/end time.
+  // MTTR is recalculated only when an operator changes its start/end time.
   set('dp_f_mttr_h', inc.mttrH || 0);
   set('dp_f_mttr_m', inc.mttrM || 0);
+  var criticalIncident = String(inc.severity || '').toLowerCase() === 'critical';
+  ['dp_f_mttr_h', 'dp_f_mttr_m'].forEach(function (id) {
+    var field = document.getElementById(id);
+    field.readOnly = criticalIncident;
+    field.style.opacity = criticalIncident ? '.72' : '1';
+    field.style.cursor = criticalIncident ? 'not-allowed' : '';
+  });
   var editRca = document.getElementById('dp_f_rca'); if (editRca) editRca.innerHTML = safeIncidentDescriptionHtml(inc.rca || '');
   var editResolution = document.getElementById('dp_f_resolution'); if (editResolution) editResolution.innerHTML = safeIncidentDescriptionHtml(inc.resolution || '');
   set('dp_f_resolved_by', inc.resolvedBy || '');
@@ -8842,7 +8862,7 @@ function populateEditForm(inc) {
   updateDetailFooter(true);
 }
 
-function updateCriticalEditDowntime() {
+function updateCriticalEditMttr() {
   const inc = incidents.find(function (item) { return item.id === detailCurrentId; });
   if (!inc || String(inc.severity || '').toLowerCase() !== 'critical') return;
   const startEl = document.getElementById('dp_f_start_dt');
@@ -8853,8 +8873,8 @@ function updateCriticalEditDowntime() {
   const endDate = wallClockToDate(endEl.value, endEl.dataset.inputTimezone || editTimezone);
   if (!startDate || !endDate) return;
   const totalMinutes = Math.max(0, Math.round((endDate.getTime() - startDate.getTime()) / 60000));
-  document.getElementById('dp_f_dtH').value = Math.floor(totalMinutes / 60);
-  document.getElementById('dp_f_dtM').value = totalMinutes % 60;
+  document.getElementById('dp_f_mttr_h').value = Math.floor(totalMinutes / 60);
+  document.getElementById('dp_f_mttr_m').value = totalMinutes % 60;
 }
 
 function updateDetailFooter(isEditing) {
@@ -10316,7 +10336,7 @@ function changeEditTZ(newKey) {
   var startHint = document.getElementById('dp_start_tz_hint');
   if (startHint) startHint.textContent = 'Incident timezone: ' + newKey;
   renderTZSelector('editTZSelector', newKey, 'changeEditTZ(this.value)');
-  updateCriticalEditDowntime();
+  updateCriticalEditMttr();
 }
 
 // changeReportTZ removed — report uses the timezone saved with the incident

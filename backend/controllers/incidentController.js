@@ -601,17 +601,18 @@ const updateIncident = async (req, res) => {
     const hasEndDateUpdate = endDateTouched;
     const hasManualDowntime = ['downtime_mins', 'downtime_minutes_total', 'downtime_h', 'downtimeH', 'downtime_m', 'downtimeM', 'downtimeStr', 'downtime_str']
       .some((key) => b[key] !== undefined);
-    const isCriticalDowntimeCalculation = normalizeSeverity(b.severity ?? current.severity) === 'critical'
+    const isCriticalMttrCalculation = normalizeSeverity(b.severity ?? current.severity) === 'critical'
       && hasEndDateUpdate && canonical.closed_at_utc;
-    if (isCriticalDowntimeCalculation) {
+    if (isCriticalMttrCalculation) {
       const openedAt = canonical.opened_at_utc ? new Date(canonical.opened_at_utc.replace(' ', 'T') + 'Z') : null;
       const closedAt = canonical.closed_at_utc ? new Date(canonical.closed_at_utc.replace(' ', 'T') + 'Z') : null;
       if (!openedAt || !closedAt || Number.isNaN(openedAt.getTime()) || Number.isNaN(closedAt.getTime()) || closedAt < openedAt) {
         return res.status(400).json({ success: false, message: 'Critical incident end time must be on or after its created time' });
       }
-      // Use the calculated duration as the default, but preserve an explicitly
-      // supplied downtime correction from the operator.
-      if (!hasManualDowntime) canonical.downtime_mins = Math.round((closedAt.getTime() - openedAt.getTime()) / 60000);
+      // MTTR is the elapsed resolution duration for Critical incidents. It is
+      // derived from authoritative start/end timestamps. Downtime remains the
+      // separately recorded service-impact duration.
+      canonical.mttr_minutes = Math.round((closedAt.getTime() - openedAt.getTime()) / 60000);
     }
     if (b.status !== undefined) add('status', normalizedStatus);
     if (b.engineer !== undefined) add('assigned_to', await resolveUserId(b.engineer));
@@ -641,7 +642,7 @@ const updateIncident = async (req, res) => {
       add('incident_report_status', reportStatus || null);
     }
 
-    const downtimeTouched = isCriticalDowntimeCalculation || hasManualDowntime;
+    const downtimeTouched = hasManualDowntime;
     if (downtimeTouched) {
       const duration = minutesToHM(canonical.downtime_mins);
       add('downtime_hours', duration.hours);
@@ -655,7 +656,7 @@ const updateIncident = async (req, res) => {
       add('mttd_minutes', canonical.mttd_minutes);
       add('mttd_str', minutesToHM(canonical.mttd_minutes).text || null);
     }
-    const mttrTouched = ['mttr_minutes', 'mttrH', 'mttr_h', 'mttrM', 'mttr_m', 'mttrStr', 'mttr_str']
+    const mttrTouched = isCriticalMttrCalculation || ['mttr_minutes', 'mttrH', 'mttr_h', 'mttrM', 'mttr_m', 'mttrStr', 'mttr_str']
       .some((key) => b[key] !== undefined);
     if (mttrTouched) add('mttr_str', minutesToHM(canonical.mttr_minutes).text || null);
     if (b.account_name !== undefined) add('account_name', b.account_name || null);

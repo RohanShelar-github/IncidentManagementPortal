@@ -81,6 +81,8 @@ test('Operations email creation keeps the normal incident form editable and link
   assert.match(ui, /operations_email_audit_id: pendingOperationsEmailAuditId/);
   assert.match(incidentController, /operations_email_incident_audit/);
   assert.match(incidentController, /operations_email_incident_created/);
+  assert.match(ui, /mailSeverity\.value = 'Critical'/);
+  assert.match(ui, /Severity: Critical by default for incidents created from Operations email/);
 });
 
 test('Operations mailbox groups messages by Graph conversation identifier', () => {
