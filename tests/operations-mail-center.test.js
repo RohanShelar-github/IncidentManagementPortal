@@ -75,9 +75,22 @@ test('Operations mailbox provides an Outlook-style read filter with a persistent
   assert.match(ui, /function ensureMailboxReadFilterUi/);
   assert.match(ui, /mailboxReadFilter = 'all'/);
   assert.match(ui, /setMailboxReadFilter/);
-  assert.match(ui, /\['all', 'All'\], \['unread', 'Unread'\], \['read', 'Read'\]/);
+  assert.match(ui, /\['all', 'All'\], \['unread', 'Unread'\], \['read', 'Read'\], \['incident_sent', 'Incident Sent'\]/);
+  assert.match(ui, /mailboxReadFilter === 'incident_sent'/);
+  assert.match(ui, /Boolean\(message\.incidentCreated\)/);
   assert.match(ui, /setMailboxMessageReadStateInUi/);
   assert.match(ui, /Mark as unread/);
+});
+
+test('Operations compose offers directory suggestions for editable To and CC fields', () => {
+  const ui = fs.readFileSync('js/app.js', 'utf8');
+  assert.match(ui, /function attachMailboxRecipientSuggestions\(input, fieldName, relatedInputs\)/);
+  assert.match(ui, /function mailboxRecipientSuggestionEntries\(inputs\)/);
+  assert.match(ui, /attachMailboxRecipientSuggestions\(to, 'To', recipientInputs\)/);
+  assert.match(ui, /attachMailboxRecipientSuggestions\(cc, 'CC', recipientInputs\)/);
+  assert.match(ui, /loadRecipientDirectory\(function \(\) \{ editor\.dispatchEvent\(new Event\('input'\)\); \}\)/);
+  assert.match(ui, /mailboxRecipientDrag = \{ source: widget, email: email \}/);
+  assert.match(ui, /host\.ondrop = function \(event\)/);
 });
 
 test('Operations compose supports image formatting and sends pasted images as Graph inline attachments', () => {

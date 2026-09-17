@@ -13,7 +13,7 @@ test('Critical closure calculates MTTR when the end time changes and preserves e
   assert.match(html, /oninput="[^"]*updateCriticalMttr\(\)/);
   assert.match(frontend, /field\.readOnly = false/);
   assert.match(frontend, /endDate\.getTime\(\) - startDate\.getTime\(\)/);
-  assert.match(frontend, /field\.readOnly = critical/);
+  assert.match(frontend, /\[mttrHours, mttrMinutes\]\.forEach\(function \(field\) \{/);
   assert.match(frontend, /if \(critical\) updateCriticalMttr\(\)/);
 });
 

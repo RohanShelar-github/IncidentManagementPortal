@@ -12,10 +12,11 @@ test('Open and SLA dashboard KPI cards are keyboard-accessible drill-down contro
   assert.match(html, /onclick="openMetricDrillDown\('sla'\)"[^>]*role="button"[^>]*tabindex="0"/);
 });
 
-test('Open drill-down includes only active incidents under current dashboard filters', () => {
+test('Dashboard drill-downs use the current dashboard-filtered incident set', () => {
   assert.match(frontend, /function isActiveIncident\(inc\)/);
   assert.match(frontend, /inc\.status !== 'Closed' && inc\.status !== 'Resolved'/);
-  assert.match(frontend, /\? getDashboardFilteredIncidents\(\) : incidents/);
+  assert.match(frontend, /var isDashboardDrillDown = Boolean\(dashboardPage && dashboardPage\.classList\.contains\('active'\)\)/);
+  assert.match(frontend, /isDashboardDrillDown\s*\? getDashboardFilteredIncidents\(\)/);
   assert.match(frontend, /open: 'Open \/ Active Incidents'/);
 });
 
@@ -38,12 +39,33 @@ test('metric drill-down no longer renders a legacy classification column', () =>
   assert.match(html, /<th>Incident ID<\/th><th>Title \/ Summary<\/th><th>Customer<\/th><th>Severity<\/th><th>Status<\/th>/);
 });
 
-test('dashboard Missed MTTR count and drill-down exclude Historian-area incidents', () => {
-  assert.match(frontend, /dashboardMttrIncidents = incidents\.filter\(function \(inc\) \{/);
+test('dashboard Missed MTTR count and drill-down respect filters while excluding Historian-area incidents', () => {
+  assert.match(frontend, /dashboardMttrIncidents = data\.filter\(function \(inc\) \{/);
   assert.match(frontend, /String\(\(inc && inc\.severity\) \|\| ''\)\.toLowerCase\(\) === 'critical'/);
   assert.match(frontend, /!isCustomer360HistorianIncident\(inc\)/);
   assert.match(frontend, /countMissedMttr\(dashboardMttrIncidents\)/);
   assert.match(frontend, /metric === 'mttr' && !customerName && !reportingCategory && isCustomer360HistorianIncident\(inc\)/);
+});
+
+test('Dashboard widgets that previously used all incidents now use the dashboard filter set', () => {
+  assert.match(frontend, /var mine = getDashboardFilteredIncidents\(\)\.filter/);
+  assert.match(frontend, /getDashboardFilteredIncidents\(\)\.forEach\(function \(i\) \{/);
+  assert.match(frontend, /var missedMttdCount = countMissedMttd\(data\)/);
+  assert.match(frontend, /renderMyIncidents\(\);\s*renderHealthGrid\(\);/);
+  assert.match(html, /id="statTotalSub"/);
+  assert.match(html, /id="statOpenSub"/);
+  assert.match(html, /id="statClosedSub"/);
+});
+
+test('Resolution Timeline uses recorded resolution duration and never fabricated severity values', () => {
+  const chartStart = frontend.indexOf('function _drawResolution');
+  const chartEnd = frontend.indexOf('function _openPDFPreview', chartStart);
+  const chart = frontend.slice(chartStart, chartEnd);
+  assert.match(chart, /getIncResolutionMinutes\(incident\) > 0/);
+  assert.match(chart, /recorded\.reduce\(function \(sum, incident\) \{ return sum \+ getIncResolutionMinutes\(incident\); \}, 0\)/);
+  assert.match(chart, /No recorded resolution data/);
+  assert.doesNotMatch(chart, /Math\.random/);
+  assert.doesNotMatch(chart, /fallback estimate/);
 });
 
 test('temporary Missed MTTR exceptions exclude only the requested incidents', () => {

@@ -92,6 +92,14 @@ test('resolved and deactivated Operations notifications do not offer incident cr
   assert.match(ui, /latest\.mailboxSource !== 'sent' && !isResolvedOperationsEmail\(latest\)/);
 });
 
+test('No Historian replies reuse the editable Historian incident recipient preset', () => {
+  const ui = read('js/app.js');
+  assert.match(ui, /function noHistorianReplyRecipientPreset\(message\)/);
+  assert.match(ui, /No\\s\+Historian\\s\+Read/);
+  assert.match(ui, /historianMailRecipientPreset\(\{ customer: 'NGC', project: 'Historian', area: 'Historian' \}\)/);
+  assert.match(ui, /Historian incident recipients were prefilled\. You may edit To, CC, or subject\./);
+});
+
 test('Operations mailbox groups messages by Graph conversation identifier', () => {
   const ui = read('js/app.js');
   const mailService = read('backend/services/emailService.js');

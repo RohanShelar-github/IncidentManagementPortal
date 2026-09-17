@@ -19,6 +19,27 @@
     return text || (fallback == null ? '' : String(fallback));
   }
 
+  // Rich-text editors store HTML so it can be rendered in the portal. Excel
+  // cells must contain the readable text, never the editor markup.
+  function richTextToPlainText(value, fallback) {
+    var text = String(value == null ? '' : value);
+    text = text
+      .replace(/<\s*br\s*\/?\s*>/gi, '\n')
+      .replace(/<\/(?:p|div|li|h[1-6])\s*>/gi, '\n')
+      .replace(/<li\b[^>]*>/gi, '• ')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;|&apos;/gi, "'")
+      .replace(/&#(\d+);/g, function (_, code) { return String.fromCharCode(Number(code)); })
+      .replace(/&#x([0-9a-f]+);/gi, function (_, code) { return String.fromCharCode(parseInt(code, 16)); });
+    text = text.replace(/[ \t]+\n/g, '\n').replace(/\n[ \t]+/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    return text || (fallback == null ? '' : String(fallback));
+  }
+
   function downtimeMinutes(incident) {
     var stored = Number(incident && (incident.downtime_mins ?? incident.downtimeMinutes));
     if (Number.isFinite(stored) && stored >= 0) return Math.round(stored);
@@ -116,8 +137,8 @@
     var timezone = normalizeText(incident.timezone, 'IST');
     var internalId = normalizeText(incident.id || incident.incident_ref);
     var title = normalizeText(incident.title || incident.summary, 'No summary provided');
-    var description = normalizeText(incident.desc || incident.description, 'No issue details provided');
-    var resolution = normalizeText(incident.resolution, 'Not provided');
+    var description = richTextToPlainText(incident.desc || incident.description, 'No issue details provided');
+    var resolution = richTextToPlainText(incident.resolution, 'Not provided');
     var applications = normalizeText(incident.applications || incident.project, 'Not specified');
     var components = normalizeText(
       incident.impacted_plants || incident.impactedPlants || incident.components,
@@ -154,7 +175,7 @@
       components: components,
       downtime: totalDowntime,
       description: description,
-      rca: normalizeText(incident.rca, 'Not provided'),
+      rca: richTextToPlainText(incident.rca, 'Not provided'),
       resolution: resolution,
       instructions: instructions,
       reporter: reporter,
@@ -506,6 +527,7 @@
 
   return {
     buildReportModel: buildReportModel,
+    richTextToPlainText: richTextToPlainText,
     buildIncidentReportWorkbook: buildIncidentReportWorkbook,
     createXlsxBytes: createXlsxBytes,
     excelSerial: excelSerial,

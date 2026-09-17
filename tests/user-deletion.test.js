@@ -42,7 +42,7 @@ test('changing a user role persists through the protected backend endpoint', () 
 
 test('user list supplies assigned incident and activity display defaults', () => {
   assert.match(controller, /COUNT\(i\.id\) AS incidents/);
-  assert.match(controller, /lastActive: user\.last_active \|\| 'Not tracked'/);
+  assert.match(controller, /lastActive: user\.last_active_at \|\| user\.last_active \|\| 'Not tracked'/);
   assert.match(controller, /incidents: Number\(user\.incidents \|\| 0\)/);
 });
 

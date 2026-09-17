@@ -45,6 +45,9 @@ INSERT INTO permissions(permission_key, permission_name) VALUES
 ('export_reports','Export Reports'),('view_customer360','View Customer 360'),('manage_users','Manage Users'),
 ('view_mailbox','View Operations'),('send_mailbox','Send Operations Mail'),('delete_mailbox','Delete Operations Emails'),('view_drafts','View Drafts'),('delete_drafts','Delete Drafts'),('manage_roles','Manage Roles'),('assign_roles','Assign Roles'),('manage_data','Manage Data')
 ON DUPLICATE KEY UPDATE permission_name=VALUES(permission_name);
+INSERT INTO permissions(permission_key, permission_name) VALUES
+('view_dashboard_total_incidents','Dashboard: Total Incidents'),('view_dashboard_open_active','Dashboard: Open / Active'),('view_dashboard_resolved','Dashboard: Resolved'),('view_dashboard_avg_resolution','Dashboard: Avg Resolution'),('view_dashboard_total_downtime','Dashboard: Total Downtime'),('view_dashboard_historian_downtime','Dashboard: Historian Downtime'),('view_dashboard_sla_breach','Dashboard: SLA Breach Rate'),('view_dashboard_missed_mttr','Dashboard: Missed MTTR Count'),('view_dashboard_missed_mttd','Dashboard: Missed MTTD Count'),('view_dashboard_resolution_rate','Dashboard: Resolution Rate')
+ON DUPLICATE KEY UPDATE permission_name=VALUES(permission_name);
 INSERT IGNORE INTO role_permissions(role_id, permission_key)
 SELECT r.id, p.permission_key FROM roles r CROSS JOIN permissions p WHERE r.role_key='admin';
 INSERT IGNORE INTO role_permissions(role_id, permission_key)
@@ -57,6 +60,8 @@ INSERT IGNORE INTO role_permissions(role_id, permission_key)
 SELECT r.id,p.permission_key FROM roles r JOIN permissions p ON p.permission_key IN ('view_dashboard','view_incidents','create_incidents','edit_incidents','close_incidents','view_reports','view_customer360') WHERE r.role_key='engineer';
 INSERT IGNORE INTO role_permissions(role_id, permission_key)
 SELECT r.id,p.permission_key FROM roles r JOIN permissions p ON p.permission_key IN ('view_dashboard','view_incidents') WHERE r.role_key='stakeholder';
+INSERT IGNORE INTO role_permissions(role_id, permission_key)
+SELECT r.id,p.permission_key FROM roles r JOIN permissions p ON p.permission_key IN ('view_dashboard_total_incidents','view_dashboard_open_active','view_dashboard_resolved','view_dashboard_avg_resolution','view_dashboard_total_downtime','view_dashboard_historian_downtime','view_dashboard_sla_breach','view_dashboard_missed_mttr','view_dashboard_missed_mttd','view_dashboard_resolution_rate') WHERE r.role_key IN ('admin','cso','pmo','aoc','engineer','stakeholder');
 
 CREATE TABLE IF NOT EXISTS users (
   id INT NOT NULL AUTO_INCREMENT,
@@ -69,6 +74,7 @@ CREATE TABLE IF NOT EXISTS users (
   password VARCHAR(255) NOT NULL,
   role VARCHAR(50) NOT NULL DEFAULT 'stakeholder',
   is_active TINYINT(1) NOT NULL DEFAULT 1,
+  last_active_at DATETIME NULL,
   created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY email (email),

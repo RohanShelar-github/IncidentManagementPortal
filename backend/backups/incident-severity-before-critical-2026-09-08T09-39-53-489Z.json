@@ -1,0 +1,1390 @@
+{
+  "format": "incident-severity-rollback-v1",
+  "status": "applied",
+  "created_at_utc": "2026-09-08T09:39:53.486Z",
+  "target_severity": "critical",
+  "changed_count": 276,
+  "incidents": [
+    {
+      "database_id": 383,
+      "incident_identifier": "INC-004",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 384,
+      "incident_identifier": "INC-005",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 385,
+      "incident_identifier": "INC-006",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 386,
+      "incident_identifier": "INC-007",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 387,
+      "incident_identifier": "INC-008",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 388,
+      "incident_identifier": "INC-009",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 389,
+      "incident_identifier": "INC-010",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 390,
+      "incident_identifier": "INC-011",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 391,
+      "incident_identifier": "INC-012",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 392,
+      "incident_identifier": "INC-013",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 393,
+      "incident_identifier": "INC-014",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 394,
+      "incident_identifier": "INC-015",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 395,
+      "incident_identifier": "INC-016",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 396,
+      "incident_identifier": "INC-017",
+      "original_severity": "high"
+    },
+    {
+      "database_id": 397,
+      "incident_identifier": "INC-018",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 398,
+      "incident_identifier": "INC-019",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 399,
+      "incident_identifier": "INC-020",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 400,
+      "incident_identifier": "INC-021",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 401,
+      "incident_identifier": "INC-022",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 402,
+      "incident_identifier": "INC-023",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 403,
+      "incident_identifier": "INC-024",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 404,
+      "incident_identifier": "INC-025",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 405,
+      "incident_identifier": "INC-026",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 406,
+      "incident_identifier": "INC-027",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 407,
+      "incident_identifier": "INC-028",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 408,
+      "incident_identifier": "INC-029",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 409,
+      "incident_identifier": "INC-030",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 410,
+      "incident_identifier": "INC-031",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 411,
+      "incident_identifier": "INC-032",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 412,
+      "incident_identifier": "INC-033",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 413,
+      "incident_identifier": "INC-034",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 414,
+      "incident_identifier": "INC-035",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 415,
+      "incident_identifier": "INC-036",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 416,
+      "incident_identifier": "INC-037",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 417,
+      "incident_identifier": "INC-038",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 419,
+      "incident_identifier": "INC-040",
+      "original_severity": "high"
+    },
+    {
+      "database_id": 420,
+      "incident_identifier": "INC-041",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 421,
+      "incident_identifier": "INC-042",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 422,
+      "incident_identifier": "INC-043",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 423,
+      "incident_identifier": "INC-044",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 424,
+      "incident_identifier": "INC-045",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 425,
+      "incident_identifier": "INC-046",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 426,
+      "incident_identifier": "INC-047",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 427,
+      "incident_identifier": "INC-048",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 428,
+      "incident_identifier": "INC-049",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 429,
+      "incident_identifier": "INC-050",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 430,
+      "incident_identifier": "INC-051",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 431,
+      "incident_identifier": "INC-052",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 432,
+      "incident_identifier": "INC-053",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 433,
+      "incident_identifier": "INC-054",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 434,
+      "incident_identifier": "INC-055",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 435,
+      "incident_identifier": "INC-056",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 436,
+      "incident_identifier": "INC-057",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 437,
+      "incident_identifier": "INC-058",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 438,
+      "incident_identifier": "INC-059",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 439,
+      "incident_identifier": "INC-060",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 440,
+      "incident_identifier": "INC-061",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 441,
+      "incident_identifier": "INC-062",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 442,
+      "incident_identifier": "INC-063",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 443,
+      "incident_identifier": "INC-064",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 444,
+      "incident_identifier": "INC-065",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 445,
+      "incident_identifier": "INC-066",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 446,
+      "incident_identifier": "INC-067",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 447,
+      "incident_identifier": "INC-068",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 448,
+      "incident_identifier": "INC-069",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 449,
+      "incident_identifier": "INC-070",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 450,
+      "incident_identifier": "INC-071",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 451,
+      "incident_identifier": "INC-072",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 452,
+      "incident_identifier": "INC-073",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 453,
+      "incident_identifier": "INC-074",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 454,
+      "incident_identifier": "INC-075",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 455,
+      "incident_identifier": "INC-076",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 456,
+      "incident_identifier": "INC-077",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 457,
+      "incident_identifier": "INC-078",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 458,
+      "incident_identifier": "INC-079",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 459,
+      "incident_identifier": "INC-080",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 460,
+      "incident_identifier": "INC-081",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 461,
+      "incident_identifier": "INC-082",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 462,
+      "incident_identifier": "INC-083",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 463,
+      "incident_identifier": "INC-084",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 464,
+      "incident_identifier": "INC-085",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 465,
+      "incident_identifier": "INC-086",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 466,
+      "incident_identifier": "INC-087",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 467,
+      "incident_identifier": "INC-088",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 468,
+      "incident_identifier": "INC-089",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 469,
+      "incident_identifier": "INC-090",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 470,
+      "incident_identifier": "INC-091",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 471,
+      "incident_identifier": "INC-092",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 472,
+      "incident_identifier": "INC-093",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 473,
+      "incident_identifier": "INC-094",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 474,
+      "incident_identifier": "INC-095",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 475,
+      "incident_identifier": "INC-096",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 476,
+      "incident_identifier": "INC-097",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 477,
+      "incident_identifier": "INC-098",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 478,
+      "incident_identifier": "INC-099",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 479,
+      "incident_identifier": "INC-100",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 480,
+      "incident_identifier": "INC-101",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 481,
+      "incident_identifier": "INC-102",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 482,
+      "incident_identifier": "INC-103",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 483,
+      "incident_identifier": "INC-104",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 484,
+      "incident_identifier": "INC-105",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 485,
+      "incident_identifier": "INC-106",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 486,
+      "incident_identifier": "INC-107",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 487,
+      "incident_identifier": "INC-108",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 488,
+      "incident_identifier": "INC-109",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 489,
+      "incident_identifier": "INC-110",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 490,
+      "incident_identifier": "INC-111",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 491,
+      "incident_identifier": "INC-112",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 492,
+      "incident_identifier": "INC-113",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 493,
+      "incident_identifier": "INC-114",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 494,
+      "incident_identifier": "INC-115",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 495,
+      "incident_identifier": "INC-116",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 496,
+      "incident_identifier": "INC-117",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 497,
+      "incident_identifier": "INC-118",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 498,
+      "incident_identifier": "INC-119",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 499,
+      "incident_identifier": "INC-120",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 500,
+      "incident_identifier": "INC-121",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 501,
+      "incident_identifier": "INC-122",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 502,
+      "incident_identifier": "INC-123",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 503,
+      "incident_identifier": "INC-124",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 504,
+      "incident_identifier": "INC-125",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 505,
+      "incident_identifier": "INC-126",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 506,
+      "incident_identifier": "INC-127",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 507,
+      "incident_identifier": "INC-128",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 508,
+      "incident_identifier": "INC-129",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 509,
+      "incident_identifier": "INC-130",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 510,
+      "incident_identifier": "INC-131",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 511,
+      "incident_identifier": "INC-132",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 512,
+      "incident_identifier": "INC-133",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 513,
+      "incident_identifier": "INC-134",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 514,
+      "incident_identifier": "INC-135",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 515,
+      "incident_identifier": "INC-136",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 516,
+      "incident_identifier": "INC-137",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 517,
+      "incident_identifier": "INC-138",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 518,
+      "incident_identifier": "INC-139",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 519,
+      "incident_identifier": "INC-140",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 520,
+      "incident_identifier": "INC-141",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 521,
+      "incident_identifier": "INC-142",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 522,
+      "incident_identifier": "INC-143",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 523,
+      "incident_identifier": "INC-144",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 524,
+      "incident_identifier": "INC-145",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 525,
+      "incident_identifier": "INC-146",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 526,
+      "incident_identifier": "INC-147",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 527,
+      "incident_identifier": "INC-148",
+      "original_severity": "high"
+    },
+    {
+      "database_id": 528,
+      "incident_identifier": "INC-149",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 529,
+      "incident_identifier": "INC-150",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 530,
+      "incident_identifier": "INC-151",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 531,
+      "incident_identifier": "INC-152",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 532,
+      "incident_identifier": "INC-153",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 533,
+      "incident_identifier": "INC-154",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 534,
+      "incident_identifier": "INC-155",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 535,
+      "incident_identifier": "INC-156",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 537,
+      "incident_identifier": "INC-158",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 538,
+      "incident_identifier": "INC-159",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 539,
+      "incident_identifier": "INC-160",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 540,
+      "incident_identifier": "INC-161",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 541,
+      "incident_identifier": "INC-162",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 542,
+      "incident_identifier": "INC-163",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 543,
+      "incident_identifier": "INC-164",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 544,
+      "incident_identifier": "INC-165",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 545,
+      "incident_identifier": "INC-166",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 546,
+      "incident_identifier": "INC-167",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 547,
+      "incident_identifier": "INC-168",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 548,
+      "incident_identifier": "INC-169",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 549,
+      "incident_identifier": "INC-170",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 550,
+      "incident_identifier": "INC-171",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 551,
+      "incident_identifier": "INC-172",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 552,
+      "incident_identifier": "INC-173",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 553,
+      "incident_identifier": "INC-174",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 554,
+      "incident_identifier": "INC-175",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 555,
+      "incident_identifier": "INC-176",
+      "original_severity": "medium"
+    },
+    {
+      "database_id": 556,
+      "incident_identifier": "INC-177",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 557,
+      "incident_identifier": "INC-178",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 558,
+      "incident_identifier": "INC-179",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 559,
+      "incident_identifier": "INC-180",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 560,
+      "incident_identifier": "INC-181",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 561,
+      "incident_identifier": "INC-182",
+      "original_severity": "medium"
+    },
+    {
+      "database_id": 562,
+      "incident_identifier": "INC-183",
+      "original_severity": "medium"
+    },
+    {
+      "database_id": 563,
+      "incident_identifier": "INC-184",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 564,
+      "incident_identifier": "INC-185",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 565,
+      "incident_identifier": "INC-186",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 566,
+      "incident_identifier": "INC-187",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 567,
+      "incident_identifier": "INC-188",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 568,
+      "incident_identifier": "INC-189",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 569,
+      "incident_identifier": "INC-190",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 570,
+      "incident_identifier": "INC-191",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 571,
+      "incident_identifier": "INC-192",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 572,
+      "incident_identifier": "INC-193",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 573,
+      "incident_identifier": "INC-194",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 574,
+      "incident_identifier": "INC-195",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 575,
+      "incident_identifier": "INC-196",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 576,
+      "incident_identifier": "INC-197",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 577,
+      "incident_identifier": "INC-198",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 578,
+      "incident_identifier": "INC-199",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 579,
+      "incident_identifier": "INC-200",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 580,
+      "incident_identifier": "INC-201",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 581,
+      "incident_identifier": "INC-202",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 582,
+      "incident_identifier": "INC-203",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 583,
+      "incident_identifier": "INC-204",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 584,
+      "incident_identifier": "INC-205",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 606,
+      "incident_identifier": "INC-213",
+      "original_severity": "high"
+    },
+    {
+      "database_id": 607,
+      "incident_identifier": "INC-214",
+      "original_severity": "medium"
+    },
+    {
+      "database_id": 609,
+      "incident_identifier": "INC-216",
+      "original_severity": "high"
+    },
+    {
+      "database_id": 610,
+      "incident_identifier": "INC-217",
+      "original_severity": "high"
+    },
+    {
+      "database_id": 612,
+      "incident_identifier": "INC-219",
+      "original_severity": "high"
+    },
+    {
+      "database_id": 616,
+      "incident_identifier": "INC-221",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 617,
+      "incident_identifier": "INC-222",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 618,
+      "incident_identifier": "INC-223",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 620,
+      "incident_identifier": "INC-229",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 621,
+      "incident_identifier": "INC-230",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 622,
+      "incident_identifier": "INC-231",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 623,
+      "incident_identifier": "INC-232",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 624,
+      "incident_identifier": "INC-233",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 625,
+      "incident_identifier": "INC-234",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 626,
+      "incident_identifier": "INC-235",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 627,
+      "incident_identifier": "INC-236",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 629,
+      "incident_identifier": "INC-238",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 631,
+      "incident_identifier": "INC-240",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 634,
+      "incident_identifier": "INC-243",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 635,
+      "incident_identifier": "INC-244",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 636,
+      "incident_identifier": "INC-245",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 637,
+      "incident_identifier": "INC-246",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 638,
+      "incident_identifier": "INC-247",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 639,
+      "incident_identifier": "INC-248",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 640,
+      "incident_identifier": "INC-249",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 641,
+      "incident_identifier": "INC-250",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 642,
+      "incident_identifier": "INC-251",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 643,
+      "incident_identifier": "INC-252",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 644,
+      "incident_identifier": "INC-253",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 645,
+      "incident_identifier": "INC-254",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 646,
+      "incident_identifier": "INC-255",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 647,
+      "incident_identifier": "INC-256",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 648,
+      "incident_identifier": "INC-257",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 649,
+      "incident_identifier": "INC-258",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 650,
+      "incident_identifier": "INC-259",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 651,
+      "incident_identifier": "INC-260",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 652,
+      "incident_identifier": "INC-261",
+      "original_severity": "medium"
+    },
+    {
+      "database_id": 653,
+      "incident_identifier": "INC-262",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 654,
+      "incident_identifier": "INC-263",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 655,
+      "incident_identifier": "INC-264",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 656,
+      "incident_identifier": "INC-265",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 657,
+      "incident_identifier": "INC-266",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 658,
+      "incident_identifier": "INC-267",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 659,
+      "incident_identifier": "INC-268",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 660,
+      "incident_identifier": "INC-269",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 661,
+      "incident_identifier": "INC-270",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 662,
+      "incident_identifier": "INC-271",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 663,
+      "incident_identifier": "INC-272",
+      "original_severity": "high"
+    },
+    {
+      "database_id": 665,
+      "incident_identifier": "INC-274",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 666,
+      "incident_identifier": "INC-275",
+      "original_severity": "high"
+    },
+    {
+      "database_id": 667,
+      "incident_identifier": "INC-276",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 668,
+      "incident_identifier": "INC-277",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 669,
+      "incident_identifier": "INC-278",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 670,
+      "incident_identifier": "INC-279",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 671,
+      "incident_identifier": "INC-280",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 672,
+      "incident_identifier": "INC-281",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 673,
+      "incident_identifier": "INC-282",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 674,
+      "incident_identifier": "INC-283",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 675,
+      "incident_identifier": "INC-284",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 676,
+      "incident_identifier": "INC-285",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 677,
+      "incident_identifier": "INC-286",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 678,
+      "incident_identifier": "INC-287",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 679,
+      "incident_identifier": "INC-288",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 680,
+      "incident_identifier": "INC-289",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 681,
+      "incident_identifier": "INC-290",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 682,
+      "incident_identifier": "INC-291",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 683,
+      "incident_identifier": "INC-292",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 684,
+      "incident_identifier": "INC-293",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 685,
+      "incident_identifier": "INC-294",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 686,
+      "incident_identifier": "INC-295",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 687,
+      "incident_identifier": "INC-296",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 688,
+      "incident_identifier": "INC-297",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 689,
+      "incident_identifier": "INC-298",
+      "original_severity": "normal"
+    },
+    {
+      "database_id": 703,
+      "incident_identifier": "INC-228",
+      "original_severity": "high"
+    },
+    {
+      "database_id": 712,
+      "incident_identifier": "INC-300",
+      "original_severity": "high"
+    },
+    {
+      "database_id": 731,
+      "incident_identifier": "INC-303",
+      "original_severity": "high"
+    }
+  ],
+  "applied_at_utc": "2026-09-08T09:39:53.534Z"
+}

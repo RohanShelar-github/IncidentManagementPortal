@@ -372,27 +372,27 @@
 </div>
 </div>
 <div class="stats-grid">
-<div class="stat-card blue">
+<div class="stat-card blue" id="dashboardCardTotalIncidents">
 <div class="stat-label">Total Incidents</div>
 <div class="stat-value" id="statTotal">148</div>
-<div class="stat-delta"><span class="stat-trend up">↑ +12%</span> vs last month</div>
+<div class="stat-delta" id="statTotalSub">incidents in current filter</div>
 </div>
-<div class="stat-card red metric-kpi-card" onclick="openMetricDrillDown('open')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View open and active incidents">
+<div class="stat-card red metric-kpi-card" id="dashboardCardOpenActive" onclick="openMetricDrillDown('open')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View open and active incidents">
 <div class="stat-label">Open / Active</div>
 <div class="stat-value" id="statOpen">34</div>
-<div class="stat-delta"><span class="stat-trend down">↑ 5</span> critical now</div>
+<div class="stat-delta" id="statOpenSub">critical open</div>
 </div>
-<div class="stat-card green">
+<div class="stat-card green" id="dashboardCardResolved">
 <div class="stat-label">Resolved</div>
 <div class="stat-value" id="statClosed">114</div>
-<div class="stat-delta"><span class="stat-trend up">↑ 77%</span> resolution rate</div>
+<div class="stat-delta" id="statClosedSub">resolved in current filter</div>
 </div>
-<div class="stat-card purple">
+<div class="stat-card purple" id="dashboardCardAvgResolution">
 <div class="stat-label">Avg Resolution</div>
 <div class="stat-value" id="statAvgResolution">—</div>
 <div class="stat-delta" id="statAvgResolutionSub">closed incidents measured</div>
 </div>
-<div class="stat-card" style="border-color:rgba(247,185,79,0.3);background:linear-gradient(135deg,rgba(247,185,79,0.08),rgba(247,185,79,0.02))">
+<div class="stat-card" id="dashboardCardTotalDowntime" style="border-color:rgba(247,185,79,0.3);background:linear-gradient(135deg,rgba(247,185,79,0.08),rgba(247,185,79,0.02))">
 <div class="stat-label" style="color:var(--warning)">Total Downtime</div>
 <div class="stat-value" id="statDowntime" style="color:var(--warning)">—</div>
 <div class="stat-delta" id="statDowntimeSub" style="font-size:11px;color:var(--text-muted)">application incidents only</div>
@@ -402,27 +402,28 @@
 <div class="stat-value" id="statHistorianDowntime" style="color:#b78ae5">—</div>
 <div class="stat-delta" id="statHistorianDowntimeSub" style="font-size:11px;color:var(--text-muted)">Historian incidents only</div>
 </div>
-<div class="stat-card metric-kpi-card" onclick="openMetricDrillDown('sla')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View active SLA-breached incidents" style="border-color:rgba(247,92,124,0.3);background:linear-gradient(135deg,rgba(247,92,124,0.08),rgba(247,92,124,0.02))">
+<div class="stat-card metric-kpi-card" id="dashboardCardSlaBreach" onclick="openMetricDrillDown('sla')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View active SLA-breached incidents" style="border-color:rgba(247,92,124,0.3);background:linear-gradient(135deg,rgba(247,92,124,0.08),rgba(247,92,124,0.02))">
 <div class="stat-label" style="color:var(--danger)">SLA Breach Rate</div>
 <div class="stat-value" id="statSLABreach" style="color:var(--danger)">—</div>
 <div class="stat-delta" id="statSLABreachSub">of incidents breached SLA</div>
 </div>
-<div class="stat-card metric-kpi-card" onclick="openMetricDrillDown('mttr')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View contributing incidents" style="border-color:rgba(247,92,124,0.3);background:linear-gradient(135deg,rgba(247,92,124,0.08),rgba(247,92,124,0.02))">
+<div class="stat-card metric-kpi-card" id="dashboardCardMissedMttr" onclick="openMetricDrillDown('mttr')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View contributing incidents" style="border-color:rgba(247,92,124,0.3);background:linear-gradient(135deg,rgba(247,92,124,0.08),rgba(247,92,124,0.02))">
 <div class="stat-label" style="color:var(--danger)">Missed MTTR Count</div>
 <div class="stat-value" id="statMissedMttr" style="color:var(--danger)">—</div>
 <div class="stat-delta" id="statMissedMttrSub">resolved incidents exceeded target</div>
 </div>
-<div class="stat-card metric-kpi-card" onclick="openMetricDrillDown('mttd')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View contributing incidents" style="border-color:rgba(247,92,124,0.3);background:linear-gradient(135deg,rgba(247,92,124,0.08),rgba(247,92,124,0.02))">
+<div class="stat-card metric-kpi-card" id="dashboardCardMissedMttd" onclick="openMetricDrillDown('mttd')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View contributing incidents" style="border-color:rgba(247,92,124,0.3);background:linear-gradient(135deg,rgba(247,92,124,0.08),rgba(247,92,124,0.02))">
 <div class="stat-label" style="color:var(--danger)">Missed MTTD Count</div>
 <div class="stat-value" id="statMissedMttd" style="color:var(--danger)">—</div>
 <div class="stat-delta" id="statMissedMttdSub">incidents exceeded the 15m target</div>
 </div>
-<div class="stat-card" style="border-color:rgba(79,142,247,0.3);background:linear-gradient(135deg,rgba(79,142,247,0.08),rgba(79,142,247,0.02))">
+<!-- Temporarily hidden from the Dashboard; MTTR data remains available elsewhere. -->
+<div id="dashboardAvgMttrCard" class="stat-card" style="display:none;border-color:rgba(79,142,247,0.3);background:linear-gradient(135deg,rgba(79,142,247,0.08),rgba(79,142,247,0.02))">
 <div class="stat-label" style="color:var(--accent)">Avg MTTR</div>
 <div class="stat-value" id="statAvgMTTR" style="color:var(--accent)">—</div>
 <div class="stat-delta" id="statAvgMTTRSub">mean time to resolve</div>
 </div>
-<div class="stat-card" style="border-color:rgba(45,212,160,0.3);background:linear-gradient(135deg,rgba(45,212,160,0.08),rgba(45,212,160,0.02))">
+<div class="stat-card" id="dashboardCardResolutionRate" style="border-color:rgba(45,212,160,0.3);background:linear-gradient(135deg,rgba(45,212,160,0.08),rgba(45,212,160,0.02))">
 <div class="stat-label" style="color:#2dd4a0">Resolution Rate</div>
 <div class="stat-value" id="statResRate" style="color:#2dd4a0">—</div>
 <div class="stat-delta" id="statResRateSub">incidents fully resolved</div>
@@ -1553,6 +1554,16 @@
 <label class="perm-check" onclick="togglePerm(this)">
 <input checked="" type="checkbox" value="view_dashboard"/> View Dashboard
             </label>
+<label class="perm-check" onclick="togglePerm(this)"><input type="checkbox" value="view_dashboard_total_incidents"/> Dashboard: Total Incidents</label>
+<label class="perm-check" onclick="togglePerm(this)"><input type="checkbox" value="view_dashboard_open_active"/> Dashboard: Open / Active</label>
+<label class="perm-check" onclick="togglePerm(this)"><input type="checkbox" value="view_dashboard_resolved"/> Dashboard: Resolved</label>
+<label class="perm-check" onclick="togglePerm(this)"><input type="checkbox" value="view_dashboard_avg_resolution"/> Dashboard: Avg Resolution</label>
+<label class="perm-check" onclick="togglePerm(this)"><input type="checkbox" value="view_dashboard_total_downtime"/> Dashboard: Total Downtime</label>
+<label class="perm-check" onclick="togglePerm(this)"><input type="checkbox" value="view_dashboard_historian_downtime"/> Dashboard: Historian Downtime</label>
+<label class="perm-check" onclick="togglePerm(this)"><input type="checkbox" value="view_dashboard_sla_breach"/> Dashboard: SLA Breach Rate</label>
+<label class="perm-check" onclick="togglePerm(this)"><input type="checkbox" value="view_dashboard_missed_mttr"/> Dashboard: Missed MTTR Count</label>
+<label class="perm-check" onclick="togglePerm(this)"><input type="checkbox" value="view_dashboard_missed_mttd"/> Dashboard: Missed MTTD Count</label>
+<label class="perm-check" onclick="togglePerm(this)"><input type="checkbox" value="view_dashboard_resolution_rate"/> Dashboard: Resolution Rate</label>
 <label class="perm-check checked" onclick="togglePerm(this)">
 <input checked="" type="checkbox" value="view_incidents"/> View Incidents
             </label>
@@ -2170,7 +2181,7 @@
 <span style="color:var(--text-muted);font-size:13px">mins</span>
 </div>
 </div>
-<div id="dtm_mttr_hint" style="display:none;font-size:10px;color:var(--text-muted);margin-top:6px">Calculated automatically from the incident start and end time for Critical incidents.</div>
+<div id="dtm_mttr_hint" style="display:none;font-size:10px;color:var(--text-muted);margin-top:6px">Calculated from the incident start and end time for Critical incidents. You can edit it if required.</div>
 </div>
 <div style="margin-bottom:16px">
 <label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Resolved By <span style="color:var(--danger,#f75c7c)">*</span></label>
@@ -2324,5 +2335,5 @@
 <div class="ai-chat-suggestions"><button onclick="askAiSuggestion(this)">Show open Critical incidents</button><button onclick="askAiSuggestion(this)">Summarize recent incidents</button></div>
 <footer class="ai-chat-compose"><textarea id="aiChatInput" rows="2" maxlength="2000" placeholder="Ask about incidents..." onkeydown="handleAiChatKey(event)"></textarea><button id="aiChatSend" onclick="sendAiChatMessage()">Send</button></footer>
 </section>
-<script src="./js/reportingMetrics.js"></script><script src="./js/incidentReportExcel.js"></script><script src="./js/app.js?v=20260908-hide-resolved-mail-actions"></script><script src="./config/config.js"></script></body>
+<script src="./js/reportingMetrics.js"></script><script src="./js/incidentReportExcel.js"></script><script src="./js/app.js?v=20260911-resolved-mail-actions"></script><script src="./config/config.js"></script></body>
 </html>

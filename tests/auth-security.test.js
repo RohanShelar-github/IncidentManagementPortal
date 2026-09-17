@@ -29,7 +29,7 @@ test('user management data is admin-only, while incident creators receive a limi
   assert.match(auth, /hasRolePermission\(req\.user\.role, 'create_incidents'\)/);
   assert.match(auth, /SELECT id, full_name, role, is_active/);
   assert.match(auth, /users\.map\(assigneeDto\)/);
-  assert.match(auth, /SELECT u\.id, u\.email, u\.full_name, u\.role, u\.is_active, u\.created_at/);
+  assert.match(auth, /SELECT u\.id, u\.email, u\.full_name, u\.role, u\.is_active, u\.last_active_at, u\.created_at/);
   assert.doesNotMatch(auth, /return \{[\s\S]{0,400}password:/);
 });
 

@@ -55,7 +55,7 @@ function userDto(user) {
     bio: user.bio || '',
     initials: user.initials || String(name || '').split(/\s+/).map(p => p[0] || '').join('').substring(0, 2).toUpperCase(),
     incidents: Number(user.incidents || 0),
-    lastActive: user.last_active || 'Not tracked',
+    lastActive: user.last_active_at || user.last_active || 'Not tracked',
     active: user.is_active === undefined ? true : Boolean(user.is_active)
   };
 }
@@ -141,7 +141,7 @@ const login = async (req, res) => {
     if (!normalizedEmail || !password) return invalidCredentials();
     if (!canAttemptLogin(attemptKey)) return res.status(429).json({ success: false, message: 'Too many login attempts. Please try again later.' });
 
-    const [users] = await pool.query('SELECT id, email, full_name, role, phone, department, location, bio, is_active, password FROM users WHERE email = ? LIMIT 1', [normalizedEmail]);
+    const [users] = await pool.query('SELECT id, email, full_name, role, phone, department, location, bio, is_active, last_active_at, password FROM users WHERE email = ? LIMIT 1', [normalizedEmail]);
     if (users.length === 0) {
       recordFailedLogin(attemptKey);
       return invalidCredentials();
@@ -173,6 +173,10 @@ const login = async (req, res) => {
       }
     }
     clearFailedLogins(attemptKey);
+    // A successful sign-in is always a reliable activity event. Subsequent
+    // authenticated requests refresh this value at a throttled rate.
+    await pool.query('UPDATE users SET last_active_at = CURRENT_TIMESTAMP WHERE id = ?', [user.id]);
+    user.last_active_at = new Date().toISOString();
     const dto = userDto(user);
     const token = jwt.sign(
       { id: dto.id, email: dto.email, name: dto.name, role: dto.role },
@@ -208,11 +212,11 @@ const getAllUsers = async (req, res) => {
     }
 
     const [users] = await pool.query(`
-      SELECT u.id, u.email, u.full_name, u.role, u.is_active, u.created_at,
+      SELECT u.id, u.email, u.full_name, u.role, u.is_active, u.last_active_at, u.created_at,
              COUNT(i.id) AS incidents
         FROM users u
         LEFT JOIN incidents i ON i.assigned_to = u.id
-       GROUP BY u.id, u.email, u.full_name, u.role, u.is_active, u.created_at
+       GROUP BY u.id, u.email, u.full_name, u.role, u.is_active, u.last_active_at, u.created_at
        ORDER BY u.full_name
     `);
     return res.status(200).json({ success: true, data: users.map(userDto) });
@@ -224,7 +228,7 @@ const getAllUsers = async (req, res) => {
 
 const getCurrentUser = async (req, res) => {
   try {
-    const [users] = await pool.query('SELECT id, email, full_name, role, phone, department, location, bio, is_active, created_at FROM users WHERE id = ?', [req.user.id]);
+    const [users] = await pool.query('SELECT id, email, full_name, role, phone, department, location, bio, is_active, last_active_at, created_at FROM users WHERE id = ?', [req.user.id]);
     if (users.length === 0) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }

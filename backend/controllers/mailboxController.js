@@ -358,6 +358,49 @@ async function listMailbox(req, res) {
   }
 }
 
+async function listIncidentSentMailbox(req, res) {
+  if (!await requireMailboxPermission(req, res, 'view_mailbox')) return;
+  try {
+    const requestedLimit = Number.parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 50;
+    const [links] = await pool.query(
+      `SELECT a.graph_message_id, i.incident_ref
+         FROM operations_email_incident_audit a
+         JOIN incidents i ON i.id = a.incident_id
+        WHERE a.status = 'created'
+          AND a.incident_id IS NOT NULL
+          AND a.graph_message_id IS NOT NULL
+          AND a.graph_message_id <> ''
+        ORDER BY a.created_at DESC, a.id DESC
+        LIMIT ?`,
+      [limit]
+    );
+    // Linked source messages can be older than the regular inbox page. Load
+    // them by their saved Graph IDs, with a small concurrency limit to avoid
+    // overloading Microsoft 365 for a larger incident history.
+    const messages = [];
+    for (let index = 0; index < links.length; index += 5) {
+      const batch = links.slice(index, index + 5);
+      const resolved = await Promise.all(batch.map(async (link) => {
+        try {
+          const message = await getInboxMessage(link.graph_message_id);
+          return { ...message, incidentCreated: true, incidentRef: link.incident_ref };
+        } catch (error) {
+          // A source email may have been removed from the mailbox after its
+          // incident was created. Keep the filter usable for all remaining mail.
+          console.warn('Linked Operations email is unavailable:', link.graph_message_id, error.message);
+          return null;
+        }
+      }));
+      messages.push(...resolved.filter(Boolean));
+    }
+    res.json({ success: true, data: messages });
+  } catch (error) {
+    console.error('Incident-sent mailbox list error:', error.message);
+    res.status(502).json({ success: false, message: 'Unable to load incident-linked emails.' });
+  }
+}
+
 async function listSentMailbox(req, res) {
   if (!await requireMailboxPermission(req, res, 'view_mailbox')) return;
   try { res.json({ success: true, data: await listSentMessages(req.query.limit) }); }
@@ -521,4 +564,4 @@ function startMailboxNotificationPolling() {
   mailboxPollTimer = setInterval(pollMailboxForNotifications, 60000);
 }
 
-module.exports = { applyMailboxIncidentLinks, attachMailboxIncidentLinks, conciseAlertDescription, containsCustomerName, deleteMailboxMessage, deleteMailboxSignatureAsAdmin, deleteOwnMailboxSignature, downloadMailboxAttachment, getMailboxMessage, getMailboxOperationsCounts, getOwnMailboxSignature, isNoHistorianReadAlert, listMailbox, listMailboxSignatures, listSentMailbox, markMailboxMessageRead, matchingCustomersByName, noHistorianAlertFields, parseNoHistorianReadAlert, parseOperationsAlert, prepareMailboxIncident, replyToMailboxMessage, saveOwnMailboxSignature, sendNewMailbox, setMailboxMessageReadState, startMailboxNotificationPolling, withUserSignature };
+module.exports = { applyMailboxIncidentLinks, attachMailboxIncidentLinks, conciseAlertDescription, containsCustomerName, deleteMailboxMessage, deleteMailboxSignatureAsAdmin, deleteOwnMailboxSignature, downloadMailboxAttachment, getMailboxMessage, getMailboxOperationsCounts, getOwnMailboxSignature, isNoHistorianReadAlert, listIncidentSentMailbox, listMailbox, listMailboxSignatures, listSentMailbox, markMailboxMessageRead, matchingCustomersByName, noHistorianAlertFields, parseNoHistorianReadAlert, parseOperationsAlert, prepareMailboxIncident, replyToMailboxMessage, saveOwnMailboxSignature, sendNewMailbox, setMailboxMessageReadState, startMailboxNotificationPolling, withUserSignature };

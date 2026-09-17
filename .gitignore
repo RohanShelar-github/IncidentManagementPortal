@@ -5,6 +5,7 @@ backend/logs/
 
 # Runtime dependencies and generated operational data are restored or recreated locally.
 backend/node_modules/
+node_modules/
 Database_Export_v*/
 import-reports/
 .tmp_import_cloud_incidents/

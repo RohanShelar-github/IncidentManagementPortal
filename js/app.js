@@ -1072,8 +1072,11 @@ function openMetricDrillDown(metric, customerName, reportingCategory) {
   var predicate = metric === 'mttr' ? isMissedMttr
     : metric === 'mttd' ? isMissedMttd
       : metric === 'open' ? isActiveIncident : isActiveSlaBreached;
-  var sourceIncidents = (metric === 'open' || metric === 'sla') && !customerName
-    ? getDashboardFilteredIncidents() : incidents;
+  var dashboardPage = document.getElementById('page-dashboard');
+  var isDashboardDrillDown = Boolean(dashboardPage && dashboardPage.classList.contains('active'));
+  var sourceIncidents = isDashboardDrillDown
+    ? getDashboardFilteredIncidents()
+    : ((metric === 'open' || metric === 'sla') && !customerName ? getDashboardFilteredIncidents() : incidents);
   var metricIncidents = sourceIncidents.filter(function (inc) {
     if (customerName && inc.customer !== customerName) return false;
     if (metric === 'mttr' && !customerName && !reportingCategory && isCustomer360HistorianIncident(inc)) return false;
@@ -1933,7 +1936,7 @@ function renderCustomerHealth(custName) {
 function renderMyIncidents() {
   var container = document.getElementById('myIncList');
   if (!container) return;
-  var mine = incidents.filter(function (i) {
+  var mine = getDashboardFilteredIncidents().filter(function (i) {
     return i.engineer === currentUserName && i.status !== 'Closed';
   }).slice(0, 5);
   var badge = document.getElementById('myIncBadge');
@@ -2030,6 +2033,8 @@ function applyDashFilters() {
   updateStats();
   renderRecentTable();
   renderActivity();
+  renderMyIncidents();
+  renderHealthGrid();
   renderEngineerLeaderboard();
   renderRecurringList();
   renderSlaCountdown();
@@ -2894,6 +2899,70 @@ function openMailboxSignatureManager() {
   });
 }
 
+function noHistorianReplyRecipientPreset(message) {
+  var subject = String(message && message.subject || '');
+  if (!/\b(?:FTD\s+)?No\s+Historian\s+Read\b/i.test(subject)) return null;
+  // Reuse the exact recipient preset used by Historian incident creation.
+  return historianMailRecipientPreset({ customer: 'NGC', project: 'Historian', area: 'Historian' });
+}
+
+function mailboxRecipientSuggestionEntries(inputs) {
+  var directory = new Map();
+  var add = function (email, name) {
+    var address = String(email || '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address) || directory.has(address.toLowerCase())) return;
+    directory.set(address.toLowerCase(), { email: address, name: String(name || preSendRecipientLabel(address)).trim() });
+  };
+  (Array.isArray(recipientDirectory) ? recipientDirectory : []).forEach(function (entry) { add(entry && entry.email, entry && entry.name); });
+  (Array.isArray(users) ? users : []).forEach(function (user) { add(user && user.email, user && user.name); });
+  add(currentUserProfile && currentUserProfile.email, currentUserProfile && currentUserProfile.name);
+  (inputs || []).forEach(function (input) { String(input && input.value || '').split(',').forEach(function (email) { add(email); }); });
+  return Array.from(directory.values()).sort(function (a, b) { return a.name.localeCompare(b.name); });
+}
+
+var mailboxRecipientDrag = null;
+function mailboxRecipientTokens(value) { return String(value || '').split(',').map(function (entry) { return entry.trim(); }).filter(Boolean); }
+function hideMailboxRecipientSuggestions(menu) { setTimeout(function () { if (menu) { menu.style.display = 'none'; menu.innerHTML = ''; } }, 120); }
+function syncMailboxRecipientWidget(widget) { widget._source.value = widget._recipients.join(', '); }
+function renderMailboxRecipientWidget(widget) {
+  var host = widget._host, editor = widget._editor; syncMailboxRecipientWidget(widget); host.innerHTML = '';
+  widget._recipients.forEach(function (email) {
+    var chip = document.createElement('span'); chip.className = 'notification-recipient-chip'; chip.draggable = true; chip.title = 'Drag to ' + (widget._fieldName === 'To' ? 'CC' : 'To');
+    chip.innerHTML = '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><strong>' + escapePreSendRecipientHtml(preSendRecipientLabel(email)) + '</strong> <span style="color:var(--text-muted)">&lt;' + escapePreSendRecipientHtml(email) + '&gt;</span></span>';
+    var remove = document.createElement('button'); remove.type = 'button'; remove.title = 'Remove recipient'; remove.setAttribute('aria-label', 'Remove ' + email); remove.textContent = '×'; remove.onclick = function () { widget._recipients = widget._recipients.filter(function (value) { return value.toLowerCase() !== email.toLowerCase(); }); renderMailboxRecipientWidget(widget); }; chip.appendChild(remove);
+    chip.ondragstart = function (event) { mailboxRecipientDrag = { source: widget, email: email }; event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', email); chip.classList.add('dragging'); };
+    chip.ondragend = function () { chip.classList.remove('dragging'); document.querySelectorAll('.recipient-drop-target').forEach(function (target) { target.classList.remove('recipient-drop-target'); }); };
+    host.appendChild(chip);
+  });
+  host.appendChild(editor);
+}
+function addMailboxRecipientToWidget(widget, email) {
+  var address = String(email || '').trim(); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) { showToast('Enter a valid email address.', 'error'); return; }
+  (widget._relatedInputs || []).forEach(function (input) { var related = input._mailboxRecipientWidget; if (related && related !== widget) { related._recipients = related._recipients.filter(function (value) { return value.toLowerCase() !== address.toLowerCase(); }); renderMailboxRecipientWidget(related); } });
+  if (!widget._recipients.some(function (value) { return value.toLowerCase() === address.toLowerCase(); })) widget._recipients.push(address);
+  widget._editor.value = ''; renderMailboxRecipientWidget(widget); widget._editor.focus();
+}
+function attachMailboxRecipientSuggestions(input, fieldName, relatedInputs) {
+  var wrap = document.createElement('div'); wrap.style.position = 'relative';
+  var host = document.createElement('div'); host.className = 'notification-recipient-chips'; host.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;min-height:40px;padding:7px;border:1px solid var(--border);border-radius:7px;background:var(--surface);align-items:center';
+  var editor = document.createElement('input'); editor.type = 'text'; editor.className = 'mailbox-compose-input'; editor.placeholder = 'Add recipient email'; editor.autocomplete = 'off'; editor.style.cssText = 'flex:1;min-width:170px;width:auto;border:0;padding:3px 2px;background:transparent'; editor.setAttribute('aria-autocomplete', 'list');
+  var menu = document.createElement('div'); menu.className = 'notification-recipient-suggestions'; menu.setAttribute('role', 'listbox'); menu.setAttribute('aria-label', fieldName + ' recipient suggestions');
+  var widget = { _source: input, _host: host, _editor: editor, _menu: menu, _fieldName: fieldName, _relatedInputs: relatedInputs || [], _recipients: mailboxRecipientTokens(input.value) }; input.type = 'hidden'; input._mailboxRecipientWidget = widget; wrap._render = function () { renderMailboxRecipientWidget(widget); };
+  host.ondragover = function (event) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; host.classList.add('recipient-drop-target'); };
+  host.ondragleave = function (event) { if (!host.contains(event.relatedTarget)) host.classList.remove('recipient-drop-target'); };
+  host.ondrop = function (event) { event.preventDefault(); host.classList.remove('recipient-drop-target'); if (!mailboxRecipientDrag || mailboxRecipientDrag.source === widget) return; var dragged = mailboxRecipientDrag; mailboxRecipientDrag = null; dragged.source._recipients = dragged.source._recipients.filter(function (value) { return value.toLowerCase() !== dragged.email.toLowerCase(); }); renderMailboxRecipientWidget(dragged.source); addMailboxRecipientToWidget(widget, dragged.email); };
+  editor.addEventListener('input', function () {
+    var query = editor.value.trim().toLowerCase(); if (!query) { menu.style.display = 'none'; menu.innerHTML = ''; return; }
+    var matches = mailboxRecipientSuggestionEntries(relatedInputs).filter(function (entry) { return entry.email.toLowerCase().includes(query) || entry.name.toLowerCase().includes(query); }).slice(0, 8);
+    if (!matches.length && (recipientDirectoryLoading || !recipientDirectory.length)) { menu.innerHTML = '<div class="notification-recipient-suggestion notification-recipient-suggestion-loading">Searching known email addresses…</div>'; menu.style.display = 'block'; loadRecipientDirectory(function () { editor.dispatchEvent(new Event('input')); }); return; }
+    if (!matches.length) { menu.style.display = 'none'; menu.innerHTML = ''; return; }
+    menu.innerHTML = matches.map(function (entry) { return '<button type="button" class="notification-recipient-suggestion" role="option" data-recipient-email="' + escapePreSendRecipientHtml(entry.email) + '"><strong>' + escapePreSendRecipientHtml(entry.name) + '</strong><span>' + escapePreSendRecipientHtml(entry.email) + '</span></button>'; }).join(''); menu.style.display = 'block';
+    menu.querySelectorAll('[data-recipient-email]').forEach(function (button) { button.onmousedown = function (event) { event.preventDefault(); addMailboxRecipientToWidget(widget, button.dataset.recipientEmail); menu.style.display = 'none'; menu.innerHTML = ''; }; });
+  });
+  editor.addEventListener('keydown', function (event) { if (event.key === 'Enter' || event.key === ',') { event.preventDefault(); addMailboxRecipientToWidget(widget, editor.value); } if (event.key === 'Escape') hideMailboxRecipientSuggestions(menu); }); editor.addEventListener('blur', function () { hideMailboxRecipientSuggestions(menu); });
+  wrap.append(input, host, menu); renderMailboxRecipientWidget(widget); return wrap;
+}
+
 function showMailboxReply(message, detail, initialMode) {
   var existing = detail.querySelector('.mailbox-reply'); if (existing) existing.remove();
   var bodyWrap = detail.querySelector('.mailbox-detail-body-wrap');
@@ -2901,15 +2970,21 @@ function showMailboxReply(message, detail, initialMode) {
   var form = document.createElement('div'); form.className = 'mailbox-reply mailbox-compose';
   var heading = document.createElement('div'); heading.className = 'mailbox-compose-head'; var label = document.createElement('div'); label.className = 'mailbox-reply-label'; label.textContent = 'Compose from AOC mailbox'; var mode = { value: initialMode || 'reply' }; heading.append(label);
   var sentItem = mailboxMessageFolder(message) === 'sent';
-  var to = document.createElement('input'); to.type = 'email'; to.className = 'mailbox-compose-input'; to.placeholder = 'To'; to.value = sentItem ? (message.to || '') : (message.from || ''); var cc = document.createElement('input'); cc.type = 'text'; cc.className = 'mailbox-compose-input'; cc.placeholder = 'CC (comma-separated, optional)'; var bcc = document.createElement('input'); bcc.type = 'text'; bcc.className = 'mailbox-compose-input'; bcc.placeholder = 'BCC (comma-separated, optional)'; var subject = document.createElement('input'); subject.type = 'text'; subject.className = 'mailbox-compose-input'; subject.placeholder = 'Subject'; subject.value = message.subject && /^re:/i.test(message.subject) ? message.subject : 'Re: ' + (message.subject || '');
-  var recipientHelp = document.createElement('div'); recipientHelp.className = 'mailbox-recipient-help'; recipientHelp.textContent = 'Reply recipients are taken from the original message.';
-  function updateMode() { var forward = mode.value === 'forward'; to.readOnly = false; to.disabled = false; to.setAttribute('aria-disabled', 'false'); to.title = forward ? 'Enter the recipient(s) for this forwarded email.' : 'You may edit the reply recipient(s).'; if (mode.value === 'replyAll' && !cc.dataset.manuallyChanged) cc.value = sentItem ? (message.cc || '') : (message.replyAllCc || ''); recipientHelp.textContent = forward ? 'Enter the recipient(s) for this forwarded email.' : (sentItem ? (mode.value === 'replyAll' ? 'Original To and CC recipients are included. You may edit To, subject, or CC.' : 'Original recipients are included. You may edit To or subject.') : (mode.value === 'replyAll' ? 'Reply-all recipients are included in CC. You may edit To, subject, or CC.' : 'Reply recipients are taken from the original message. You may edit To or subject.')); }
+  var historianRecipients = initialMode === 'forward' ? null : noHistorianReplyRecipientPreset(message);
+  var to = document.createElement('input'); to.type = 'email'; to.className = 'mailbox-compose-input'; to.placeholder = 'To'; to.value = sentItem ? (message.to || '') : (message.from || ''); if (historianRecipients) to.value = historianRecipients.to; var cc = document.createElement('input'); cc.type = 'text'; cc.className = 'mailbox-compose-input'; cc.placeholder = 'CC (comma-separated, optional)';
+  // Set Reply All recipients before the chip widget is attached. Previously
+  // they were assigned afterwards, and the empty widget state overwrote them.
+  cc.value = historianRecipients ? historianRecipients.cc : (initialMode === 'replyAll' ? (sentItem ? (message.cc || '') : (message.replyAllCc || message.to || message.cc || '')) : '');
+  var bcc = document.createElement('input'); bcc.type = 'text'; bcc.className = 'mailbox-compose-input'; bcc.placeholder = 'BCC (comma-separated, optional)'; var subject = document.createElement('input'); subject.type = 'text'; subject.className = 'mailbox-compose-input'; subject.placeholder = 'Subject'; subject.value = message.subject && /^re:/i.test(message.subject) ? message.subject : 'Re: ' + (message.subject || '');
+  var recipientHelp = document.createElement('div'); recipientHelp.className = 'mailbox-recipient-help'; recipientHelp.textContent = historianRecipients ? 'Historian incident recipients were prefilled. You may edit To, CC, or subject.' : 'Reply recipients are taken from the original message.';
+  function updateMode() { var forward = mode.value === 'forward'; to.readOnly = false; to.disabled = false; to.setAttribute('aria-disabled', 'false'); to.title = forward ? 'Enter the recipient(s) for this forwarded email.' : 'You may edit the reply recipient(s).'; recipientHelp.textContent = historianRecipients ? 'Historian incident recipients were prefilled. You may edit To, CC, or subject.' : (forward ? 'Enter the recipient(s) for this forwarded email.' : (sentItem ? (mode.value === 'replyAll' ? 'Original To and CC recipients are included. You may edit To, subject, or CC.' : 'Original recipients are included. You may edit To or subject.') : (mode.value === 'replyAll' ? 'Reply-all recipients are included in CC. You may edit To, subject, or CC.' : 'Reply recipients are taken from the original message. You may edit To or subject.'))); }
   cc.addEventListener('input', function () { cc.dataset.manuallyChanged = 'true'; });
   var toolbar = document.createElement('div'); toolbar.className = 'mailbox-compose-toolbar'; [['bold','B','Bold'],['italic','I','Italic'],['underline','U','Underline'],['insertUnorderedList','• List','Bulleted list'],['insertOrderedList','1. List','Numbered list'],['createLink','↗ Link','Insert link'],['addSignature','Signature','Add saved signature'],['removeFormat','Tx','Clear formatting']].forEach(function (entry) { var button = document.createElement('button'); button.type = 'button'; button.className = 'mailbox-tool'; button.textContent = entry[1]; button.title = entry[2]; button.onclick = function () { if (entry[0] === 'addSignature') { appendMailboxSignature(editor); return; } var value = entry[0] === 'createLink' ? window.prompt('Paste the link URL') : null; if (entry[0] !== 'createLink' || value) document.execCommand(entry[0], false, value); editor.focus(); }; toolbar.appendChild(button); });
   var editor = document.createElement('div'); editor.className = 'mailbox-rich-editor'; editor.contentEditable = 'true'; editor.setAttribute('role', 'textbox'); editor.setAttribute('aria-label', 'Email message'); editor.dataset.placeholder = 'Write your message…'; configureMailboxComposeImageEditor(editor, 'mailboxReplyEditor'); addMailboxComposeImageTools(toolbar, editor);
   var attachments = document.createElement('div'); attachments.className = 'mailbox-compose-attachments'; var fileInput = document.createElement('input'); fileInput.type = 'file'; fileInput.multiple = true; fileInput.id = 'mailboxReplyFiles'; var fileLabel = document.createElement('label'); fileLabel.className = 'mailbox-attach-button'; fileLabel.htmlFor = fileInput.id; fileLabel.textContent = 'Attach files'; var fileNames = document.createElement('span'); fileNames.className = 'mailbox-file-names'; fileNames.textContent = 'Up to 10 files, 2.5 MB each'; fileInput.onchange = function () { fileNames.textContent = fileInput.files.length ? Array.from(fileInput.files).map(function (file) { return file.name; }).join(', ') : 'Up to 10 files, 2.5 MB each'; }; attachments.append(fileInput, fileLabel, fileNames);
   var actions = document.createElement('div'); actions.className = 'mailbox-reply-actions'; var cancel = document.createElement('button'); cancel.className = 'btn btn-secondary btn-sm'; cancel.textContent = 'Discard'; cancel.onclick = function () { form.remove(); }; var send = document.createElement('button'); send.className = 'btn btn-primary btn-sm'; send.textContent = 'Send'; send.onclick = function () { var html = editor.innerHTML.trim(); if (!editor.textContent.trim() && !editor.querySelector('img')) { showToast('Please enter a message.', 'error'); return; } send.disabled = true; send.textContent = 'Preparing…'; mailboxFilesToPayload(fileInput.files).then(function (attachmentsPayload) { send.textContent = 'Sending…'; return fetch(window.APP_CONFIG.API_BASE_URL + mailboxMessagePath(message, '/reply'), { method: 'POST', headers: { Authorization: 'Bearer ' + mailboxToken(), 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: mode.value, to: to.value.trim(), cc: cc.value.trim(), bcc: bcc.value.trim(), subject: subject.value.trim(), html: html, attachments: attachmentsPayload }) }).then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to send email'); return data; }); }); }).then(function () { showToast('Email sent from the AOC mailbox.', 'success'); form.remove(); if (mailboxActiveView === 'sent') loadMailbox(); }).catch(function (error) { send.disabled = false; send.textContent = 'Send'; showToast(error.message, 'error'); }); }; actions.append(cancel, send);
-  form.append(heading, to, cc, bcc, subject, recipientHelp, toolbar, editor, attachments, actions); detail.querySelector('.mailbox-detail-body-wrap').before(form); var composerObserver = new MutationObserver(function () { if (!form.isConnected) { if (bodyWrap) bodyWrap.style.display = ''; composerObserver.disconnect(); } }); composerObserver.observe(detail, { childList: true }); updateMode(); editor.focus();
+  var recipientInputs = [to, cc]; var toControl = attachMailboxRecipientSuggestions(to, 'To', recipientInputs); var ccControl = attachMailboxRecipientSuggestions(cc, 'CC', recipientInputs); loadRecipientDirectory();
+  form.append(heading, toControl, ccControl, bcc, subject, recipientHelp, toolbar, editor, attachments, actions); detail.querySelector('.mailbox-detail-body-wrap').before(form); var composerObserver = new MutationObserver(function () { if (!form.isConnected) { if (bodyWrap) bodyWrap.style.display = ''; composerObserver.disconnect(); } }); composerObserver.observe(detail, { childList: true }); updateMode(); toControl._render(); ccControl._render(); editor.focus();
 }
 function deleteMailboxMessage(message, detail) {
   fetch(window.APP_CONFIG.API_BASE_URL + mailboxMessagePath(message), { method: 'DELETE', headers: { Authorization: 'Bearer ' + mailboxToken() } })
@@ -3018,39 +3093,18 @@ function ensureOperationsMailboxUi() {
   ensureMailboxReadFilterUi(layout);
   document.querySelectorAll('.operations-view').forEach(function (button) { button.classList.toggle('active', button.dataset.mailboxView === mailboxActiveView); });
   var composeButton = document.getElementById('operationsNewMailBtn'); if (composeButton) composeButton.style.display = hasMailboxPermission('send_mailbox') ? '' : 'none';
-  ensureOperationsIncidentActions();
 }
 
-var operationsIncidentActionObserver = null;
 function isResolvedOperationsEmail(message) {
   // Resolution notifications are informational only and must not start a new
   // incident. Match whole keywords so an unrelated subject is not hidden.
   return /\b(?:resolved|deactivated)\b/i.test(String(message && message.subject || ''));
 }
-function ensureOperationsIncidentActions() {
-  var list = document.getElementById('mailboxList');
-  if (!list || operationsIncidentActionObserver) return;
-  function addActions() {
-    if (mailboxActiveView === 'sent' || !hasPermission('create_incidents')) return;
-    list.querySelectorAll('.mailbox-row').forEach(function (row, index) {
-      if (row.querySelector('.mailbox-row-create-incident')) return;
-      var message = mailboxVisibleMessages()[index];
-      if (!message || isResolvedOperationsEmail(message)) return;
-      var button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-secondary btn-sm mailbox-row-create-incident'; button.textContent = 'Create Incident';
-      button.style.cssText = 'margin-top:7px;padding:4px 8px;font-size:10px';
-      button.onclick = function (event) { event.stopPropagation(); openCreateIncidentFromOperationsEmail(message, button); };
-      row.appendChild(button);
-    });
-  }
-  operationsIncidentActionObserver = new MutationObserver(addActions);
-  operationsIncidentActionObserver.observe(list, { childList: true, subtree: true });
-  addActions();
-}
 
 function operationsViewLabel(view) { return ({ all: 'All Incoming', coralogix: 'Coralogix Alerts', azure: 'Azure Alerts', jira: 'Customer Raised Tickets', sent: 'Sent Items' })[view] || 'All Incoming'; }
-function mailboxReadFilterLabel(filter) { return ({ all: 'All', unread: 'Unread', read: 'Read' })[filter] || 'All'; }
+function mailboxReadFilterLabel(filter) { return ({ all: 'All', unread: 'Unread', read: 'Read', incident_sent: 'Incident Sent' })[filter] || 'All'; }
 function setMailboxView(view) { mailboxActiveView = ['all', 'coralogix', 'azure', 'jira', 'sent'].indexOf(view) > -1 ? view : 'all'; if (mailboxActiveView === 'sent') mailboxReadFilter = 'all'; mailboxSearchQuery = ''; var search = document.getElementById('mailboxSearch'); if (search) search.value = ''; selectedMailboxId = null; selectedMailboxMessageIds.clear(); var detail = document.getElementById('mailboxDetail'); if (detail) detail.innerHTML = '<div class="mailbox-empty">Select an email to read it here.</div>'; ensureOperationsMailboxUi(); loadMailbox(); }
-function setMailboxReadFilter(filter) { mailboxReadFilter = ['all', 'unread', 'read'].indexOf(filter) > -1 ? filter : 'all'; selectedMailboxId = null; selectedMailboxMessageIds.clear(); var detail = document.getElementById('mailboxDetail'); if (detail) detail.innerHTML = '<div class="mailbox-empty">Select an email to read it here.</div>'; ensureOperationsMailboxUi(); renderMailboxList(); }
+function setMailboxReadFilter(filter) { var previous = mailboxReadFilter; mailboxReadFilter = ['all', 'unread', 'read', 'incident_sent'].indexOf(filter) > -1 ? filter : 'all'; selectedMailboxId = null; selectedMailboxMessageIds.clear(); var detail = document.getElementById('mailboxDetail'); if (detail) detail.innerHTML = '<div class="mailbox-empty">Select an email to read it here.</div>'; ensureOperationsMailboxUi(); if (mailboxReadFilter === 'incident_sent' || previous === 'incident_sent') loadMailbox(); else renderMailboxList(); }
 function ensureMailboxReadFilterUi(layout) {
   var head = layout && layout.querySelector('.mailbox-list-head'); if (!head) return;
   var actions = head.querySelector('.mailbox-list-actions'); if (!actions) return;
@@ -3059,7 +3113,7 @@ function ensureMailboxReadFilterUi(layout) {
     wrap = document.createElement('div'); wrap.id = 'mailboxReadFilter'; wrap.className = 'mailbox-read-filter';
     var button = document.createElement('button'); button.id = 'mailboxReadFilterButton'; button.type = 'button'; button.className = 'mailbox-filter-button'; button.setAttribute('aria-haspopup', 'menu'); button.onclick = function (event) { event.stopPropagation(); var menu = document.getElementById('mailboxReadFilterMenu'); if (menu) menu.hidden = !menu.hidden; };
     var menu = document.createElement('div'); menu.id = 'mailboxReadFilterMenu'; menu.className = 'mailbox-filter-menu'; menu.setAttribute('role', 'menu'); menu.hidden = true;
-    [['all', 'All'], ['unread', 'Unread'], ['read', 'Read']].forEach(function (option) { var item = document.createElement('button'); item.type = 'button'; item.dataset.mailboxReadFilter = option[0]; item.setAttribute('role', 'menuitem'); item.textContent = option[1]; item.onclick = function () { menu.hidden = true; setMailboxReadFilter(option[0]); }; menu.appendChild(item); });
+    [['all', 'All'], ['unread', 'Unread'], ['read', 'Read'], ['incident_sent', 'Incident Sent']].forEach(function (option) { var item = document.createElement('button'); item.type = 'button'; item.dataset.mailboxReadFilter = option[0]; item.setAttribute('role', 'menuitem'); item.textContent = option[1]; item.onclick = function () { menu.hidden = true; setMailboxReadFilter(option[0]); }; menu.appendChild(item); });
     wrap.append(button, menu); actions.insertBefore(wrap, actions.firstChild);
   }
   wrap.style.display = mailboxActiveView === 'sent' ? 'none' : '';
@@ -3071,6 +3125,7 @@ function mailboxVisibleMessages() {
   var messages = mailboxMessages;
   if (mailboxReadFilter === 'unread') messages = messages.filter(function (message) { return !message.isRead && message.mailboxSource !== 'sent'; });
   if (mailboxReadFilter === 'read') messages = messages.filter(function (message) { return message.isRead && message.mailboxSource !== 'sent'; });
+  if (mailboxReadFilter === 'incident_sent') messages = messages.filter(function (message) { return message.mailboxSource !== 'sent' && Boolean(message.incidentCreated); });
   if (!mailboxSearchQuery) return messages;
   return messages.filter(function (message) { return [message.fromName, message.from, message.to, message.subject, message.preview, message.jiraIssueKey].join(' ').toLowerCase().indexOf(mailboxSearchQuery) > -1; });
 }
@@ -3085,7 +3140,7 @@ function loadOperationsCounts() {
 function loadMailbox(options) {
   options = options || {}; ensureOperationsMailboxUi(); var list = document.getElementById('mailboxList'); if (!list) return;
   if (!options.silent) list.innerHTML = '<div class="mailbox-empty">Loading ' + operationsViewLabel(mailboxActiveView).toLowerCase() + '…</div>';
-  var endpoint = mailboxActiveView === 'sent' ? '/mailbox/sent?limit=50' : '/mailbox/inbox?limit=50&category=' + encodeURIComponent(mailboxActiveView);
+  var endpoint = mailboxActiveView === 'sent' ? '/mailbox/sent?limit=50' : (mailboxReadFilter === 'incident_sent' ? '/mailbox/inbox/incident-sent?limit=50' : '/mailbox/inbox?limit=50&category=' + encodeURIComponent(mailboxActiveView));
   fetch(window.APP_CONFIG.API_BASE_URL + endpoint, { headers: { Authorization: 'Bearer ' + mailboxToken() } })
     .then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to load Operations mail'); return data.data; }); })
     .then(function (messages) { var incoming = messages || []; var newMessages = mailboxActiveView !== 'sent' && mailboxInitialLoadComplete ? incoming.filter(function (message) { return !knownMailboxMessageIds.has(message.id) && !message.isRead; }) : []; mailboxMessages = incoming; knownMailboxMessageIds = new Set(incoming.map(function (message) { return message.id; })); mailboxInitialLoadComplete = true; selectedMailboxMessageIds = new Set(Array.from(selectedMailboxMessageIds).filter(function (id) { return mailboxMessages.some(function (message) { return message.id === id; }); })); renderMailboxList(); if (mailboxActiveView !== 'sent') loadOperationsCounts(); if (newMessages.length) showToast(newMessages.length === 1 ? 'New Operations email received: ' + (newMessages[0].subject || '(No subject)') : newMessages.length + ' new Operations emails received.', 'info'); })
@@ -3438,7 +3493,8 @@ function showNewMailboxComposer() {
   var editor = document.createElement('div'); editor.className = 'mailbox-rich-editor'; editor.contentEditable = 'true'; editor.dataset.placeholder = 'Write your message…'; editor.setAttribute('role', 'textbox'); editor.setAttribute('aria-label', 'Email body'); configureMailboxComposeImageEditor(editor, 'mailboxNewMailEditor');
   var attachments = document.createElement('div'); attachments.className = 'mailbox-compose-attachments'; var fileInput = document.createElement('input'); fileInput.type = 'file'; fileInput.multiple = true; fileInput.id = 'operationsNewMailFiles'; var fileLabel = document.createElement('label'); fileLabel.className = 'mailbox-attach-button'; fileLabel.htmlFor = fileInput.id; fileLabel.textContent = 'Attach files'; var fileNames = document.createElement('span'); fileNames.className = 'mailbox-file-names'; fileNames.textContent = 'Up to 10 files, 2.5 MB each'; fileInput.onchange = function () { fileNames.textContent = fileInput.files.length ? Array.from(fileInput.files).map(function (file) { return file.name; }).join(', ') : 'Up to 10 files, 2.5 MB each'; }; attachments.append(fileInput, fileLabel, fileNames);
   var actions = document.createElement('div'); actions.className = 'mailbox-reply-actions'; var discard = document.createElement('button'); discard.type = 'button'; discard.className = 'btn btn-secondary btn-sm'; discard.textContent = 'Discard'; discard.onclick = function () { var dirty = to.value || cc.value || bcc.value || subject.value || editor.textContent.trim() || editor.querySelector('img') || fileInput.files.length; if (!dirty || window.confirm('Discard this email?')) { detail.innerHTML = '<div class="mailbox-empty">Select an email to read it here.</div>'; } }; var send = document.createElement('button'); send.type = 'button'; send.className = 'btn btn-primary btn-sm'; send.textContent = 'Send'; send.onclick = function () { var html = editor.innerHTML.trim(); if (!to.value.trim()) { showToast('Add at least one To recipient.', 'error'); return; } if (!subject.value.trim()) { showToast('Email subject is required.', 'error'); return; } if (!editor.textContent.trim() && !editor.querySelector('img')) { showToast('Please enter a message.', 'error'); return; } send.disabled = true; send.textContent = 'Preparing…'; mailboxFilesToPayload(fileInput.files).then(function (attachmentsPayload) { send.textContent = 'Sending…'; return fetch(window.APP_CONFIG.API_BASE_URL + '/mailbox/send', { method: 'POST', headers: { Authorization: 'Bearer ' + mailboxToken(), 'Content-Type': 'application/json' }, body: JSON.stringify({ to: to.value.trim(), cc: cc.value.trim(), bcc: bcc.value.trim(), subject: subject.value.trim(), html: html, attachments: attachmentsPayload }) }).then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to send email'); return data; }); }); }).then(function () { showToast('Email sent successfully.', 'success'); detail.innerHTML = '<div class="mailbox-empty">Email sent successfully. Select an email to read it here.</div>'; if (mailboxActiveView === 'sent') loadMailbox(); }).catch(function (error) { send.disabled = false; send.textContent = 'Send'; showToast(error.message, 'error'); }); }; actions.append(discard, send);
-  form.append(heading, to, cc, bcc, subject, mailboxComposeToolbar(editor), editor, attachments, actions); detail.appendChild(form); to.focus();
+  var recipientInputs = [to, cc]; var toControl = attachMailboxRecipientSuggestions(to, 'To', recipientInputs); var ccControl = attachMailboxRecipientSuggestions(cc, 'CC', recipientInputs); loadRecipientDirectory();
+  form.append(heading, toControl, ccControl, bcc, subject, mailboxComposeToolbar(editor), editor, attachments, actions); detail.appendChild(form); to.focus();
 }
 
 function openMailboxMessage(id) {
@@ -3569,6 +3625,23 @@ function switchRole(role) {
   el = document.getElementById('dashNav');
   if (el) el.style.display = can('view_dashboard') ? '' : 'none';
 
+  // The Dashboard page and each KPI card are independently assignable.
+  [
+    ['dashboardCardTotalIncidents', 'view_dashboard_total_incidents'],
+    ['dashboardCardOpenActive', 'view_dashboard_open_active'],
+    ['dashboardCardResolved', 'view_dashboard_resolved'],
+    ['dashboardCardAvgResolution', 'view_dashboard_avg_resolution'],
+    ['dashboardCardTotalDowntime', 'view_dashboard_total_downtime'],
+    ['statHistorianDowntimeCard', 'view_dashboard_historian_downtime'],
+    ['dashboardCardSlaBreach', 'view_dashboard_sla_breach'],
+    ['dashboardCardMissedMttr', 'view_dashboard_missed_mttr'],
+    ['dashboardCardMissedMttd', 'view_dashboard_missed_mttd'],
+    ['dashboardCardResolutionRate', 'view_dashboard_resolution_rate']
+  ].forEach(function (card) {
+    var cardElement = document.getElementById(card[0]);
+    if (cardElement) cardElement.style.display = can('view_dashboard') && can(card[1]) ? '' : 'none';
+  });
+
   // ── Refresh icon is always visible on dashboard (inline, non-intrusive) ──
 
   // ── Reports page: export buttons ─────────────────────────
@@ -3625,8 +3698,25 @@ const SUPPORTED_USER_ROLES = [
   { key: 'stakeholder', name: 'Stakeholder' }
 ];
 
+const DASHBOARD_CARD_PERMISSIONS = [
+  'view_dashboard_total_incidents', 'view_dashboard_open_active', 'view_dashboard_resolved',
+  'view_dashboard_avg_resolution', 'view_dashboard_total_downtime', 'view_dashboard_historian_downtime',
+  'view_dashboard_sla_breach', 'view_dashboard_missed_mttr', 'view_dashboard_missed_mttd',
+  'view_dashboard_resolution_rate'
+];
+
 const PERM_LABELS = {
   view_dashboard: 'View Dashboard',
+  view_dashboard_total_incidents: 'Dashboard: Total Incidents',
+  view_dashboard_open_active: 'Dashboard: Open / Active',
+  view_dashboard_resolved: 'Dashboard: Resolved',
+  view_dashboard_avg_resolution: 'Dashboard: Avg Resolution',
+  view_dashboard_total_downtime: 'Dashboard: Total Downtime',
+  view_dashboard_historian_downtime: 'Dashboard: Historian Downtime',
+  view_dashboard_sla_breach: 'Dashboard: SLA Breach Rate',
+  view_dashboard_missed_mttr: 'Dashboard: Missed MTTR Count',
+  view_dashboard_missed_mttd: 'Dashboard: Missed MTTD Count',
+  view_dashboard_resolution_rate: 'Dashboard: Resolution Rate',
   view_incidents: 'View Incidents',
   create_incidents: 'Create Incidents',
   edit_incidents: 'Edit Incidents',
@@ -3650,32 +3740,32 @@ let roles = [
   {
     key: 'admin', name: 'Admin', icon: '🛡', color: 'purple', system: true,
     desc: 'Full access to all portal features including user and role management.',
-    perms: ['view_dashboard', 'view_incidents', 'create_incidents', 'edit_incidents', 'close_incidents', 'delete_incidents', 'view_reports', 'export_reports', 'view_customer360', 'view_mailbox', 'send_mailbox', 'delete_mailbox', 'view_drafts', 'delete_drafts', 'manage_users', 'manage_roles', 'assign_roles', 'manage_data']
+    perms: ['view_dashboard', ...DASHBOARD_CARD_PERMISSIONS, 'view_incidents', 'create_incidents', 'edit_incidents', 'close_incidents', 'delete_incidents', 'view_reports', 'export_reports', 'view_customer360', 'view_mailbox', 'send_mailbox', 'delete_mailbox', 'view_drafts', 'delete_drafts', 'manage_users', 'manage_roles', 'assign_roles', 'manage_data']
   },
   {
     key: 'cso', name: 'CSO', icon: '🌐', color: 'green', system: false,
     desc: 'Cloud Service Operations — manages and resolves incidents, generates reports.',
-    perms: ['view_dashboard', 'view_incidents', 'edit_incidents', 'close_incidents', 'view_reports', 'export_reports', 'view_customer360']
+    perms: ['view_dashboard', ...DASHBOARD_CARD_PERMISSIONS, 'view_incidents', 'edit_incidents', 'close_incidents', 'view_reports', 'export_reports', 'view_customer360']
   },
   {
     key: 'pmo', name: 'PMO', icon: '📋', color: 'yellow', system: false,
     desc: 'Project Management Office — read-only access to incidents and reports.',
-    perms: ['view_dashboard', 'view_incidents', 'view_reports', 'export_reports', 'view_customer360']
+    perms: ['view_dashboard', ...DASHBOARD_CARD_PERMISSIONS, 'view_incidents', 'view_reports', 'export_reports', 'view_customer360']
   },
   {
     key: 'aoc', name: 'AOC', icon: '🔧', color: 'red', system: false,
     desc: 'Area Operations Center — operational incident handling and reporting.',
-    perms: ['view_dashboard', 'view_incidents', 'create_incidents', 'edit_incidents', 'close_incidents', 'view_reports', 'export_reports', 'view_customer360']
+    perms: ['view_dashboard', ...DASHBOARD_CARD_PERMISSIONS, 'view_incidents', 'create_incidents', 'edit_incidents', 'close_incidents', 'view_reports', 'export_reports', 'view_customer360']
   },
   {
     key: 'engineer', name: 'Engineer', icon: '🔩', color: 'blue', system: false,
     desc: 'Field engineer — can create and manage assigned incidents.',
-    perms: ['view_dashboard', 'view_incidents', 'create_incidents', 'edit_incidents', 'close_incidents', 'view_reports', 'view_customer360']
+    perms: ['view_dashboard', ...DASHBOARD_CARD_PERMISSIONS, 'view_incidents', 'create_incidents', 'edit_incidents', 'close_incidents', 'view_reports', 'view_customer360']
   },
   {
     key: 'stakeholder', name: 'Stakeholder', icon: '👁', color: 'gray', system: false,
     desc: 'Read-only observer — can view dashboard and incidents only.',
-    perms: ['view_dashboard', 'view_incidents']
+    perms: ['view_dashboard', ...DASHBOARD_CARD_PERMISSIONS, 'view_incidents']
   },
 ];
 
@@ -4025,7 +4115,7 @@ function openRoleModal(key = null) {
     document.getElementById('r_color').value = 'blue';
     document.getElementById('r_desc').value = '';
     // Default: tick view permissions
-    ['view_dashboard', 'view_incidents', 'view_reports'].forEach(p => {
+    ['view_dashboard'].concat(DASHBOARD_CARD_PERMISSIONS, ['view_incidents', 'view_reports']).forEach(p => {
       const cb = document.querySelector(`#permGrid input[value="${p}"]`);
       if (cb) { cb.checked = true; cb.closest('label').classList.add('checked'); }
     });
@@ -5094,9 +5184,11 @@ function openDowntimeModal(id) {
   var mttrHours = document.getElementById('dtm_mttr_hours');
   var mttrMinutes = document.getElementById('dtm_mttr_mins');
   [mttrHours, mttrMinutes].forEach(function (field) {
-    field.readOnly = critical;
-    field.style.opacity = critical ? '.72' : '1';
-    field.style.cursor = critical ? 'not-allowed' : '';
+    // Critical MTTR is prefilled from the incident start/end time, but an
+    // operator must be able to correct the recorded value when necessary.
+    field.readOnly = false;
+    field.style.opacity = '1';
+    field.style.cursor = '';
   });
   var mttrHint = document.getElementById('dtm_mttr_hint');
   if (mttrHint) mttrHint.style.display = critical ? 'block' : 'none';
@@ -5133,13 +5225,15 @@ function confirmCloseIncident() {
   const rca = (document.getElementById('dtm_rca')?.innerHTML || '').trim();
   const res = (document.getElementById('dtm_resolution')?.innerHTML || '').trim();
   convertIncidentEndFromIST('dtm_end_time', 'dtm_end_tz_hint');
-  if (criticalDowntime) updateCriticalMttr();
   const endTimeRaw = document.getElementById('dtm_end_time').value;
 
   if (!endTimeRaw) { showToast('Please select the incident end date & time', 'error'); return; }
   if (!Number.isFinite(h) || !Number.isFinite(m) || !Number.isInteger(h) || !Number.isInteger(m)
     || h < 0 || (!criticalDowntime && h > 999) || m < 0 || m > 59) {
     showToast('Please enter a valid downtime (zero is allowed)', 'error'); return;
+  }
+  if (!Number.isInteger(mttrH) || !Number.isInteger(mttrM) || mttrH < 0 || mttrH > 999 || mttrM < 0 || mttrM > 59) {
+    showToast('Please enter a valid MTTR', 'error'); return;
   }
   if (!rca) { showToast('Please enter the Root Cause Analysis', 'error'); return; }
   if (!res) { showToast('Please enter the Resolution Steps', 'error'); return; }
@@ -5510,6 +5604,12 @@ function renderUsersTable() {
     return `badge" style="background:${bg};color:${fg};border-color:${fg}30`;
   };
 
+  function formatUserLastActive(value) {
+    if (!value || value === 'Not tracked') return 'Not tracked';
+    var date = new Date(String(value).replace(' ', 'T'));
+    if (!Number.isFinite(date.getTime())) return String(value);
+    return date.toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  }
   var _ut = document.getElementById('usersTable'); if (_ut) _ut.innerHTML = filtered.map(u => `
     <tr>
       <td>
@@ -5521,7 +5621,7 @@ function renderUsersTable() {
       <td style="font-family:var(--font-mono);font-size:11px">${u.email}</td>
       <td><span class="badge ${getRoleBadgeStyle(u.role)}">${roleLabels[u.role] || u.role}</span></td>
       <td>${u.incidents}</td>
-      <td style="font-size:12px;color:var(--text3)">${u.lastActive}</td>
+      <td style="font-size:12px;color:var(--text3)">${formatUserLastActive(u.lastActive)}</td>
       <td><span class="badge ${u.active ? 'badge-low' : 'badge-critical'}">${u.active ? 'Active' : 'Inactive'}</span></td>
       <td>
         <div style="display:flex;gap:4px;flex-wrap:wrap">
@@ -5938,7 +6038,7 @@ function renderHealthGrid() {
 
   // Group customers: Critical = has open critical, AtRisk = has open high, else Healthy
   var custMap = {};
-  incidents.forEach(function (i) {
+  getDashboardFilteredIncidents().forEach(function (i) {
     if (!custMap[i.customer]) custMap[i.customer] = { open: 0, critical: 0, high: 0 };
     if (i.status !== 'Closed' && i.status !== 'Resolved') {
       custMap[i.customer].open++;
@@ -6267,7 +6367,7 @@ function updateStats() {
   if (slSub) slSub.textContent = breachCount > 0 ? 'open critical incidents breached' : 'all critical incidents within SLA';
 
   // Aggregate only Critical incidents so the KPI and drill-down stay aligned.
-  var dashboardMttrIncidents = incidents.filter(function (inc) {
+  var dashboardMttrIncidents = data.filter(function (inc) {
     return String((inc && inc.severity) || '').toLowerCase() === 'critical' && !isCustomer360HistorianIncident(inc);
   });
   var missedMttrCount = countMissedMttr(dashboardMttrIncidents);
@@ -6278,7 +6378,7 @@ function updateStats() {
     ? '1 closed critical incident measured'
     : missedMttrCount + ' closed critical incidents measured';
 
-  var missedMttdCount = countMissedMttd(incidents);
+  var missedMttdCount = countMissedMttd(data);
   var missedMttdEl = document.getElementById('statMissedMttd');
   var missedMttdSub = document.getElementById('statMissedMttdSub');
   if (missedMttdEl) missedMttdEl.textContent = missedMttdCount;
@@ -6300,6 +6400,14 @@ function updateStats() {
   var rrSub = document.getElementById('statResRateSub');
   if (rrEl) rrEl.textContent = resRate + '%';
   if (rrSub) rrSub.textContent = closed + ' of ' + data.length + ' resolved';
+
+  var totalSub = document.getElementById('statTotalSub');
+  var openSub = document.getElementById('statOpenSub');
+  var closedSub = document.getElementById('statClosedSub');
+  var criticalOpen = data.filter(function (i) { return isActiveIncident(i) && String(i.severity || '').toLowerCase() === 'critical'; }).length;
+  if (totalSub) totalSub.textContent = data.length + ' incident' + (data.length === 1 ? '' : 's') + ' in current filter';
+  if (openSub) openSub.textContent = criticalOpen + ' critical open';
+  if (closedSub) closedSub.textContent = closed + ' resolved in current filter';
 }
 
 // ─── RECENT TABLE ─────────────────────────────────────────────
@@ -7564,29 +7672,30 @@ function _drawResolution(gridC, textC, textC2, data) {
   var r = _fitCanvas(el, 220);
   var ctx = r.ctx, W = r.W, H = r.H;
   ctx.clearRect(0, 0, W, H);
+  var severityColors = { Critical: '#f75c7c', High: '#f7b94f', Medium: '#4f8ef7', Normal: '#2dd4a0' };
+  var resolutionGroups = ['Critical', 'High', 'Medium', 'Normal'].map(function (severity) {
+    var recorded = data.filter(function (incident) {
+      return incident.severity === severity
+        && (incident.status === 'Closed' || incident.status === 'Resolved')
+        && getIncResolutionMinutes(incident) > 0;
+    });
+    if (!recorded.length) return null;
+    var averageMinutes = recorded.reduce(function (sum, incident) { return sum + getIncResolutionMinutes(incident); }, 0) / recorded.length;
+    return { severity: severity, color: severityColors[severity], count: recorded.length, hours: Math.round(averageMinutes / 6) / 10 };
+  }).filter(Boolean);
 
-  if (!data.length) {
-    ctx.fillStyle = textC;
-    ctx.font = '12px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('No data for selected filters', W / 2, H / 2);
+  if (!resolutionGroups.length) {
+    ctx.fillStyle = textC; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(data.length ? 'No recorded resolution data' : 'No data for selected filters', W / 2, H / 2);
+    el.style.cursor = 'default'; el.onmousemove = null; el.onclick = null; el.onmouseleave = _hideTip;
     return;
   }
-  if (!data.length) { ctx.fillStyle = textC; ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('No data for selected filters', W / 2, H / 2); return; }
-  var sevs = ['Critical', 'High', 'Medium', 'Normal'];
-  var colors = ['#f75c7c', '#f7b94f', '#4f8ef7', '#2dd4a0'];
-  // Avg resolution hours per severity (from closed incidents)
-  var avgHrs = sevs.map(function (s) {
-    var closed = data.filter(function (i) { return i.severity === s && (i.status === 'Closed' || i.status === 'Resolved'); });
-    if (!closed.length) return Math.round(Math.random() * 20 + 4); // fallback estimate
-    return Math.round(closed.length * 3.2 + Math.random() * 5);
-  });
 
   var pad = { t: 16, r: 48, b: 30, l: 68 };
   var cW = W - pad.l - pad.r, cH = H - pad.t - pad.b;
-  var barH = Math.min(22, cH / sevs.length * 0.55), gap = cH / sevs.length;
-  var maxV = Math.max.apply(null, avgHrs.concat([10]));
-  maxV = Math.ceil(maxV / 5) * 5;
+  var barH = Math.min(22, cH / resolutionGroups.length * 0.55), gap = cH / resolutionGroups.length;
+  var maxV = Math.max.apply(null, resolutionGroups.map(function (group) { return group.hours; }).concat([1]));
+  maxV = Math.max(1, Math.ceil(maxV / 5) * 5);
 
   // Vertical grid
   for (var g = 0; g <= 5; g++) {
@@ -7602,20 +7711,20 @@ function _drawResolution(gridC, textC, textC2, data) {
   ctx.fillText('Hours', pad.l + cW / 2, H - 4);
 
   var barRects = [];
-  sevs.forEach(function (s, i) {
+  resolutionGroups.forEach(function (group, i) {
     var y = pad.t + i * gap + (gap - barH) / 2;
-    var bw = (avgHrs[i] / maxV) * cW;
+    var bw = (group.hours / maxV) * cW;
     // Label
     ctx.fillStyle = textC2; ctx.font = '11px sans-serif'; ctx.textAlign = 'right';
-    ctx.fillText(s, pad.l - 6, y + barH / 2 + 4);
+    ctx.fillText(group.severity, pad.l - 6, y + barH / 2 + 4);
     // Bar
-    ctx.fillStyle = colors[i];
+    ctx.fillStyle = group.color;
     if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(pad.l, y, bw, barH, 3); ctx.fill(); }
     else { ctx.fillRect(pad.l, y, bw, barH); }
     // Value
     ctx.fillStyle = textC2; ctx.font = '10px sans-serif'; ctx.textAlign = 'left';
-    ctx.fillText(avgHrs[i] + 'h', pad.l + bw + 4, y + barH / 2 + 4);
-    barRects.push({ x: pad.l, y: y, w: bw, h: barH, label: s, val: avgHrs[i] });
+    ctx.fillText(group.hours + 'h', pad.l + bw + 4, y + barH / 2 + 4);
+    barRects.push({ x: pad.l, y: y, w: bw, h: barH, label: group.severity, val: group.hours, count: group.count, color: group.color });
   });
 
   el.style.cursor = 'pointer';
@@ -7629,8 +7738,8 @@ function _drawResolution(gridC, textC, textC2, data) {
       if (mx >= b.x - 2 && mx <= b.x + b.w + 2 && my >= b.y - 4 && my <= b.y + b.h + 4) {
         found = true; el.style.cursor = 'pointer';
         _showTip(el, '<b>' + b.label + '</b><br>'
-          + '<span style="color:' + colors[i] + '">Avg: ' + b.val + 'h to resolve</span><br>'
-          + '<span style="color:#666;font-size:10px">Click to filter incidents</span>', e);
+          + '<span style="color:' + b.color + '">Actual average: ' + b.val + 'h</span><br>'
+          + '<span style="color:#666;font-size:10px">' + b.count + ' closed incident' + (b.count === 1 ? '' : 's') + ' with recorded timing</span>', e);
         break;
       }
     }
@@ -8104,6 +8213,11 @@ function _buildXLSX(data, filename, downloadNow) {
       endTime: endTime,
       downtime: dtStr,
       mttd: mttdStr2,
+      // Descriptions, RCA, and resolution are rich-text fields in the portal.
+      // Export their readable text rather than their stored HTML markup.
+      desc: mailboxPlainText(inc.desc || inc.description || ''),
+      rca: mailboxPlainText(inc.rca || ''),
+      resolution: mailboxPlainText(inc.resolution || ''),
     });
   });
 
@@ -8850,12 +8964,11 @@ function populateEditForm(inc) {
   // MTTR is recalculated only when an operator changes its start/end time.
   set('dp_f_mttr_h', inc.mttrH || 0);
   set('dp_f_mttr_m', inc.mttrM || 0);
-  var criticalIncident = String(inc.severity || '').toLowerCase() === 'critical';
   ['dp_f_mttr_h', 'dp_f_mttr_m'].forEach(function (id) {
     var field = document.getElementById(id);
-    field.readOnly = criticalIncident;
-    field.style.opacity = criticalIncident ? '.72' : '1';
-    field.style.cursor = criticalIncident ? 'not-allowed' : '';
+    field.readOnly = false;
+    field.style.opacity = '1';
+    field.style.cursor = '';
   });
   var editRca = document.getElementById('dp_f_rca'); if (editRca) editRca.innerHTML = safeIncidentDescriptionHtml(inc.rca || '');
   var editResolution = document.getElementById('dp_f_resolution'); if (editResolution) editResolution.innerHTML = safeIncidentDescriptionHtml(inc.resolution || '');
