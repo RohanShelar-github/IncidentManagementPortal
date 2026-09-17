@@ -363,6 +363,20 @@ async function graphInboxRequest(path, extraHeaders = {}) {
   return data;
 }
 
+// Microsoft Graph's @odata.nextLink is already a complete, absolute URL
+// carrying forward the original $select/$filter/$orderby — it must be
+// requested as-is rather than rebuilt through graphInboxRequest's path
+// (mailbox + endpoint) composition.
+async function graphInboxRequestByUrl(url, extraHeaders = {}) {
+  const token = await getGraphAccessToken();
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}`, ...extraHeaders }, signal: AbortSignal.timeout(30000)
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error?.message || `Microsoft Graph inbox request failed (${response.status})`);
+  return data;
+}
+
 async function graphInboxJsonRequest(path, method, body) {
   const mailbox = inboundMailboxAddress();
   if (!mailbox) throw new Error('Microsoft Graph inbox address is not configured');
@@ -385,9 +399,8 @@ function mailboxCategoryGraphFilter(category) {
   return '';
 }
 
-async function listMailboxFolderMessages(folder, limit = 50, category = 'all') {
+async function listMailboxFolderMessages(folder, limit = 50, category = 'all', cursor = null) {
   const selectedCategory = normalizedOperationsCategory(category);
-  const query = new URLSearchParams({ '$top': String(Math.min(Math.max(Number(limit) || 50, 1), 100)), '$select': 'id,subject,from,toRecipients,receivedDateTime,sentDateTime,isRead,bodyPreview,hasAttachments,conversationId,internetMessageId', '$orderby': folder === 'sentitems' ? 'sentDateTime DESC' : 'receivedDateTime DESC' });
   // Microsoft Graph rejects some sender-filter + receivedDateTime-sort combinations
   // ("InefficientFilter"), while the matching unread-count call succeeds.  Fetch the
   // page in its normal order and apply the same deterministic classification locally.
@@ -395,15 +408,25 @@ async function listMailboxFolderMessages(folder, limit = 50, category = 'all') {
   // a subject filter, which lets their dedicated view reach older tickets that
   // are outside the newest general Inbox page.
   const jiraFilter = selectedCategory === 'jira' && folder === 'inbox' ? mailboxCategoryGraphFilter('jira') : '';
-  if (jiraFilter) {
-    // Graph rejects a contains(subject, ...) filter combined with its default
-    // receivedDateTime sort. The UI already orders conversations by timestamp.
-    query.set('$filter', jiraFilter);
-    query.delete('$orderby');
+  const extraHeaders = jiraFilter ? { ConsistencyLevel: 'eventual' } : {};
+  let data;
+  if (cursor) {
+    // A continuation cursor already encodes the original $select/$filter/
+    // $orderby — request it verbatim rather than rebuilding the query.
+    data = await graphInboxRequestByUrl(cursor, extraHeaders);
+  } else {
+    const query = new URLSearchParams({ '$top': String(Math.min(Math.max(Number(limit) || 50, 1), 100)), '$select': 'id,subject,from,toRecipients,receivedDateTime,sentDateTime,isRead,bodyPreview,hasAttachments,conversationId,internetMessageId', '$orderby': folder === 'sentitems' ? 'sentDateTime DESC' : 'receivedDateTime DESC' });
+    if (jiraFilter) {
+      // Graph rejects a contains(subject, ...) filter combined with its default
+      // receivedDateTime sort. The UI already orders conversations by timestamp.
+      query.set('$filter', jiraFilter);
+      query.delete('$orderby');
+    }
+    data = await graphInboxRequest(`/mailFolders/${folder}/messages?${query}`, extraHeaders);
   }
-  const data = await graphInboxRequest(`/mailFolders/${folder}/messages?${query}`, jiraFilter ? { ConsistencyLevel: 'eventual' } : {});
-  const messages = Array.isArray(data.value) ? data.value.map((message) => mailboxDto(message, false)) : [];
-  return selectedCategory === 'all' || folder !== 'inbox' ? messages : messages.filter((message) => message.category === selectedCategory);
+  const rawMessages = Array.isArray(data.value) ? data.value.map((message) => mailboxDto(message, false)) : [];
+  const messages = selectedCategory === 'all' || folder !== 'inbox' ? rawMessages : rawMessages.filter((message) => message.category === selectedCategory);
+  return { messages, nextLink: data['@odata.nextLink'] || null };
 }
 
 async function listConversationMessages(conversationId) {
@@ -448,16 +471,18 @@ async function enrichInboxConversations(inbox) {
   return Array.from(messagesById.values());
 }
 
-async function listInboxMessages(limit = 50, category = 'all') {
-  const inbox = await listMailboxFolderMessages('inbox', limit, category);
+async function listInboxMessages(limit = 50, category = 'all', cursor = null) {
+  const { messages: inbox, nextLink } = await listMailboxFolderMessages('inbox', limit, category, cursor);
   // A bounded Inbox page can contain only the newest reply in a conversation.
   // Expand its exact Graph conversation ID so older messages still appear in
   // the thread instead of being silently omitted by the page limit.
-  return enrichInboxConversations(inbox);
+  const messages = await enrichInboxConversations(inbox);
+  return { messages, nextLink };
 }
 
-async function listSentMessages(limit = 50) {
-  return (await listMailboxFolderMessages('sentitems', limit, 'sent')).map((message) => ({ ...message, mailboxSource: 'sent' }));
+async function listSentMessages(limit = 50, cursor = null) {
+  const { messages, nextLink } = await listMailboxFolderMessages('sentitems', limit, 'sent', cursor);
+  return { messages: messages.map((message) => ({ ...message, mailboxSource: 'sent' })), nextLink };
 }
 
 async function countUnreadMailboxMessages(category) {

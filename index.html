@@ -372,7 +372,7 @@
 </div>
 </div>
 <div class="stats-grid">
-<div class="stat-card blue" id="dashboardCardTotalIncidents">
+<div class="stat-card blue metric-kpi-card" id="dashboardCardTotalIncidents" onclick="drillDownToIncidents({ _label: 'All Filtered Incidents' })" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View all incidents in the current filter">
 <div class="stat-label">Total Incidents</div>
 <div class="stat-value" id="statTotal">148</div>
 <div class="stat-delta" id="statTotalSub">incidents in current filter</div>
@@ -382,22 +382,22 @@
 <div class="stat-value" id="statOpen">34</div>
 <div class="stat-delta" id="statOpenSub">critical open</div>
 </div>
-<div class="stat-card green" id="dashboardCardResolved">
+<div class="stat-card green metric-kpi-card" id="dashboardCardResolved" onclick="drillDownToIncidents({ statuses: ['Closed','Resolved'], _label: 'Resolved Incidents' })" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View resolved incidents">
 <div class="stat-label">Resolved</div>
 <div class="stat-value" id="statClosed">114</div>
 <div class="stat-delta" id="statClosedSub">resolved in current filter</div>
 </div>
-<div class="stat-card purple" id="dashboardCardAvgResolution">
+<div class="stat-card purple metric-kpi-card" id="dashboardCardAvgResolution" onclick="openMetricDrillDown('resolutionAvg')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View incidents with recorded resolution time">
 <div class="stat-label">Avg Resolution</div>
 <div class="stat-value" id="statAvgResolution">—</div>
 <div class="stat-delta" id="statAvgResolutionSub">closed incidents measured</div>
 </div>
-<div class="stat-card" id="dashboardCardTotalDowntime" style="border-color:rgba(247,185,79,0.3);background:linear-gradient(135deg,rgba(247,185,79,0.08),rgba(247,185,79,0.02))">
+<div class="stat-card metric-kpi-card" id="dashboardCardTotalDowntime" onclick="openMetricDrillDown('downtime')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View application incidents contributing to total downtime" style="border-color:rgba(247,185,79,0.3);background:linear-gradient(135deg,rgba(247,185,79,0.08),rgba(247,185,79,0.02))">
 <div class="stat-label" style="color:var(--warning)">Total Downtime</div>
 <div class="stat-value" id="statDowntime" style="color:var(--warning)">—</div>
 <div class="stat-delta" id="statDowntimeSub" style="font-size:11px;color:var(--text-muted)">application incidents only</div>
 </div>
-<div class="stat-card" id="statHistorianDowntimeCard" style="border-color:rgba(155,89,182,0.3);background:linear-gradient(135deg,rgba(155,89,182,0.08),rgba(155,89,182,0.02))">
+<div class="stat-card metric-kpi-card" id="statHistorianDowntimeCard" onclick="openMetricDrillDown('historianDowntime')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View Historian incidents contributing to downtime" style="border-color:rgba(155,89,182,0.3);background:linear-gradient(135deg,rgba(155,89,182,0.08),rgba(155,89,182,0.02))">
 <div class="stat-label" style="color:#b78ae5">Historian Downtime</div>
 <div class="stat-value" id="statHistorianDowntime" style="color:#b78ae5">—</div>
 <div class="stat-delta" id="statHistorianDowntimeSub" style="font-size:11px;color:var(--text-muted)">Historian incidents only</div>
@@ -423,7 +423,7 @@
 <div class="stat-value" id="statAvgMTTR" style="color:var(--accent)">—</div>
 <div class="stat-delta" id="statAvgMTTRSub">mean time to resolve</div>
 </div>
-<div class="stat-card" id="dashboardCardResolutionRate" style="border-color:rgba(45,212,160,0.3);background:linear-gradient(135deg,rgba(45,212,160,0.08),rgba(45,212,160,0.02))">
+<div class="stat-card metric-kpi-card" id="dashboardCardResolutionRate" onclick="drillDownToIncidents({ statuses: ['Closed','Resolved'], _label: 'Resolved Incidents' })" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View resolved incidents" style="border-color:rgba(45,212,160,0.3);background:linear-gradient(135deg,rgba(45,212,160,0.08),rgba(45,212,160,0.02))">
 <div class="stat-label" style="color:#2dd4a0">Resolution Rate</div>
 <div class="stat-value" id="statResRate" style="color:#2dd4a0">—</div>
 <div class="stat-delta" id="statResRateSub">incidents fully resolved</div>
@@ -645,7 +645,7 @@
 <!-- ─── INCIDENTS ─────────────────────────────────────── -->
 <div class="page" id="page-mailbox">
 <div class="page-header"><div><div class="breadcrumb"><span class="breadcrumb-item" onclick="navigate('dashboard', document.getElementById('dashNav'))">Home</span><span class="breadcrumb-sep">›</span><span class="breadcrumb-item active">Mailbox</span></div><div class="page-header-title">Operations Mailbox</div><div class="page-header-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>Microsoft 365 inbox and reply workspace for the AOC service mailbox</span><span style="color:var(--text-muted)">-</span><span id="mailboxLastUpdated" style="color:var(--text-muted)">Last updated just now</span><span id="mailboxRefreshBtn" onclick="refreshPageContent(event,'mailbox')" onmouseout="this.style.color='var(--text-muted)';this.style.background='transparent'" onmouseover="this.style.color='var(--accent)';this.style.background='rgba(79,142,247,0.12)'" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--text-muted);transition:color .2s,background .2s;flex-shrink:0" title="Refresh"><svg fill="none" height="13" id="mailboxRefreshIcon" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" style="transition:transform .7s ease" viewbox="0 0 24 24" width="13"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg></span></div></div></div>
-<div class="mailbox-layout"><section class="mailbox-list-card"><div class="mailbox-list-head"><div class="mailbox-list-title"><input id="mailboxSelectAll" type="checkbox" aria-label="Select all emails" onchange="toggleMailboxSelectAll(this.checked)"/><strong>Inbox</strong></div><div class="mailbox-list-actions"><button id="mailboxBulkDeleteBtn" class="btn btn-danger btn-sm" onclick="deleteSelectedMailboxMessages()" style="display:none">Delete selected</button><span id="mailboxCount" class="mailbox-count">Loading…</span></div></div><div id="mailboxList" class="mailbox-list"><div class="mailbox-empty">Loading messages…</div></div></section><section class="mailbox-message-card" id="mailboxDetail"><div class="mailbox-empty">Select an email to read it here.</div></section></div>
+<div class="mailbox-layout"><section class="mailbox-list-card"><div class="mailbox-list-head"><div class="mailbox-list-title"><input id="mailboxSelectAll" type="checkbox" aria-label="Select all emails" onchange="toggleMailboxSelectAll(this.checked)"/><strong>Inbox</strong></div><div class="mailbox-list-actions"><button id="mailboxBulkDeleteBtn" class="btn btn-danger btn-sm" onclick="deleteSelectedMailboxMessages()" style="display:none">Delete selected</button><span id="mailboxCount" class="mailbox-count">Loading…</span></div></div><div id="mailboxList" class="mailbox-list"><div class="mailbox-empty">Loading messages…</div></div><div id="mailboxLoadMoreWrap" style="display:none;text-align:center;padding:10px"><button id="mailboxLoadMoreBtn" class="btn btn-secondary btn-sm" onclick="loadMoreMailbox()">Load older messages</button></div></section><section class="mailbox-message-card" id="mailboxDetail"><div class="mailbox-empty">Select an email to read it here.</div></section></div>
 </div>
 <div class="page" id="page-drafts">
 <div class="page-header"><div><div class="breadcrumb"><span class="breadcrumb-item" onclick="navigate('dashboard', document.getElementById('dashNav'))">Home</span><span class="breadcrumb-sep">›</span><span class="breadcrumb-item active">Draft Review</span></div><div class="page-header-title">Draft Review</div><div class="page-header-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>Saved alert details waiting for the 10-minute review window. No incident or notification email has been created.</span><span style="color:var(--text-muted)">-</span><span id="draftsLastUpdated" style="color:var(--text-muted)">Last updated just now</span><span id="draftsRefreshBtn" onclick="refreshPageContent(event,'drafts')" onmouseout="this.style.color='var(--text-muted)';this.style.background='transparent'" onmouseover="this.style.color='var(--accent)';this.style.background='rgba(79,142,247,0.12)'" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--text-muted);transition:color .2s,background .2s;flex-shrink:0" title="Refresh"><svg fill="none" height="13" id="draftsRefreshIcon" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" style="transition:transform .7s ease" viewbox="0 0 24 24" width="13"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg></span></div></div></div>

@@ -63,6 +63,20 @@ const normalizeStatus = (value) => {
 const normalizeSeverity = (value) => SEVERITY_TO_DB[value] || SEVERITY_TO_DB[String(value || '').trim()] || String(value || 'Medium').toLowerCase();
 const displayStatus = (value) => STATUS_FROM_DB[value] || value || 'New';
 const displaySeverity = (value) => SEVERITY_FROM_DB[String(value || '').toLowerCase()] || value || 'Medium';
+
+// Shared closing-completeness rule, enforced both when an incident is created
+// directly in a closed state and when an existing incident transitions into
+// closed. Without this, an incident can end up permanently marked Closed with
+// no recorded closing timestamp or resolution details.
+function validateIncidentClosureFields({ rca, resolution, resolvedBy, closingTimestamp }) {
+  if (!String(rca || '').trim() || !String(resolution || '').trim() || !String(resolvedBy || '').trim()) {
+    return 'Root Cause Analysis, Resolution Steps, and Resolved By are required before closing an incident';
+  }
+  if (!closingTimestamp) {
+    return 'A closing timestamp (incident end date & time) is required before closing an incident';
+  }
+  return null;
+}
 const toDateTimeValue = (value) => {
   if (!value) return '';
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
@@ -265,6 +279,13 @@ const createIncident = async (req, res) => {
       }
     }
     if (!b.title || !b.severity) return res.status(400).json({ success: false, message: 'Title and severity are required' });
+    if (normalizeStatus(b.status || 'New') === 'closed') {
+      const closureError = validateIncidentClosureFields({
+        rca: b.rca, resolution: b.resolution, resolvedBy: b.resolved_by || b.resolvedBy,
+        closingTimestamp: b.date_time_closed || b.endDT || b.closed_at
+      });
+      if (closureError) return res.status(400).json({ success: false, message: closureError });
+    }
 
     b.description = sanitizeIncidentDescription(b.description);
     let incidentRef = await generateIncidentRef();
@@ -594,9 +615,9 @@ const updateIncident = async (req, res) => {
       const rootCause = String(b.rca ?? current.rca ?? '').trim();
       const resolution = String(b.resolution ?? current.resolution ?? '').trim();
       const resolvedBy = String(b.resolved_by ?? b.resolvedBy ?? current.resolved_by ?? '').trim();
-      if (!rootCause || !resolution || !resolvedBy) {
-        return res.status(400).json({ success: false, message: 'Root Cause Analysis, Resolution Steps, and Resolved By are required before closing an incident' });
-      }
+      const closingTimestamp = b.date_time_closed ?? b.endDT ?? b.closed_at ?? current.date_time_closed ?? current.end_dt;
+      const closureError = validateIncidentClosureFields({ rca: rootCause, resolution, resolvedBy, closingTimestamp });
+      if (closureError) return res.status(400).json({ success: false, message: closureError });
     }
     const hasEndDateUpdate = endDateTouched;
     const hasManualDowntime = ['downtime_mins', 'downtime_minutes_total', 'downtime_h', 'downtimeH', 'downtime_m', 'downtimeM', 'downtimeStr', 'downtime_str']

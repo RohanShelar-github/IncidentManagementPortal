@@ -744,6 +744,8 @@ function minutesToHM(mins) {
 
 function getIncDowntimeMinutes(inc) {
   if (inc.downtimeH > 0 || inc.downtimeM > 0) return (inc.downtimeH || 0) * 60 + (inc.downtimeM || 0);
+  // Downtime is always the manually-recorded value only. It is never
+  // substituted with a calculated figure (e.g. MTTR) for any severity.
   return 0;
 }
 
@@ -1063,15 +1065,44 @@ function isActiveSlaBreached(inc) {
   return Number.isFinite(openedAt) && (Date.now() - openedAt) > getIncidentSlaHours(inc) * 3600000;
 }
 
-function openMetricDrillDown(metric, customerName, reportingCategory) {
+// Per-KPI-card dashboard permission required for each computed metric's
+// drill-down. Charts (slaBreachChart/dow/byProject) have no finer-grained
+// permission than the dashboard page itself, same as today.
+var METRIC_DRILLDOWN_PERMISSIONS = {
+  open: 'view_dashboard_open_active', sla: 'view_dashboard_sla_breach',
+  mttr: 'view_dashboard_missed_mttr', mttd: 'view_dashboard_missed_mttd',
+  resolutionAvg: 'view_dashboard_avg_resolution', downtime: 'view_dashboard_total_downtime',
+  historianDowntime: 'view_dashboard_historian_downtime'
+};
+var DOW_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function openMetricDrillDown(metric, customerName, reportingCategory, extra) {
   if (!hasPermission('view_incidents')) {
     showToast('Access denied: you cannot view incidents', 'error');
     return;
   }
-  if (['mttr', 'mttd', 'open', 'sla'].indexOf(metric) === -1) return;
-  var predicate = metric === 'mttr' ? isMissedMttr
-    : metric === 'mttd' ? isMissedMttd
-      : metric === 'open' ? isActiveIncident : isActiveSlaBreached;
+  var requiredCardPermission = METRIC_DRILLDOWN_PERMISSIONS[metric];
+  if (requiredCardPermission && !(hasPermission('view_dashboard') && hasPermission(requiredCardPermission))) {
+    showToast('Access denied: you cannot view this metric', 'error');
+    return;
+  }
+  if (['slaBreachChart', 'dow', 'byProject', 'byAreaOpen'].indexOf(metric) !== -1 && !hasPermission('view_dashboard')) {
+    showToast('Access denied: you cannot view this metric', 'error');
+    return;
+  }
+  if (['mttr', 'mttd', 'open', 'sla', 'resolutionAvg', 'downtime', 'historianDowntime', 'slaBreachChart', 'dow', 'byProject', 'byAreaOpen'].indexOf(metric) === -1) return;
+  var predicate;
+  if (metric === 'mttr') predicate = isMissedMttr;
+  else if (metric === 'mttd') predicate = isMissedMttd;
+  else if (metric === 'open') predicate = isActiveIncident;
+  else if (metric === 'sla') predicate = isActiveSlaBreached;
+  else if (metric === 'resolutionAvg') predicate = function (inc) { return (inc.status === 'Closed' || inc.status === 'Resolved') && getIncResolutionMinutes(inc) > 0; };
+  else if (metric === 'downtime') predicate = function (inc) { return (inc.status === 'Closed' || inc.status === 'Resolved') && !isHistorianIncident(inc); };
+  else if (metric === 'historianDowntime') predicate = function (inc) { return (inc.status === 'Closed' || inc.status === 'Resolved') && isHistorianIncident(inc); };
+  else if (metric === 'slaBreachChart') predicate = function (inc) { return String(inc.severity || '') === (extra && extra.severity) && computeSlaBreachBucket(inc) === ((extra && extra.breached) ? 'breached' : 'onTime'); };
+  else if (metric === 'dow') predicate = function (inc) { var d = new Date(inc.date); return !isNaN(d) && d.getDay() === extra; };
+  else if (metric === 'byAreaOpen') predicate = function (inc) { return isActiveIncident(inc) && (inc.area || 'Unspecified') === extra; };
+  else predicate = function (inc) { return (inc.project || 'Other') === extra; }; // byProject
   var dashboardPage = document.getElementById('page-dashboard');
   var isDashboardDrillDown = Boolean(dashboardPage && dashboardPage.classList.contains('active'));
   var sourceIncidents = isDashboardDrillDown
@@ -1097,22 +1128,36 @@ function openMetricDrillDown(metric, customerName, reportingCategory) {
   if (!title || !sub || !actualHeader || !body || !overlay) return;
   var drilldownTitles = {
     mttr: 'Missed MTTR Incidents', mttd: 'Missed MTTD Incidents',
-    open: 'Open / Active Incidents', sla: 'SLA-Breached Active Incidents'
+    open: 'Open / Active Incidents', sla: 'SLA-Breached Active Incidents',
+    resolutionAvg: 'Average Resolution — Contributing Incidents',
+    downtime: 'Total Downtime — Contributing Incidents',
+    historianDowntime: 'Historian Downtime — Contributing Incidents'
   };
-  title.textContent = drilldownTitles[metric];
+  var dynamicTitle = metric === 'dow' ? 'Incidents Opened on ' + (DOW_NAMES[extra] || 'Selected Day')
+    : metric === 'slaBreachChart' ? ((extra && extra.severity) || '') + ' — ' + ((extra && extra.breached) ? 'Breached' : 'On-time') + ' SLA'
+      : metric === 'byProject' ? (extra || 'Unspecified') + ' — Contributing Incidents'
+        : metric === 'byAreaOpen' ? (extra || 'Unspecified') + ' — Open / Active Incidents'
+          : null;
+  title.textContent = dynamicTitle || drilldownTitles[metric];
+  var isDashboardDrivenMetric = ['open', 'sla', 'resolutionAvg', 'downtime', 'historianDowntime', 'slaBreachChart', 'dow', 'byProject', 'byAreaOpen'].indexOf(metric) !== -1;
   sub.textContent = metricIncidents.length + ' contributing incident' + (metricIncidents.length === 1 ? '' : 's')
-    + ' · ' + (customerName || ((metric === 'open' || metric === 'sla') ? 'Current dashboard filters' : 'All customers'))
+    + ' · ' + (customerName || (isDashboardDrivenMetric ? 'Current dashboard filters' : 'All customers'))
     + ' · Select a row to view details';
-  actualHeader.textContent = (metric === 'open' || metric === 'sla') ? 'Open Duration' : 'Actual ' + metric.toUpperCase();
+  actualHeader.textContent = (metric === 'open' || metric === 'sla' || metric === 'byAreaOpen') ? 'Open Duration'
+    : (metric === 'mttr' || metric === 'mttd') ? 'Actual ' + metric.toUpperCase()
+      : (metric === 'downtime' || metric === 'historianDowntime') ? 'Actual Downtime'
+        : metric === 'resolutionAvg' ? 'Actual Resolution' : 'Actual Duration';
 
   if (!metricIncidents.length) {
     body.innerHTML = '<tr><td class="metric-drilldown-empty" colspan="11">No contributing incidents found.</td></tr>';
   } else {
     body.innerHTML = metricIncidents.map(function (inc) {
-      var isLiveMetric = metric === 'open' || metric === 'sla';
+      var isLiveMetric = metric === 'open' || metric === 'sla' || metric === 'byAreaOpen';
       var actualMinutes = metric === 'mttr' ? getActualMttrMinutes(inc)
         : metric === 'mttd' ? getIncidentMttdMinutes(inc)
-          : Math.max(0, (Date.now() - getIncidentOpenedTimestamp(inc)) / 60000);
+          : isLiveMetric ? Math.max(0, (Date.now() - getIncidentOpenedTimestamp(inc)) / 60000)
+            : (metric === 'downtime' || metric === 'historianDowntime') ? getIncDowntimeMinutes(inc)
+              : getIncResolutionMinutes(inc);
       var targetMinutes = metric === 'mttd' ? MTTD_SLA_MINUTES : getIncidentSlaHours(inc) * 60;
       var created = formatStoredIncidentDateTime(inc.date_time_opened || inc.startDT || inc.date_created || inc.date);
       var resolved = isLiveMetric ? '—' : formatStoredIncidentDateTime(inc.date_time_closed || inc.endDT || inc.downtimeEnd);
@@ -2772,6 +2817,13 @@ var activeMailboxRichBody = '';
 var mailboxPollTimer = null;
 var knownMailboxMessageIds = new Set();
 var mailboxInitialLoadComplete = false;
+// Opaque Microsoft Graph continuation cursor for fetching the next, older
+// page of the current mailbox view. Null once there is nothing more to load.
+var mailboxNextCursor = null;
+// True once "Load More" has been used since the last fresh load. While true,
+// the background poll pauses so it doesn't silently discard the expanded
+// history the user asked to see.
+var mailboxHistoryExpanded = false;
 function mailboxToken() { return sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY); }
 function hasMailboxPermission(permission) { return (window._currentPerms || []).indexOf(permission) > -1; }
 function mailboxDecodeEntities(value) { var area = document.createElement('textarea'); area.innerHTML = String(value || ''); return area.value; }
@@ -3137,17 +3189,70 @@ function loadOperationsCounts() {
     .catch(function () { /* the list remains usable when counts cannot be loaded */ });
 }
 
-function loadMailbox(options) {
-  options = options || {}; ensureOperationsMailboxUi(); var list = document.getElementById('mailboxList'); if (!list) return;
-  if (!options.silent) list.innerHTML = '<div class="mailbox-empty">Loading ' + operationsViewLabel(mailboxActiveView).toLowerCase() + '…</div>';
-  var endpoint = mailboxActiveView === 'sent' ? '/mailbox/sent?limit=50' : (mailboxReadFilter === 'incident_sent' ? '/mailbox/inbox/incident-sent?limit=50' : '/mailbox/inbox?limit=50&category=' + encodeURIComponent(mailboxActiveView));
-  fetch(window.APP_CONFIG.API_BASE_URL + endpoint, { headers: { Authorization: 'Bearer ' + mailboxToken() } })
-    .then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to load Operations mail'); return data.data; }); })
-    .then(function (messages) { var incoming = messages || []; var newMessages = mailboxActiveView !== 'sent' && mailboxInitialLoadComplete ? incoming.filter(function (message) { return !knownMailboxMessageIds.has(message.id) && !message.isRead; }) : []; mailboxMessages = incoming; knownMailboxMessageIds = new Set(incoming.map(function (message) { return message.id; })); mailboxInitialLoadComplete = true; selectedMailboxMessageIds = new Set(Array.from(selectedMailboxMessageIds).filter(function (id) { return mailboxMessages.some(function (message) { return message.id === id; }); })); renderMailboxList(); if (mailboxActiveView !== 'sent') loadOperationsCounts(); if (newMessages.length) showToast(newMessages.length === 1 ? 'New Operations email received: ' + (newMessages[0].subject || '(No subject)') : newMessages.length + ' new Operations emails received.', 'info'); })
-    .catch(function (error) { list.innerHTML = ''; var empty = document.createElement('div'); empty.className = 'mailbox-empty'; empty.textContent = error.message; list.appendChild(empty); });
+// The DB-driven "Incident Sent" view has no Microsoft Graph folder page to
+// continue from — it is not paginated, so Load More never applies to it.
+function mailboxViewSupportsLoadMore() {
+  return mailboxReadFilter !== 'incident_sent';
 }
 
-function startMailboxPolling() { stopMailboxPolling(); ensureOperationsMailboxUi(); mailboxInitialLoadComplete = false; knownMailboxMessageIds = new Set(); loadMailbox(); mailboxPollTimer = setInterval(function () { var page = document.getElementById('page-mailbox'); if (page && page.classList.contains('active')) loadMailbox({ silent: true }); }, 30000); }
+function updateMailboxLoadMoreButton(state) {
+  var wrap = document.getElementById('mailboxLoadMoreWrap');
+  var btn = document.getElementById('mailboxLoadMoreBtn');
+  if (!wrap || !btn) return;
+  if (!mailboxViewSupportsLoadMore() || !mailboxNextCursor) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  btn.disabled = state === 'loading';
+  btn.textContent = state === 'loading' ? 'Loading…' : 'Load older messages';
+}
+
+function loadMailbox(options) {
+  options = options || {};
+  ensureOperationsMailboxUi();
+  var list = document.getElementById('mailboxList');
+  if (!list) return;
+  var isLoadMore = Boolean(options.loadMore) && mailboxNextCursor && mailboxViewSupportsLoadMore();
+  if (isLoadMore) {
+    updateMailboxLoadMoreButton('loading');
+  } else {
+    mailboxHistoryExpanded = false;
+    if (!options.silent) list.innerHTML = '<div class="mailbox-empty">Loading ' + operationsViewLabel(mailboxActiveView).toLowerCase() + '…</div>';
+  }
+  var baseEndpoint = mailboxActiveView === 'sent' ? '/mailbox/sent' : (mailboxReadFilter === 'incident_sent' ? '/mailbox/inbox/incident-sent' : '/mailbox/inbox');
+  var endpoint = baseEndpoint + '?limit=50' + (mailboxActiveView !== 'sent' && mailboxReadFilter !== 'incident_sent' ? '&category=' + encodeURIComponent(mailboxActiveView) : '');
+  if (isLoadMore) endpoint += '&cursor=' + encodeURIComponent(mailboxNextCursor);
+  fetch(window.APP_CONFIG.API_BASE_URL + endpoint, { headers: { Authorization: 'Bearer ' + mailboxToken() } })
+    .then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to load Operations mail'); return data; }); })
+    .then(function (data) {
+      var incoming = data.data || [];
+      mailboxNextCursor = mailboxViewSupportsLoadMore() ? (data.nextCursor || null) : null;
+      if (isLoadMore) {
+        var existingIds = new Set(mailboxMessages.map(function (message) { return message.id; }));
+        incoming.forEach(function (message) { if (!existingIds.has(message.id)) mailboxMessages.push(message); });
+      } else {
+        var newMessages = mailboxActiveView !== 'sent' && mailboxInitialLoadComplete ? incoming.filter(function (message) { return !knownMailboxMessageIds.has(message.id) && !message.isRead; }) : [];
+        mailboxMessages = incoming;
+        knownMailboxMessageIds = new Set(incoming.map(function (message) { return message.id; }));
+        mailboxInitialLoadComplete = true;
+        if (newMessages.length) showToast(newMessages.length === 1 ? 'New Operations email received: ' + (newMessages[0].subject || '(No subject)') : newMessages.length + ' new Operations emails received.', 'info');
+      }
+      selectedMailboxMessageIds = new Set(Array.from(selectedMailboxMessageIds).filter(function (id) { return mailboxMessages.some(function (message) { return message.id === id; }); }));
+      renderMailboxList();
+      updateMailboxLoadMoreButton('idle');
+      if (mailboxActiveView !== 'sent' && !isLoadMore) loadOperationsCounts();
+    })
+    .catch(function (error) {
+      if (isLoadMore) { updateMailboxLoadMoreButton('idle'); showToast(error.message || 'Unable to load more mail', 'error'); return; }
+      list.innerHTML = ''; var empty = document.createElement('div'); empty.className = 'mailbox-empty'; empty.textContent = error.message; list.appendChild(empty);
+    });
+}
+
+function loadMoreMailbox() {
+  if (!mailboxNextCursor) return;
+  mailboxHistoryExpanded = true;
+  loadMailbox({ loadMore: true });
+}
+
+function startMailboxPolling() { stopMailboxPolling(); ensureOperationsMailboxUi(); mailboxInitialLoadComplete = false; knownMailboxMessageIds = new Set(); loadMailbox(); mailboxPollTimer = setInterval(function () { var page = document.getElementById('page-mailbox'); if (page && page.classList.contains('active') && !mailboxHistoryExpanded) loadMailbox({ silent: true }); }, 30000); }
 function updateMailboxBulkControls() { var enabled = mailboxActiveView !== 'sent' && hasMailboxPermission('delete_mailbox'), button = document.getElementById('mailboxBulkDeleteBtn'), all = document.getElementById('mailboxSelectAll'), visible = mailboxVisibleMessages(); if (button) { button.style.display = enabled && selectedMailboxMessageIds.size ? '' : 'none'; button.textContent = 'Delete selected (' + selectedMailboxMessageIds.size + ')'; } if (all) { all.style.display = enabled ? '' : 'none'; all.checked = enabled && visible.length > 0 && selectedMailboxMessageIds.size === visible.length; all.indeterminate = enabled && selectedMailboxMessageIds.size > 0 && selectedMailboxMessageIds.size < visible.length; } }
 function toggleMailboxSelectAll(checked) { selectedMailboxMessageIds = checked ? new Set(mailboxVisibleMessages().map(function (message) { return message.id; })) : new Set(); renderMailboxList(); }
 function renderMailboxList() {
@@ -5387,6 +5492,13 @@ function saveIncident() {
     showToast('Please fill in all required fields', 'error');
     return;
   }
+  if (status === 'Closed') {
+    const editingInc = editingId ? incidents.find(i => i.id === editingId) : null;
+    if (!editingInc || editingInc.status !== 'Closed') {
+      showToast('Use the Close action to close an incident — it collects the required closing details (end time, root cause, resolution, and resolved by).', 'error');
+      return;
+    }
+  }
 
   const area = document.getElementById('f_area')?.value || '';
   const resolvedBy = document.getElementById('f_resolved_by')?.value || '';
@@ -6058,16 +6170,21 @@ function renderHealthGrid() {
     var isCrit = d.critical > 0, isHigh = d.high > 0;
     var dot = isCrit ? '#f75c7c' : isHigh ? '#f7b94f' : '#2dd4a0';
     var openTxt = d.open > 0 ? d.open + ' open' : 'OK';
-    var row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer;background:rgba(255,255,255,0.02);border:1px solid var(--border);margin-bottom:6px;transition:background .15s';
-    row.onmouseenter = function () { this.style.background = 'rgba(79,142,247,0.06)'; };
-    row.onmouseleave = function () { this.style.background = 'rgba(255,255,255,0.02)'; };
-    row.onclick = (function (name) { return function () { openCustomer360(name); }; })(c);
-    row.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:' + dot + ';flex-shrink:0;box-shadow:0 0 6px ' + dot + '"></span>'
-      + '<span style="font-size:12px;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + c + '</span>'
-      + '<span style="font-size:10px;color:' + dot + ';font-weight:600">' + openTxt + '</span>';
-    return row.outerHTML;
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer;background:rgba(255,255,255,0.02);border:1px solid var(--border);margin-bottom:6px;transition:background .15s">'
+      + '<span style="width:8px;height:8px;border-radius:50%;background:' + dot + ';flex-shrink:0;box-shadow:0 0 6px ' + dot + '"></span>'
+      + '<span style="font-size:12px;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeMetricHtml(c) + '</span>'
+      + '<span style="font-size:10px;color:' + dot + ';font-weight:600">' + openTxt + '</span>'
+      + '</div>';
   }).join('');
+  // Event handlers must be attached to the real DOM nodes after they're
+  // parsed from innerHTML — assigning .onclick to a detached element and
+  // then serializing it via outerHTML silently drops the handler.
+  Array.from(el.children).forEach(function (rowEl, idx) {
+    var name = custs[idx];
+    rowEl.onmouseenter = function () { rowEl.style.background = 'rgba(79,142,247,0.06)'; };
+    rowEl.onmouseleave = function () { rowEl.style.background = 'rgba(255,255,255,0.02)'; };
+    rowEl.onclick = function () { openCustomer360(name); };
+  });
 }
 
 
@@ -6808,7 +6925,7 @@ function _drawDowntimeCustomer(data) {
     var pct = Math.round(r.v / maxV * 100);
     var h = Math.floor(r.v / 60), m = r.v % 60;
     var label = h > 0 ? h + 'h ' + (m > 0 ? m + 'm' : '') : m + 'm';
-    return '<div style="margin-bottom:10px">'
+    return '<div style="margin-bottom:10px;cursor:pointer" title="Click to filter incidents">'
       + '<div style="display:flex;justify-content:space-between;margin-bottom:3px">'
       + '<span style="font-size:12px;color:var(--text);font-weight:500">' + r.k + '</span>'
       + '<span style="font-size:11px;color:var(--accent);font-family:var(--font-mono)">' + label + '</span></div>'
@@ -6816,6 +6933,11 @@ function _drawDowntimeCustomer(data) {
       + '<div style="height:6px;width:' + pct + '%;background:linear-gradient(90deg,var(--accent),#7c5cbf);border-radius:3px;transition:width .4s ease"></div>'
       + '</div></div>';
   }).join('');
+  Array.from(el.children).forEach(function (rowEl, idx) {
+    rowEl.onclick = function () {
+      drillDownToIncidents({ customer: sorted[idx].k, statuses: ['Closed', 'Resolved'], _label: sorted[idx].k + ' (Closed)' });
+    };
+  });
 }
 
 // ── DOWNTIME BY APPLICATION (list-based) ──────────────────
@@ -6843,7 +6965,7 @@ function _drawDowntimeApp(data) {
     var pct = Math.round(r.v / maxV * 100);
     var h = Math.floor(r.v / 60), m = r.v % 60;
     var label = h > 0 ? h + 'h ' + (m > 0 ? m + 'm' : '') : m + 'm';
-    return '<div style="margin-bottom:10px">'
+    return '<div style="margin-bottom:10px;cursor:pointer" title="Click to filter incidents">'
       + '<div style="display:flex;justify-content:space-between;margin-bottom:3px">'
       + '<span style="font-size:12px;color:var(--text);font-weight:500">' + r.k + '</span>'
       + '<span style="font-size:11px;color:#2dd4a0;font-family:var(--font-mono)">' + label + '</span></div>'
@@ -6851,6 +6973,9 @@ function _drawDowntimeApp(data) {
       + '<div style="height:6px;width:' + pct + '%;background:linear-gradient(90deg,#2dd4a0,#1aab80);border-radius:3px"></div>'
       + '</div></div>';
   }).join('');
+  Array.from(el.children).forEach(function (rowEl, idx) {
+    rowEl.onclick = function () { openMetricDrillDown('byProject', null, null, sorted[idx].k); };
+  });
 }
 
 // ── DOWNTIME BY AREA (list-based) ─────────────────────────
@@ -6880,7 +7005,7 @@ function _drawDowntimeArea(data) {
     var h = Math.floor(r.v / 60), m = r.v % 60;
     var label = h > 0 ? h + 'h ' + (m > 0 ? m + 'm' : '') : m + 'm';
     var color = areaColors[idx % areaColors.length];
-    return '<div style="margin-bottom:10px">'
+    return '<div style="margin-bottom:10px;cursor:pointer" title="Click to filter incidents">'
       + '<div style="display:flex;justify-content:space-between;margin-bottom:3px">'
       + '<span style="font-size:12px;color:var(--text);font-weight:500">' + r.k + '</span>'
       + '<span style="font-size:11px;font-family:var(--font-mono)" style="color:' + color + '">' + label + '</span></div>'
@@ -6888,6 +7013,22 @@ function _drawDowntimeArea(data) {
       + '<div style="height:6px;width:' + pct + '%;background:' + color + ';border-radius:3px;opacity:0.85"></div>'
       + '</div></div>';
   }).join('');
+  Array.from(el.children).forEach(function (rowEl, idx) {
+    rowEl.onclick = function () {
+      drillDownToIncidents({ area: sorted[idx].k, statuses: ['Closed', 'Resolved'], _label: sorted[idx].k + ' (Closed)' });
+    };
+  });
+}
+
+// Per-incident SLA breach classification for the SLA Breach chart. Shared
+// with its drill-down so the chart and the drilled-down results always agree.
+function computeSlaBreachBucket(inc) {
+  var slaH = getIncidentSlaHours(inc);
+  var startMs = getIncidentOpenedTimestamp(inc);
+  var endMs = inc.downtimeEnd ? new Date(inc.downtimeEnd).getTime() :
+    (inc.status === 'Closed' || inc.status === 'Resolved') ? startMs + slaH * 3600000 * 0.8 : Date.now();
+  var elapsedH = (endMs - startMs) / 3600000;
+  return elapsedH > slaH ? 'breached' : 'onTime';
 }
 
 // ── SLA BREACH BY SEVERITY (canvas) ───────────────────────
@@ -6907,12 +7048,7 @@ function _drawSLABreach(gridC, textC, textC2, data) {
   var breached = { Critical: 0, High: 0, Medium: 0, Normal: 0 };
 
   data.forEach(function (i) {
-    var slaH = getIncidentSlaHours(i);
-    var startMs = getIncidentOpenedTimestamp(i);
-    var endMs = i.downtimeEnd ? new Date(i.downtimeEnd).getTime() :
-      (i.status === 'Closed' || i.status === 'Resolved') ? startMs + slaH * 3600000 * 0.8 : Date.now();
-    var elapsedH = (endMs - startMs) / 3600000;
-    if (elapsedH > slaH) breached[i.severity]++;
+    if (computeSlaBreachBucket(i) === 'breached') breached[i.severity]++;
     else onTime[i.severity]++;
   });
 
@@ -6935,6 +7071,7 @@ function _drawSLABreach(gridC, textC, textC2, data) {
     }
   }
 
+  var barRects = [];
   sevs.forEach(function (sev, i) {
     var cx = pad.l + (i + 0.5) * gap;
     var col = colors[sev];
@@ -6951,6 +7088,7 @@ function _drawSLABreach(gridC, textC, textC2, data) {
       ctx.beginPath();
       ctx.rect(cx - barW, y0 - bH, barW, bH);
       ctx.fill();
+      barRects.push({ x: cx - barW, y: y0 - bH, w: barW, h: bH, severity: sev, breached: false, count: onTime[sev] });
     }
 
     // Breached bar (red)
@@ -6961,6 +7099,7 @@ function _drawSLABreach(gridC, textC, textC2, data) {
       ctx.beginPath();
       ctx.rect(cx, y0 - rH, barW, rH);
       ctx.fill();
+      barRects.push({ x: cx, y: y0 - rH, w: barW, h: rH, severity: sev, breached: true, count: breached[sev] });
     }
 
     // Label
@@ -6981,6 +7120,32 @@ function _drawSLABreach(gridC, textC, textC2, data) {
     ctx.fillStyle = textC2; ctx.font = '10px sans-serif'; ctx.textAlign = 'left';
     ctx.fillText(item[0], lx + 13, ly - 1);
   });
+
+  el.style.cursor = 'pointer';
+  function findSlaBreachHit(e) {
+    var rect = el.getBoundingClientRect();
+    var mx = (e.clientX - rect.left) * (W / rect.width);
+    var my = (e.clientY - rect.top) * (H / rect.height);
+    for (var i = 0; i < barRects.length; i++) {
+      var b = barRects[i];
+      if (mx >= b.x - 2 && mx <= b.x + b.w + 2 && my >= b.y - 2 && my <= b.y + b.h + 2) return b;
+    }
+    return null;
+  }
+  el.onmousemove = function (e) {
+    var hit = findSlaBreachHit(e);
+    if (!hit) { _hideTip(); el.style.cursor = 'default'; return; }
+    el.style.cursor = 'pointer';
+    _showTip(el, '<b>' + hit.severity + ' — ' + (hit.breached ? 'Breached' : 'On-time') + '</b><br>'
+      + '<span>' + hit.count + ' incident' + (hit.count === 1 ? '' : 's') + '</span>'
+      + '<br><span style="color:#666;font-size:10px">Click to filter incidents</span>', e);
+  };
+  el.onclick = function (e) {
+    var hit = findSlaBreachHit(e);
+    if (!hit) return;
+    openMetricDrillDown('slaBreachChart', null, null, { severity: hit.severity, breached: hit.breached });
+  };
+  el.onmouseleave = _hideTip;
 }
 
 // ── MTTR TREND (canvas — avg resolve time by month) ────────
@@ -6994,12 +7159,13 @@ function _drawMTTR(gridC, textC, textC2, data) {
 
   // Build monthly MTTR for last 6 months
   var now = new Date();
-  var labels = [], vals = [];
+  var labels = [], vals = [], monthDates = [];
   for (var m = 5; m >= 0; m--) {
     var d = new Date(now.getFullYear(), now.getMonth() - m, 1);
     var mo = d.toLocaleString('default', { month: 'short' });
     var yr = d.getFullYear();
     labels.push(mo);
+    monthDates.push(d);
 
     var monthIncs = data.filter(function (i) {
       if (i.status !== 'Closed' && i.status !== 'Resolved') return false;
@@ -7007,7 +7173,7 @@ function _drawMTTR(gridC, textC, textC2, data) {
       return id.getMonth() === d.getMonth() && id.getFullYear() === yr;
     });
 
-    if (monthIncs.length === 0) { vals.push(0); return; }
+    if (monthIncs.length === 0) { vals.push(0); continue; }
     var totalH = monthIncs.reduce(function (sum, i) {
       return sum + ((i.downtimeH || 0) + (i.downtimeM || 0) / 60);
     }, 0);
@@ -7075,6 +7241,34 @@ function _drawMTTR(gridC, textC, textC2, data) {
     ctx.fillStyle = textC2; ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center';
     if (p.y - 12 > pad.t) ctx.fillText(vals[i] + 'h', p.x, p.y - 8);
   });
+
+  function findMttrTrendHit(e) {
+    var rect = el.getBoundingClientRect();
+    var mx = (e.clientX - rect.left) * (W / rect.width);
+    var best = -1, bestDist = 9999;
+    pts.forEach(function (pt, i) { var dd = Math.abs(pt.x - mx); if (dd < bestDist) { bestDist = dd; best = i; } });
+    return (best >= 0 && bestDist < cW / (labels.length - 1) * 0.65) ? best : -1;
+  }
+  el.style.cursor = 'pointer';
+  el.onmousemove = function (e) {
+    var idx = findMttrTrendHit(e);
+    if (idx === -1) { _hideTip(); el.style.cursor = 'default'; return; }
+    el.style.cursor = 'pointer';
+    _showTip(el, '<b>' + labels[idx] + '</b><br><span style="color:#f7b94f">' + vals[idx] + 'h avg downtime</span>'
+      + '<br><span style="color:#666;font-size:10px">Click to filter incidents</span>', e);
+  };
+  el.onclick = function (e) {
+    var idx = findMttrTrendHit(e);
+    if (idx === -1 || !monthDates[idx]) return;
+    var monthStart = monthDates[idx];
+    var monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+    function toYMD(dt) { return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0'); }
+    drillDownToIncidents({
+      from: toYMD(monthStart), to: toYMD(monthEnd), statuses: ['Closed', 'Resolved'],
+      _label: 'Closed incidents — ' + labels[idx]
+    });
+  };
+  el.onmouseleave = _hideTip;
 }
 
 // ── AREA BREAKDOWN (canvas — grouped bar) ─────────────────
@@ -7112,6 +7306,7 @@ function _drawAreaBreakdown(gridC, textC, textC2, data) {
     ctx.setLineDash([]);
   }
 
+  var barRects = [];
   areas.forEach(function (area, i) {
     var cx = pad.l + (i + 0.5) * gap;
     var openH = (map[area].open / maxV) * cH;
@@ -7121,12 +7316,12 @@ function _drawAreaBreakdown(gridC, textC, textC2, data) {
     var g1 = ctx.createLinearGradient(0, y0 - openH, 0, y0);
     g1.addColorStop(0, 'rgba(247,92,124,0.9)'); g1.addColorStop(1, 'rgba(247,92,124,0.3)');
     ctx.fillStyle = g1;
-    if (openH > 0) ctx.fillRect(cx - bW, y0 - openH, bW, openH);
+    if (openH > 0) { ctx.fillRect(cx - bW, y0 - openH, bW, openH); barRects.push({ x: cx - bW, y: y0 - openH, w: bW, h: openH, area: area, closed: false, count: map[area].open }); }
 
     var g2 = ctx.createLinearGradient(0, y0 - closedH, 0, y0);
     g2.addColorStop(0, 'rgba(45,212,160,0.9)'); g2.addColorStop(1, 'rgba(45,212,160,0.3)');
     ctx.fillStyle = g2;
-    if (closedH > 0) ctx.fillRect(cx + 2, y0 - closedH, bW, closedH);
+    if (closedH > 0) { ctx.fillRect(cx + 2, y0 - closedH, bW, closedH); barRects.push({ x: cx + 2, y: y0 - closedH, w: bW, h: closedH, area: area, closed: true, count: map[area].closed }); }
 
     ctx.fillStyle = textC2; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
     ctx.fillText(area.length > 6 ? area.substring(0, 6) + '…' : area, cx, y0 + 14);
@@ -7140,6 +7335,40 @@ function _drawAreaBreakdown(gridC, textC, textC2, data) {
     ctx.fillStyle = textC2; ctx.font = '10px sans-serif'; ctx.textAlign = 'left';
     ctx.fillText(item[0], lx + 13, ly - 1);
   });
+
+  el.style.cursor = 'pointer';
+  function findAreaBarHit(e) {
+    var rect = el.getBoundingClientRect();
+    var mx = (e.clientX - rect.left) * (W / rect.width);
+    var my = (e.clientY - rect.top) * (H / rect.height);
+    for (var i = 0; i < barRects.length; i++) {
+      var b = barRects[i];
+      if (mx >= b.x - 2 && mx <= b.x + b.w + 2 && my >= b.y - 2 && my <= b.y + b.h + 2) return b;
+    }
+    return null;
+  }
+  el.onmousemove = function (e) {
+    var hit = findAreaBarHit(e);
+    if (!hit) { _hideTip(); el.style.cursor = 'default'; return; }
+    el.style.cursor = 'pointer';
+    _showTip(el, '<b>' + hit.area + ' — ' + (hit.closed ? 'Closed' : 'Open') + '</b><br>'
+      + '<span>' + hit.count + ' incident' + (hit.count === 1 ? '' : 's') + '</span>'
+      + '<br><span style="color:#666;font-size:10px">Click to filter incidents</span>', e);
+  };
+  el.onclick = function (e) {
+    var hit = findAreaBarHit(e);
+    if (!hit) return;
+    if (hit.closed) {
+      drillDownToIncidents({ area: hit.area, statuses: ['Closed', 'Resolved'], _label: hit.area + ' (Closed)' });
+    } else {
+      // "Open" here means every non-closed status (several distinct status
+      // values), which the Incidents-page status filter can't express as a
+      // single inclusion list without hardcoding every open status label —
+      // reuse the existing isActiveIncident predicate via the modal instead.
+      openMetricDrillDown('byAreaOpen', null, null, hit.area);
+    }
+  };
+  el.onmouseleave = _hideTip;
 }
 
 // ── INCIDENTS BY DAY OF WEEK (canvas — bar chart) ─────────
@@ -7175,6 +7404,7 @@ function _drawDow(gridC, textC, textC2, data) {
   }
 
   var weekendColor = 'rgba(247,185,79,0.8)', weekColor = 'rgba(79,142,247,0.8)';
+  var barRects = [];
   counts.forEach(function (v, i) {
     var cx = pad.l + (i + 0.5) * gap;
     var bH = (v / maxV) * cH;
@@ -7198,7 +7428,33 @@ function _drawDow(gridC, textC, textC2, data) {
     }
     ctx.fillStyle = textC; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
     ctx.fillText(days[i], cx, y0 + 14);
+    barRects.push({ x: cx - barW / 2, y: y0 - bH, w: barW, h: Math.max(bH, 6), dayIndex: i, count: v });
   });
+
+  el.style.cursor = 'pointer';
+  function findDowHit(e) {
+    var rect = el.getBoundingClientRect();
+    var mx = (e.clientX - rect.left) * (W / rect.width);
+    var my = (e.clientY - rect.top) * (H / rect.height);
+    for (var i = 0; i < barRects.length; i++) {
+      var b = barRects[i];
+      if (mx >= b.x - 2 && mx <= b.x + b.w + 2 && my >= b.y - 2 && my <= pad.t + cH) return b;
+    }
+    return null;
+  }
+  el.onmousemove = function (e) {
+    var hit = findDowHit(e);
+    if (!hit || !hit.count) { _hideTip(); el.style.cursor = 'default'; return; }
+    el.style.cursor = 'pointer';
+    _showTip(el, '<b>' + DOW_NAMES[hit.dayIndex] + '</b><br><span>' + hit.count + ' incident' + (hit.count === 1 ? '' : 's') + '</span>'
+      + '<br><span style="color:#666;font-size:10px">Click to filter incidents</span>', e);
+  };
+  el.onclick = function (e) {
+    var hit = findDowHit(e);
+    if (!hit || !hit.count) return;
+    openMetricDrillDown('dow', null, null, hit.dayIndex);
+  };
+  el.onmouseleave = _hideTip;
 }
 
 
@@ -7233,12 +7489,13 @@ function _drawTrend(gridC, textC, textC2, data) {
   // Standard operational trend: monthly opened events versus monthly closed events.
   // Only the incidents currently loaded from the database are counted.
   var now = new Date();
-  var labels = [], dOpen = [], dClosed = [];
+  var labels = [], dOpen = [], dClosed = [], monthBounds = [];
 
   // Include the current calendar month plus the preceding seven calendar months.
   for (var monthOffset = 7; monthOffset >= 0; monthOffset--) {
     var monthStart = new Date(now.getFullYear(), now.getMonth() - monthOffset, 1);
     var monthEnd = new Date(now.getFullYear(), now.getMonth() - monthOffset + 1, 1);
+    monthBounds.push({ start: monthStart, end: monthEnd });
     labels.push(monthStart.toLocaleString('default', { month: 'short', year: '2-digit' }));
 
     var openCnt = data.filter(function (i) {
@@ -7390,11 +7647,27 @@ function _drawTrend(gridC, textC, textC2, data) {
       _showTip(el,
         '<div style="font-weight:700;margin-bottom:4px;color:#e0e0f0">' + labels[best] + '</div>'
         + '<div style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:50%;background:#f75c7c;display:inline-block"></span><span style="color:#aaa">Opened</span><b style="margin-left:auto;padding-left:16px;color:#f75c7c">' + dOpen[best] + '</b></div>'
-        + '<div style="display:flex;align-items:center;gap:6px;margin-top:3px"><span style="width:10px;height:10px;border-radius:50%;background:#2dd4a0;display:inline-block"></span><span style="color:#aaa">Closed</span><b style="margin-left:auto;padding-left:16px;color:#2dd4a0">' + dClosed[best] + '</b></div>',
+        + '<div style="display:flex;align-items:center;gap:6px;margin-top:3px"><span style="width:10px;height:10px;border-radius:50%;background:#2dd4a0;display:inline-block"></span><span style="color:#aaa">Closed</span><b style="margin-left:auto;padding-left:16px;color:#2dd4a0">' + dClosed[best] + '</b></div>'
+        + '<div style="margin-top:6px;color:#666;font-size:10px;border-top:1px solid rgba(255,255,255,0.08);padding-top:4px">Click to filter incidents opened this month</div>',
         e);
     } else {
       _hideTip();
     }
+  };
+  el.style.cursor = 'pointer';
+  el.onclick = function (e) {
+    var rect = el.getBoundingClientRect();
+    var mx = (e.clientX - rect.left) * (W / rect.width);
+    var best = -1, bestDist = 9999;
+    pOpen.forEach(function (pt, i) { var d = Math.abs(pt.x - mx); if (d < bestDist) { bestDist = d; best = i; } });
+    if (best < 0 || bestDist >= cW / (labels.length - 1) * 0.65 || !monthBounds[best]) return;
+    var bounds = monthBounds[best];
+    var monthEndInclusive = new Date(bounds.end.getTime() - 86400000);
+    function toYMD(dt) { return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0'); }
+    drillDownToIncidents({
+      from: toYMD(bounds.start), to: toYMD(monthEndInclusive),
+      _label: 'Incidents opened — ' + labels[best]
+    });
   };
   el.onmouseleave = function () { _hideTip(); _drawTrend(gridC, textC, textC2, data); };
 }
@@ -7656,7 +7929,17 @@ function _drawCustomer(gridC, textC, textC2, data) {
     for (var i = 0; i < barRects.length; i++) {
       var b = barRects[i];
       if (mx >= b.x - 2 && mx <= b.x + b.w + 2 && my >= pad.t && my <= pad.t + cH) {
-        drillDownToIncidents({ customer: b.label, _label: b.label + ' (' + b.total + ' incidents)' });
+        // Preserve both dimensions when a specific severity segment within
+        // the stacked bar was clicked, not just the customer as a whole.
+        var seg = null;
+        for (var si = 0; si < b.segs.length; si++) {
+          if (my >= b.segs[si].y && my <= b.segs[si].y + b.segs[si].h) { seg = b.segs[si]; break; }
+        }
+        if (seg) {
+          drillDownToIncidents({ customer: b.label, severity: seg.sev, _label: b.label + ' — ' + seg.sev + ' (' + seg.cnt + ' incidents)' });
+        } else {
+          drillDownToIncidents({ customer: b.label, _label: b.label + ' (' + b.total + ' incidents)' });
+        }
         return;
       }
     }
@@ -8194,10 +8477,8 @@ function _buildXLSX(data, filename, downloadNow) {
   data = data.map(function (inc) {
     const xlTZ = inc.timezone || 'IST';
     const slaH = { Critical: 1, High: 4, Medium: 12, Normal: 24 }[inc.severity] || 6;
-    const dtStr = inc.downtimeStr ||
-      (inc.downtimeH > 0
-        ? inc.downtimeH + 'h' + (inc.downtimeM > 0 ? ' ' + inc.downtimeM + 'm' : '')
-        : inc.downtimeM > 0 ? inc.downtimeM + 'm' : '—');
+    const dtMinutes = getIncDowntimeMinutes(inc);
+    const dtStr = dtMinutes > 0 ? minutesToHM(dtMinutes) : '—';
     const mttdStr2 = inc.mttdStr || (inc.mttdH > 0 ? inc.mttdH + 'h' + (inc.mttdM > 0 ? ' ' + inc.mttdM + 'm' : '') : inc.mttdM > 0 ? inc.mttdM + 'm' : '—');
     // Start time: stored in IST as datetime-local string
     const istOff = getTZOffset('IST');
@@ -9040,6 +9321,16 @@ function saveDetailEdit() {
   if (!title || !customer || !severity || !engineer) {
     showToast('Please fill in all required fields', 'error');
     return;
+  }
+  if (status === 'Closed' && inc.status !== 'Closed') {
+    const closingTimestampCheck = document.getElementById('dp_f_end_dt')?.value;
+    const rcaCheck = (document.getElementById('dp_f_rca')?.innerHTML || '').trim();
+    const resolutionCheck = (document.getElementById('dp_f_resolution')?.innerHTML || '').trim();
+    const resolvedByCheck = document.getElementById('dp_f_resolved_by')?.value;
+    if (!closingTimestampCheck) { showToast('Please select the incident end date & time before closing', 'error'); return; }
+    if (!rcaCheck) { showToast('Please enter the Root Cause Analysis before closing', 'error'); return; }
+    if (!resolutionCheck) { showToast('Please enter the Resolution Steps before closing', 'error'); return; }
+    if (!resolvedByCheck) { showToast('Please select who resolved the incident before closing', 'error'); return; }
   }
   // Log feed entries for meaningful changes
   if (inc.status !== status) {
@@ -10330,7 +10621,53 @@ document.addEventListener('DOMContentLoaded', function () {
 // ═══════════════════════════════════════════════════════════════
 // CHART DRILL-DOWN — navigate to Incidents with filter applied
 // ═══════════════════════════════════════════════════════════════
+// Converts the dashboard's df_year/df_month multiselects (which have no
+// direct Incidents-page equivalent) into an effective from/to date bound.
+// Only used when the dashboard is using year/month filtering and hasn't
+// also set an explicit df_from/df_to range.
+function dashboardYearMonthToDateRange(years, months) {
+  if (!years.length && !months.length) return { from: '', to: '' };
+  if (!years.length) return { from: '', to: '' }; // month-only, no year: ambiguous across years, skip
+  var monthNames = getDashboardMonthNames();
+  var monthIdxs = months.length
+    ? months.map(function (m) { return monthNames.indexOf(m); }).filter(function (i) { return i >= 0; })
+    : [0, 11];
+  if (!monthIdxs.length) monthIdxs = [0, 11];
+  var yearNums = years.map(Number).filter(Number.isFinite);
+  if (!yearNums.length) return { from: '', to: '' };
+  var minYear = Math.min.apply(null, yearNums), maxYear = Math.max.apply(null, yearNums);
+  var minMonth = Math.min.apply(null, monthIdxs), maxMonth = Math.max.apply(null, monthIdxs);
+  var fromDate = new Date(minYear, minMonth, 1);
+  var toDate = new Date(maxYear, maxMonth + 1, 0); // last day of maxMonth
+  function toYMD(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  return { from: toYMD(fromDate), to: toYMD(toDate) };
+}
+
 function drillDownToIncidents(filters) {
+  filters = filters || {};
+  // When drilling down from the dashboard, carry over its currently active
+  // filter selections (customer/severity/area/date range) so the result
+  // reflects both the dashboard's context AND the clicked segment, rather
+  // than replacing it. The one dimension being clicked (filters.severity /
+  // customer / area / status, singular) always overrides its own dimension.
+  var dashboardPageEl = document.getElementById('page-dashboard');
+  if (dashboardPageEl && dashboardPageEl.classList.contains('active')) {
+    var snapshot = getDashFilterSnapshot();
+    if (filters.severities === undefined && filters.severity === undefined) filters.severities = snapshot.ms.df_severity;
+    if (filters.customers === undefined && filters.customer === undefined) filters.customers = snapshot.ms.df_customer;
+    if (filters.areas === undefined && filters.area === undefined) filters.areas = snapshot.ms.df_area;
+    if (filters.from === undefined && filters.to === undefined) {
+      if (snapshot.dates.df_from || snapshot.dates.df_to) {
+        filters.from = snapshot.dates.df_from;
+        filters.to = snapshot.dates.df_to;
+      } else if (snapshot.ms.df_year.length || snapshot.ms.df_month.length) {
+        var range = dashboardYearMonthToDateRange(snapshot.ms.df_year, snapshot.ms.df_month);
+        filters.from = range.from;
+        filters.to = range.to;
+      }
+    }
+  }
+
   // Navigate to incidents page
   navigate('incidents', document.getElementById('incidentsNav'));
 
@@ -10341,6 +10678,16 @@ function drillDownToIncidents(filters) {
     if (search) search.value = '';
     ['severityFilter', 'statusFilter', 'customerFilter', 'areaFilter', 'assigneeFilter'].forEach(function (id) { clearMsFilter(id); });
     ['dateFrom', 'dateTo'].forEach(function (id) { var el = document.getElementById(id); if (el) el.value = ''; });
+
+    // Carried-over dashboard selections (arrays) first, then the caller's
+    // specific single-value override for whichever dimension was clicked —
+    // applied after, so it always wins for that one dimension.
+    if (filters.severities && filters.severities.length) setMsValues('severityFilter', filters.severities);
+    if (filters.customers && filters.customers.length) setMsValues('customerFilter', filters.customers);
+    if (filters.areas && filters.areas.length) setMsValues('areaFilter', filters.areas);
+    if (filters.statuses && filters.statuses.length) setMsValues('statusFilter', filters.statuses);
+    if (filters.from) document.getElementById('dateFrom') && (document.getElementById('dateFrom').value = filters.from);
+    if (filters.to) document.getElementById('dateTo') && (document.getElementById('dateTo').value = filters.to);
 
     // Apply the drill-down filters
     if (filters.severity) setMsValues('severityFilter', [filters.severity]);

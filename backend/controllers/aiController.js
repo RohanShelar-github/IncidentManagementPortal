@@ -51,7 +51,7 @@ async function answerMailboxQuestion(message, user) {
     return 'Your role does not have permission to view the Operations mailbox.';
   }
   const state = mailboxReadState(message);
-  const messages = await listInboxMessages(50, 'all');
+  const { messages } = await listInboxMessages(50, 'all');
   const inboxMessages = messages.filter((item) => item.mailboxSource !== 'sent');
   const matching = state === null ? inboxMessages : inboxMessages.filter((item) => Boolean(item.isRead) === state);
   return formatMailboxMetadata(matching, state);

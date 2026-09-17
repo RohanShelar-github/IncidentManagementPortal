@@ -350,8 +350,9 @@ async function prepareMailboxIncident(req, res) {
 async function listMailbox(req, res) {
   if (!await requireMailboxPermission(req, res, 'view_mailbox')) return;
   try {
-    const messages = await listInboxMessages(req.query.limit, req.query.category);
-    res.json({ success: true, data: await attachMailboxIncidentLinks(messages) });
+    const cursor = typeof req.query.cursor === 'string' && req.query.cursor ? req.query.cursor : null;
+    const { messages, nextLink } = await listInboxMessages(req.query.limit, req.query.category, cursor);
+    res.json({ success: true, data: await attachMailboxIncidentLinks(messages), nextCursor: nextLink });
   } catch (error) {
     console.error('Mailbox list error:', error.message);
     res.status(502).json({ success: false, message: 'Unable to load the Microsoft 365 mailbox.' });
@@ -403,8 +404,11 @@ async function listIncidentSentMailbox(req, res) {
 
 async function listSentMailbox(req, res) {
   if (!await requireMailboxPermission(req, res, 'view_mailbox')) return;
-  try { res.json({ success: true, data: await listSentMessages(req.query.limit) }); }
-  catch (error) {
+  try {
+    const cursor = typeof req.query.cursor === 'string' && req.query.cursor ? req.query.cursor : null;
+    const { messages, nextLink } = await listSentMessages(req.query.limit, cursor);
+    res.json({ success: true, data: messages, nextCursor: nextLink });
+  } catch (error) {
     console.error('Sent mailbox list error:', error.message);
     res.status(502).json({ success: false, message: 'Unable to load Microsoft 365 Sent Items.' });
   }
@@ -533,7 +537,7 @@ async function pollMailboxForNotifications() {
   if (mailboxPollInFlight || String(process.env.MAIL_PROVIDER || '').toLowerCase() !== 'graph') return;
   mailboxPollInFlight = true;
   try {
-    const messages = await listInboxMessages(50);
+    const { messages } = await listInboxMessages(50);
     const currentIds = new Set(messages.map((message) => message.id));
     if (knownMailboxMessageIds) {
       const newMessages = messages.filter((message) => !knownMailboxMessageIds.has(message.id));
