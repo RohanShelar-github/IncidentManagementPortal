@@ -51,12 +51,15 @@ ON DUPLICATE KEY UPDATE permission_name=VALUES(permission_name);
 INSERT INTO permissions(permission_key, permission_name) VALUES
 ('manage_customer_csm','Manage Customer CSM')
 ON DUPLICATE KEY UPDATE permission_name=VALUES(permission_name);
+INSERT INTO permissions(permission_key, permission_name) VALUES
+('view_alert_compliance_report','View Alert Compliance Report')
+ON DUPLICATE KEY UPDATE permission_name=VALUES(permission_name);
 INSERT IGNORE INTO role_permissions(role_id, permission_key)
 SELECT r.id, p.permission_key FROM roles r CROSS JOIN permissions p WHERE r.role_key='admin';
 INSERT IGNORE INTO role_permissions(role_id, permission_key)
 SELECT r.id,p.permission_key FROM roles r JOIN permissions p ON p.permission_key IN ('view_dashboard','view_incidents','edit_incidents','close_incidents','view_reports','export_reports','view_customer360') WHERE r.role_key='cso';
 INSERT IGNORE INTO role_permissions(role_id, permission_key)
-SELECT r.id,p.permission_key FROM roles r JOIN permissions p ON p.permission_key IN ('view_dashboard','view_incidents','view_reports','export_reports','view_customer360') WHERE r.role_key='pmo';
+SELECT r.id,p.permission_key FROM roles r JOIN permissions p ON p.permission_key IN ('view_dashboard','view_incidents','view_reports','export_reports','view_customer360','view_alert_compliance_report') WHERE r.role_key='pmo';
 INSERT IGNORE INTO role_permissions(role_id, permission_key)
 SELECT r.id,p.permission_key FROM roles r JOIN permissions p ON p.permission_key IN ('view_dashboard','view_incidents','create_incidents','edit_incidents','close_incidents','view_reports','export_reports','view_customer360') WHERE r.role_key='aoc';
 INSERT IGNORE INTO role_permissions(role_id, permission_key)

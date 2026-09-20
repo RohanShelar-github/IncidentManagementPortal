@@ -2790,7 +2790,8 @@ function navigateInternal(page, el) {
     users: 'manage_users',
     roles: 'manage_roles',
     customer360: 'view_customer360',
-    datamanagement: 'manage_data'
+    datamanagement: 'manage_data',
+    alertCompliance: 'view_alert_compliance_report'
   };
   // Dashboard blocked separately so it doesn't interfere with initial load
   if (page === 'dashboard' && !hasPermission('view_dashboard')) {
@@ -2810,7 +2811,7 @@ function navigateInternal(page, el) {
   pageEl.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   if (el) el.classList.add('active');
-  const titles = { home: 'Home', dashboard: 'Dashboard', incidents: 'Incident Management', mailbox: 'Operations', drafts: 'Draft Review', reports: 'Reports', users: 'User Management', roles: 'Role Management', customer360: 'Customer 360' };
+  const titles = { home: 'Home', dashboard: 'Dashboard', incidents: 'Incident Management', mailbox: 'Operations', drafts: 'Draft Review', reports: 'Reports', users: 'User Management', roles: 'Role Management', customer360: 'Customer 360', alertCompliance: 'Alert Compliance' };
   if (page === 'home') renderHomePage();
   var _tbt = document.getElementById('topbarTitle'); if (_tbt) _tbt.textContent = titles[page] || page;
   if (page === 'incidents') renderIncidentTable();
@@ -2834,6 +2835,7 @@ function navigateInternal(page, el) {
       setTimeout(function () { _showC360Picker(); }, 50);
     }
   }
+  if (page === 'alertCompliance') loadAlertComplianceReport();
   updateStatusBar();
   closeSidebar();
 }
@@ -3499,7 +3501,7 @@ function renderIncidentDrafts() {
     var selector = canDelete ? '<input class="draft-review-select" type="checkbox" data-draft-select="' + Number(draft.id) + '" aria-label="Select draft" ' + (selectedIncidentDraftIds.has(Number(draft.id)) ? 'checked' : '') + '/>' : '';
     return '<article class="draft-review-card" data-draft-card="' + Number(draft.id) + '" tabindex="0" role="button" aria-label="Open draft" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;display:flex;gap:16px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;cursor:pointer">'
       + '<div style="min-width:250px;flex:1"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' + selector + '<strong style="color:var(--text)">' + escapeMetricHtml(draft.title || 'Untitled alert') + '</strong><span class="badge" style="color:' + color + ';border-color:' + color + '">' + escapeMetricHtml(status) + '</span></div>'
-      + '<div style="margin-top:7px;color:var(--text-muted);font-size:12px">' + escapeMetricHtml(draft.draft_ref) + ' · ' + escapeMetricHtml(draft.customer || 'Customer not selected') + ' · ' + escapeMetricHtml(draft.severity || 'Severity not selected') + '</div>'
+      + '<div style="margin-top:7px;color:var(--text-muted);font-size:12px">' + escapeMetricHtml(draft.draft_ref) + ' · ' + escapeMetricHtml(draft.customer || 'Customer not selected') + ' · ' + escapeMetricHtml(draft.severity || 'Severity not selected') + ' · Created by ' + escapeMetricHtml(draft.created_by_name || 'Unknown') + '</div>'
       + '<div style="margin-top:6px;color:var(--text-muted);font-size:11px">' + (draft.is_manual ? 'Manual draft · ready when saved' : 'Email received: ' + escapeMetricHtml(mailboxDate(draft.source_received_at)) + ' · Review ends: ' + escapeMetricHtml(mailboxDate(draft.review_deadline_at))) + '</div></div>'
       + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + action + resolve + remove + '</div></article>';
   }).join('');
@@ -3561,7 +3563,7 @@ function viewIncidentDraft(id) {
   var existing = document.getElementById('incidentDraftDetailModal'); if (existing) existing.remove();
   var modal = document.createElement('div'); modal.id = 'incidentDraftDetailModal'; modal.className = 'modal-overlay open';
   var timing = draft.is_manual ? 'Manual draft. It is ready to create and no notification email has been sent.' : 'Source email received: ' + escapeMetricHtml(mailboxDate(draft.source_received_at)) + '. The 10-minute review deadline is ' + escapeMetricHtml(mailboxDate(draft.review_deadline_at)) + '.';
-  modal.innerHTML = '<div class="modal" style="width:min(680px,94vw)"><div class="modal-header"><div class="modal-title">Draft Incident</div><button class="modal-close" type="button">×</button></div><div class="modal-body"><div style="margin-bottom:14px;color:var(--accent);font-size:13px;font-weight:700">' + escapeMetricHtml(draftStatusLabel(draft)) + '</div><div class="form-grid"><div class="form-group form-full"><label class="form-label">Title</label><div style="color:var(--text)">' + escapeMetricHtml(draft.title || '') + '</div></div><div class="form-group"><label class="form-label">Customer</label><div style="color:var(--text)">' + escapeMetricHtml(draft.customer || '') + '</div></div><div class="form-group"><label class="form-label">Severity</label><div style="color:var(--text)">' + escapeMetricHtml(draft.severity || '') + '</div></div><div class="form-group form-full"><label class="form-label">Description</label><div style="white-space:pre-wrap;color:var(--text);line-height:1.5">' + escapeMetricHtml(mailboxPlainText(draft.payload?.description || '')) + '</div></div></div><div style="margin-top:14px;font-size:12px;color:var(--text-muted)">' + timing + '</div></div><div class="modal-footer"><button class="btn btn-secondary" type="button">Close</button></div></div>';
+  modal.innerHTML = '<div class="modal" style="width:min(680px,94vw)"><div class="modal-header"><div class="modal-title">Draft Incident</div><button class="modal-close" type="button">×</button></div><div class="modal-body"><div style="margin-bottom:14px;color:var(--accent);font-size:13px;font-weight:700">' + escapeMetricHtml(draftStatusLabel(draft)) + '</div><div class="form-grid"><div class="form-group form-full"><label class="form-label">Title</label><div style="color:var(--text)">' + escapeMetricHtml(draft.title || '') + '</div></div><div class="form-group"><label class="form-label">Customer</label><div style="color:var(--text)">' + escapeMetricHtml(draft.customer || '') + '</div></div><div class="form-group"><label class="form-label">Severity</label><div style="color:var(--text)">' + escapeMetricHtml(draft.severity || '') + '</div></div><div class="form-group"><label class="form-label">Created By</label><div style="color:var(--text)">' + escapeMetricHtml(draft.created_by_name || 'Unknown') + '</div></div><div class="form-group form-full"><label class="form-label">Description</label><div style="white-space:pre-wrap;color:var(--text);line-height:1.5">' + escapeMetricHtml(mailboxPlainText(draft.payload?.description || '')) + '</div></div></div><div style="margin-top:14px;font-size:12px;color:var(--text-muted)">' + timing + '</div></div><div class="modal-footer"><button class="btn btn-secondary" type="button">Close</button></div></div>';
   function close() { modal.remove(); } modal.addEventListener('click', function (event) { if (event.target === modal) close(); }); modal.querySelectorAll('button').forEach(function (button) { if (button.textContent === '×' || button.textContent === 'Close') button.onclick = close; }); document.body.appendChild(modal);
 }
 
@@ -3722,6 +3724,10 @@ function switchRole(role) {
   el = document.getElementById('c360Nav');
   if (el) el.style.display = can('view_customer360') ? '' : 'none';
 
+  // Alert Compliance nav — only if can view the alert compliance report
+  el = document.getElementById('alertComplianceNav');
+  if (el) el.style.display = can('view_alert_compliance_report') ? '' : 'none';
+
   // Data management — roles with manage_data permission
   el = document.getElementById('dataMgmtNav');
   if (el) el.style.display = can('manage_data') ? '' : 'none';
@@ -3867,13 +3873,14 @@ const PERM_LABELS = {
   assign_roles: 'Assign Roles',
   manage_data: 'Manage Data',
   manage_customer_csm: 'Manage Customer CSM',
+  view_alert_compliance_report: 'View Alert Compliance Report',
 };
 
 let roles = [
   {
     key: 'admin', name: 'Admin', icon: '🛡', color: 'purple', system: true,
     desc: 'Full access to all portal features including user and role management.',
-    perms: ['view_dashboard', ...DASHBOARD_CARD_PERMISSIONS, 'view_incidents', 'create_incidents', 'edit_incidents', 'close_incidents', 'delete_incidents', 'view_reports', 'export_reports', 'view_customer360', 'view_mailbox', 'send_mailbox', 'delete_mailbox', 'view_drafts', 'delete_drafts', 'manage_users', 'manage_roles', 'assign_roles', 'manage_data', 'manage_customer_csm']
+    perms: ['view_dashboard', ...DASHBOARD_CARD_PERMISSIONS, 'view_incidents', 'create_incidents', 'edit_incidents', 'close_incidents', 'delete_incidents', 'view_reports', 'export_reports', 'view_customer360', 'view_mailbox', 'send_mailbox', 'delete_mailbox', 'view_drafts', 'delete_drafts', 'manage_users', 'manage_roles', 'assign_roles', 'manage_data', 'manage_customer_csm', 'view_alert_compliance_report']
   },
   {
     key: 'cso', name: 'CSO', icon: '🌐', color: 'green', system: false,
@@ -3883,7 +3890,7 @@ let roles = [
   {
     key: 'pmo', name: 'PMO', icon: '📋', color: 'yellow', system: false,
     desc: 'Project Management Office — read-only access to incidents and reports.',
-    perms: ['view_dashboard', ...DASHBOARD_CARD_PERMISSIONS, 'view_incidents', 'view_reports', 'export_reports', 'view_customer360']
+    perms: ['view_dashboard', ...DASHBOARD_CARD_PERMISSIONS, 'view_incidents', 'view_reports', 'export_reports', 'view_customer360', 'view_alert_compliance_report']
   },
   {
     key: 'aoc', name: 'AOC', icon: '🔧', color: 'red', system: false,
@@ -6379,6 +6386,7 @@ function renderPageAfterRefresh(page) {
     else _showC360Picker();
     return;
   }
+  if (page === 'alertCompliance') { loadAlertComplianceReport(); return; }
 }
 
 function refreshPageContent(event, page) {
@@ -11059,4 +11067,230 @@ const _origSaveIncident = saveIncident;
 saveIncident = function () {
   _origSaveIncident();
 };
+
+// ── ALERT COMPLIANCE REPORT ─────────────────────────────────────────────
+// Additive, self-contained feature: surfaces Operations mailbox alerts that
+// never became an incident (or went quiet with no resolved confirmation).
+// Reads GET /api/operations-alerts, gated server-side by the
+// view_alert_compliance_report permission. Safe to delete this entire block
+// (plus the small hook lines in navigateInternal/switchRole/renderPageAfterRefresh
+// and the page/nav markup in index.html) to fully revert the feature.
+const ALERT_COMPLIANCE_STATE_LABELS = {
+  went_quiet: 'Went Quiet — Unconfirmed',
+  actively_repeating: 'Actively Repeating',
+  confirmed_resolved: 'Confirmed Resolved',
+  incident_created: 'Incident Created'
+};
+const ALERT_COMPLIANCE_STATE_CLASS = {
+  went_quiet: 'badge-critical',
+  actively_repeating: 'badge-high',
+  confirmed_resolved: 'badge-closed',
+  incident_created: 'badge-progress'
+};
+let alertComplianceReportData = [];
+let alertComplianceReportSummary = null;
+
+function loadAlertComplianceReport() {
+  if (!hasPermission('view_alert_compliance_report')) return;
+  const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) { showToast('Not authenticated. Please login first.', 'error'); return; }
+  const daysEl = document.getElementById('acFilterDays');
+  const days = daysEl ? daysEl.value : '14';
+  const tbody = document.getElementById('acTableBody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);padding:20px">Loading alert activity…</td></tr>';
+  fetch(window.APP_CONFIG.API_BASE_URL + '/operations-alerts?days=' + encodeURIComponent(days), {
+    headers: { Authorization: 'Bearer ' + token }
+  })
+    .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+    .then(function (result) {
+      if (!result.ok || !result.data.success) throw new Error(result.data.message || 'Unable to load the Alert Compliance report');
+      alertComplianceReportData = result.data.data || [];
+      alertComplianceReportSummary = result.data.summary || null;
+      populateAlertComplianceCustomerFilter();
+      renderAlertComplianceSummary();
+      renderAlertComplianceTable();
+    })
+    .catch(function (err) {
+      console.error('Alert compliance report error:', err);
+      showToast(err.message || 'Unable to load the Alert Compliance report', 'error');
+      if (tbody) tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--danger);padding:20px">Failed to load alert activity</td></tr>';
+    });
+}
+
+function populateAlertComplianceCustomerFilter() {
+  const select = document.getElementById('acFilterCustomer');
+  if (!select) return;
+  const current = select.value;
+  const names = Array.from(new Set(alertComplianceReportData.map(function (r) { return r.customer; }).filter(Boolean))).sort();
+  select.innerHTML = '<option value="">All Customers</option>' + names.map(function (n) {
+    return '<option value="' + escapeMetricHtml(n) + '">' + escapeMetricHtml(n) + '</option>';
+  }).join('');
+  if (names.indexOf(current) >= 0) select.value = current;
+}
+
+function renderAlertComplianceSummary() {
+  const s = alertComplianceReportSummary || { wentQuiet: 0, activelyRepeating: 0, confirmedResolved: 0, incidentCreated: 0 };
+  var set = function (id, val) { var el = document.getElementById(id); if (el) el.textContent = val; };
+  set('acStatQuiet', s.wentQuiet || 0);
+  set('acStatRepeating', s.activelyRepeating || 0);
+  set('acStatResolved', s.confirmedResolved || 0);
+  set('acStatIncident', s.incidentCreated || 0);
+}
+
+function acFilterByState(state) {
+  const sel = document.getElementById('acFilterState');
+  if (!sel) return;
+  sel.value = sel.value === state ? '' : state;
+  renderAlertComplianceTable();
+}
+
+function acFormatAge(firstSeen) {
+  if (!firstSeen) return '—';
+  const ms = Date.now() - new Date(firstSeen).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return '—';
+  const hours = ms / 3600000;
+  if (hours < 1) return Math.round(ms / 60000) + 'm';
+  if (hours < 24) return Math.round(hours) + 'h';
+  return Math.round(hours / 24) + 'd';
+}
+
+function acFormatTimestamp(value) {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function renderAlertComplianceTable() {
+  const tbody = document.getElementById('acTableBody');
+  const countEl = document.getElementById('acRowCount');
+  if (!tbody) return;
+  const category = document.getElementById('acFilterCategory')?.value || '';
+  const state = document.getElementById('acFilterState')?.value || '';
+  const customer = document.getElementById('acFilterCustomer')?.value || '';
+  const rows = alertComplianceReportData.filter(function (r) {
+    if (category && r.category !== category) return false;
+    if (state && r.state !== state) return false;
+    if (customer && r.customer !== customer) return false;
+    return true;
+  });
+  if (countEl) countEl.textContent = rows.length + ' alert group' + (rows.length === 1 ? '' : 's');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);padding:20px">No alert activity in the selected window</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(function (r) {
+    const stateLabel = ALERT_COMPLIANCE_STATE_LABELS[r.state] || r.state;
+    const stateClass = ALERT_COMPLIANCE_STATE_CLASS[r.state] || 'badge-progress';
+    const incidentCell = r.incidentRef
+      ? '<a href="javascript:void(0)" onclick="acOpenIncident(\'' + escapeMetricHtml(r.incidentRef) + '\')" style="color:var(--accent);font-weight:600">' + escapeMetricHtml(r.incidentRef) + '</a>'
+      : '<span style="color:var(--text-muted)">—</span>';
+    const commentCount = r.commentCount || 0;
+    const commentCell = '<button class="btn btn-secondary" onclick="acOpenComments(\'' + escapeMetricHtml(r.fingerprintKey) + '\')" style="padding:3px 10px;font-size:11px" title="View or add comments">'
+      + '💬 ' + commentCount + '</button>';
+    return '<tr>'
+      + '<td style="max-width:320px">' + escapeMetricHtml(r.subject) + '</td>'
+      + '<td>' + escapeMetricHtml(r.category) + '</td>'
+      + '<td>' + escapeMetricHtml(r.customer || '—') + '</td>'
+      + '<td>' + acFormatTimestamp(r.firstSeen) + '</td>'
+      + '<td>' + acFormatTimestamp(r.lastSeen) + '</td>'
+      + '<td>' + escapeMetricHtml(r.occurrenceCount) + '</td>'
+      + '<td><span class="badge ' + stateClass + '">' + escapeMetricHtml(stateLabel) + '</span></td>'
+      + '<td>' + incidentCell + '</td>'
+      + '<td>' + acFormatAge(r.firstSeen) + '</td>'
+      + '<td>' + commentCell + '</td>'
+      + '</tr>';
+  }).join('');
+}
+
+function acOpenIncident(incidentRef) {
+  if (!incidentRef) return;
+  if (typeof openDetailPanel === 'function') openDetailPanel(incidentRef);
+}
+
+// ── Alert Compliance comments ────────────────────────────────────────────
+// Comment thread per alert group, keyed by the group's fingerprintKey
+// (stable across report reloads for the same recurring alert). Lets
+// admin/PMO record why an alert did or didn't become an incident.
+let acActiveCommentFingerprintKey = null;
+let acActiveCommentFingerprint = null;
+
+function acOpenComments(fingerprintKey) {
+  const row = alertComplianceReportData.find(function (r) { return r.fingerprintKey === fingerprintKey; });
+  if (!row) return;
+  acActiveCommentFingerprintKey = fingerprintKey;
+  acActiveCommentFingerprint = row.fingerprint || '';
+  const title = document.getElementById('acCommentModalTitle');
+  if (title) title.textContent = 'Comments — ' + row.subject;
+  const input = document.getElementById('acCommentInput');
+  if (input) input.value = '';
+  const list = document.getElementById('acCommentsList');
+  if (list) list.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:16px;font-size:12px">Loading comments…</div>';
+  openModal('alertCommentModal');
+  acLoadComments(fingerprintKey);
+}
+
+function acLoadComments(fingerprintKey) {
+  const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) return;
+  fetch(window.APP_CONFIG.API_BASE_URL + '/operations-alerts/comments?fingerprintKey=' + encodeURIComponent(fingerprintKey), {
+    headers: { Authorization: 'Bearer ' + token }
+  })
+    .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+    .then(function (result) {
+      if (!result.ok || !result.data.success) throw new Error(result.data.message || 'Unable to load comments');
+      acRenderComments(result.data.data || []);
+    })
+    .catch(function (err) {
+      const list = document.getElementById('acCommentsList');
+      if (list) list.innerHTML = '<div style="text-align:center;color:var(--danger);padding:16px;font-size:12px">' + escapeMetricHtml(err.message || 'Unable to load comments') + '</div>';
+    });
+}
+
+function acRenderComments(comments) {
+  const list = document.getElementById('acCommentsList');
+  if (!list) return;
+  if (!comments.length) {
+    list.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:16px;font-size:12px">No comments yet — be the first to explain this alert.</div>';
+    return;
+  }
+  list.innerHTML = comments.map(function (c) {
+    const initials = String(c.author || '?').trim().split(/\s+/).map(function (p) { return p[0] || ''; }).join('').substring(0, 2).toUpperCase();
+    return '<div class="comment-item">'
+      + '<div class="comment-avatar">' + escapeMetricHtml(initials || '?') + '</div>'
+      + '<div style="flex:1;min-width:0">'
+      + '<span class="comment-author">' + escapeMetricHtml(c.author) + '</span>'
+      + '<span class="comment-time">' + acFormatTimestamp(c.createdAt) + '</span>'
+      + '<div class="comment-text">' + escapeMetricHtml(c.comment) + '</div>'
+      + '</div></div>';
+  }).join('');
+}
+
+function acSubmitComment() {
+  const input = document.getElementById('acCommentInput');
+  const text = input ? input.value.trim() : '';
+  if (!text) { showToast('Enter a comment first', 'error'); return; }
+  if (!acActiveCommentFingerprintKey) return;
+  const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) { showToast('Not authenticated. Please login first.', 'error'); return; }
+  fetch(window.APP_CONFIG.API_BASE_URL + '/operations-alerts/comments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ fingerprintKey: acActiveCommentFingerprintKey, fingerprint: acActiveCommentFingerprint, comment: text })
+  })
+    .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+    .then(function (result) {
+      if (!result.ok || !result.data.success) throw new Error(result.data.message || 'Unable to add comment');
+      if (input) input.value = '';
+      acLoadComments(acActiveCommentFingerprintKey);
+      const row = alertComplianceReportData.find(function (r) { return r.fingerprintKey === acActiveCommentFingerprintKey; });
+      if (row) row.commentCount = (row.commentCount || 0) + 1;
+      renderAlertComplianceTable();
+      showToast('Comment added', 'success');
+    })
+    .catch(function (err) {
+      showToast(err.message || 'Unable to add comment', 'error');
+    });
+}
+// ── /ALERT COMPLIANCE REPORT ────────────────────────────────────────────
 

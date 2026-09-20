@@ -713,4 +713,8 @@ async function sendIncidentClosedEmail(incident) {
   return sendIncidentCreatedEmail({ ...incident, emailType: 'closed' });
 }
 
-module.exports = { cleanAddressList, configured, countUnreadMailboxMessages, deleteInboxMessage, enrichInboxConversations, getAccessToken, getGraphAccessToken, getInboxAttachment, getInboxMessage, getOperationsMailboxCounts, graphRecipients, hasDisplayableEmailContent, htmlEscape, incidentEmail, inboundMailboxAddress, inlineDataImagesForEmail, listConversationMessages, listInboxMessages, listSentMessages, markInboxMessageRead, replyToInboxMessage, safeIncidentEmailHtml, sanitizeMailboxReplyHtml, sanitizeSignatureLayoutHtml, sendCriticalIncidentEmail, sendIncidentClosedEmail, sendIncidentCreatedEmail, sendNewMailboxMessage, setInboxMessageReadState, writeMailDiagnostic, xmlEscape };
+// listMailboxFolderMessages is additionally exported (read-only, pre-existing
+// function, unchanged) so the Alert Compliance report can page through raw
+// inbox messages once and classify locally, instead of issuing one Graph
+// request per category and adding to the mailbox's shared concurrency load.
+module.exports = { cleanAddressList, configured, countUnreadMailboxMessages, deleteInboxMessage, enrichInboxConversations, getAccessToken, getGraphAccessToken, getInboxAttachment, getInboxMessage, getOperationsMailboxCounts, graphRecipients, hasDisplayableEmailContent, htmlEscape, incidentEmail, inboundMailboxAddress, inlineDataImagesForEmail, listConversationMessages, listInboxMessages, listMailboxFolderMessages, listSentMessages, markInboxMessageRead, replyToInboxMessage, safeIncidentEmailHtml, sanitizeMailboxReplyHtml, sanitizeSignatureLayoutHtml, sendCriticalIncidentEmail, sendIncidentClosedEmail, sendIncidentCreatedEmail, sendNewMailboxMessage, setInboxMessageReadState, writeMailDiagnostic, xmlEscape };

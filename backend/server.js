@@ -12,6 +12,10 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const roleRoutes = require('./routes/roleRoutes');
 const aiRoutes = require('./routes/aiRoutes');
 const mailboxRoutes = require('./routes/mailboxRoutes');
+// New, additive route for the Alert Compliance report (Operations alerts
+// with no incident created). Safe to remove this line + the app.use below
+// to fully revert the feature — nothing else depends on it.
+const operationsAlertReportRoutes = require('./routes/operationsAlertReportRoutes');
 const { startMailboxNotificationPolling } = require('./controllers/mailboxController');
 const { startUiServer } = require('../server-ui');
 const pool = require('./config/database');
@@ -60,6 +64,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/mailbox', mailboxRoutes);
+app.use('/api/operations-alerts', operationsAlertReportRoutes);
 
 // Health check endpoint
 app.get('/api/health', async (req, res) => {

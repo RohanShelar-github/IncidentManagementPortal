@@ -43,6 +43,7 @@ function draftDto(row) {
     severity: payload.severity || '',
     payload,
     finalized_incident_ref: row.finalized_incident_ref || null,
+    created_by_name: row.created_by_name || 'Unknown',
     created_at: asIsoUtc(row.created_at),
     updated_at: asIsoUtc(row.updated_at)
   };
@@ -56,9 +57,10 @@ async function listIncidentDrafts(req, res) {
   try {
     await refreshReadyDrafts();
     const [rows] = await pool.query(
-      `SELECT d.*, i.incident_ref AS finalized_incident_ref
+      `SELECT d.*, i.incident_ref AS finalized_incident_ref, u.full_name AS created_by_name
          FROM incident_drafts d
          LEFT JOIN incidents i ON i.id = d.finalized_incident_id
+         LEFT JOIN users u ON u.id = d.created_by
         WHERE d.deleted_at IS NULL AND d.status <> 'finalized'
         ORDER BY FIELD(d.status, 'reviewing', 'ready', 'resolved', 'finalized'), d.review_deadline_at ASC, d.updated_at DESC`,
       []
@@ -72,8 +74,10 @@ async function listIncidentDrafts(req, res) {
 
 async function getOwnedDraft(id, userId, allowAdmin) {
   const [rows] = await pool.query(
-    `SELECT d.*, i.incident_ref AS finalized_incident_ref
-       FROM incident_drafts d LEFT JOIN incidents i ON i.id = d.finalized_incident_id
+    `SELECT d.*, i.incident_ref AS finalized_incident_ref, u.full_name AS created_by_name
+       FROM incident_drafts d
+       LEFT JOIN incidents i ON i.id = d.finalized_incident_id
+       LEFT JOIN users u ON u.id = d.created_by
       WHERE d.id = ? AND d.deleted_at IS NULL ${allowAdmin ? '' : 'AND d.created_by = ?'} LIMIT 1`,
     allowAdmin ? [id] : [id, userId]
   );
@@ -107,8 +111,10 @@ async function createIncidentDraft(req, res) {
 
     await refreshReadyDrafts();
     const [existing] = await pool.query(
-      `SELECT d.*, i.incident_ref AS finalized_incident_ref
-         FROM incident_drafts d LEFT JOIN incidents i ON i.id = d.finalized_incident_id
+      `SELECT d.*, i.incident_ref AS finalized_incident_ref, u.full_name AS created_by_name
+         FROM incident_drafts d
+         LEFT JOIN incidents i ON i.id = d.finalized_incident_id
+         LEFT JOIN users u ON u.id = d.created_by
         WHERE d.source_message_id = ? AND d.created_by = ? AND d.deleted_at IS NULL
           AND d.status IN ('reviewing', 'ready', 'resolved')
         ORDER BY d.updated_at DESC LIMIT 1`,

@@ -51,5 +51,5 @@ test('Customer 360 shows the Inbound CSM name and gates editing behind the new p
 
 test('manage_customer_csm has a display label and defaults to the admin role only', () => {
   assert.match(frontend, /manage_customer_csm: 'Manage Customer CSM',/);
-  assert.match(frontend, /'manage_users', 'manage_roles', 'assign_roles', 'manage_data', 'manage_customer_csm'\]/);
+  assert.match(frontend, /'manage_users', 'manage_roles', 'assign_roles', 'manage_data', 'manage_customer_csm', 'view_alert_compliance_report'\]/);
 });

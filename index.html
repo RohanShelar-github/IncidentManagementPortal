@@ -86,6 +86,12 @@
 <div class="nav-item" id="c360Nav" onclick="navigate('customer360', this)">
 <span class="nav-icon">👥</span><span class="nav-label"> Customer 360</span>
 </div>
+<!-- ALERT COMPLIANCE REPORT: additive nav item, safe to delete to revert -->
+<div class="nav-item" id="alertComplianceNav" onclick="navigate('alertCompliance', this)">
+<span class="nav-icon">📡</span><span class="nav-label"> Alert Compliance</span>
+</div>
+<!-- /ALERT COMPLIANCE REPORT -->
+
 <div class="nav-section" id="adminSection">Admin</div>
 <div class="nav-item" data-label="Users" id="usersNav" onclick="navigate('users', this)">
 <span class="nav-icon">◉</span><span class="nav-label"> User Management</span>
@@ -1253,6 +1259,119 @@
 </table>
 </div>
 </div>
+<!-- ALERT COMPLIANCE REPORT: additive page, safe to delete this whole block to revert -->
+<div class="page" id="page-alertCompliance">
+<div class="page-header">
+<div>
+<div class="breadcrumb" id="bc_page-alertCompliance">
+<span class="breadcrumb-item" onclick="navigate('dashboard', document.getElementById('dashNav'))">🏠 Home</span>
+<span class="breadcrumb-sep">›</span>
+<span class="breadcrumb-item active">Alert Compliance</span>
+</div>
+<div class="page-header-title">Alert Compliance Report</div>
+<div class="page-header-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>Operations mailbox alerts that never became an incident, grouped and tracked to closure</span><span style="color:var(--text-muted)">-</span><span id="alertComplianceLastUpdated" style="color:var(--text-muted)">Last updated just now</span>
+<span id="alertComplianceRefreshBtn" onclick="refreshPageContent(event,'alertCompliance')" onmouseout="this.style.color='var(--text-muted)';this.style.background='transparent'" onmouseover="this.style.color='var(--accent)';this.style.background='rgba(79,142,247,0.12)'" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--text-muted);transition:color .2s,background .2s;flex-shrink:0" title="Refresh">
+<svg fill="none" height="13" id="alertComplianceRefreshIcon" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" style="transition:transform .7s ease" viewbox="0 0 24 24" width="13">
+<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+<path d="M21 3v5h-5"></path>
+<path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+<path d="M8 16H3v5"></path>
+</svg>
+</span></div>
+</div>
+</div>
+<!-- Summary tiles -->
+<div class="stats-grid" style="margin-bottom:20px">
+<div class="stat-card" id="acTileQuiet" style="border-color:rgba(247,92,124,0.3);background:linear-gradient(135deg,rgba(247,92,124,0.08),rgba(247,92,124,0.02));cursor:pointer" onclick="acFilterByState('went_quiet')" title="Alerts that stopped repeating with no resolved signal and no incident">
+<div class="stat-label">Went Quiet — Unconfirmed</div>
+<div class="stat-value" id="acStatQuiet">0</div>
+<div class="stat-delta">no incident, no resolved signal</div>
+</div>
+<div class="stat-card" id="acTileRepeating" style="border-color:rgba(247,185,79,0.3);background:linear-gradient(135deg,rgba(247,185,79,0.08),rgba(247,185,79,0.02));cursor:pointer" onclick="acFilterByState('actively_repeating')" title="Alerts still firing within the expected interval, no incident yet">
+<div class="stat-label">Actively Repeating</div>
+<div class="stat-value" id="acStatRepeating">0</div>
+<div class="stat-delta">no incident yet</div>
+</div>
+<div class="stat-card green" id="acTileResolved" style="cursor:pointer" onclick="acFilterByState('confirmed_resolved')" title="Alerts with a resolved notification and no incident">
+<div class="stat-label">Confirmed Resolved</div>
+<div class="stat-value" id="acStatResolved">0</div>
+<div class="stat-delta">self-resolved, no incident needed</div>
+</div>
+<div class="stat-card blue" id="acTileIncident" style="cursor:pointer" onclick="acFilterByState('incident_created')" title="Alerts that led to a created incident">
+<div class="stat-label">Incident Created</div>
+<div class="stat-value" id="acStatIncident">0</div>
+<div class="stat-delta">tracked as an incident</div>
+</div>
+</div>
+<!-- Filters -->
+<div class="filter-bar" style="margin-bottom:20px">
+<div class="filter-group">
+<div class="filter-label">Time Window</div>
+<select id="acFilterDays" onchange="loadAlertComplianceReport()">
+<option value="7">Last 7 days</option>
+<option selected="" value="14">Last 14 days</option>
+<option value="30">Last 30 days</option>
+<option value="60">Last 60 days</option>
+<option value="90">Last 90 days</option>
+</select>
+</div>
+<div class="filter-group">
+<div class="filter-label">Category</div>
+<select id="acFilterCategory" onchange="renderAlertComplianceTable()">
+<option value="">All Categories</option>
+<option value="coralogix">Coralogix</option>
+<option value="azure">Azure</option>
+</select>
+</div>
+<div class="filter-group">
+<div class="filter-label">State</div>
+<select id="acFilterState" onchange="renderAlertComplianceTable()">
+<option value="">All States</option>
+<option value="went_quiet">Went Quiet — Unconfirmed</option>
+<option value="actively_repeating">Actively Repeating</option>
+<option value="confirmed_resolved">Confirmed Resolved</option>
+<option value="incident_created">Incident Created</option>
+</select>
+</div>
+<div class="filter-group">
+<div class="filter-label">Customer</div>
+<select id="acFilterCustomer" onchange="renderAlertComplianceTable()"><option value="">All Customers</option></select>
+</div>
+</div>
+<!-- Results table -->
+<div class="chart-card">
+<div class="chart-header" style="margin-bottom:16px">
+<div class="chart-title">Alert Groups</div>
+<span id="acRowCount" style="font-size:12px;color:var(--text-muted)"></span>
+</div>
+<table>
+<thead><tr><th>Alert</th><th>Category</th><th>Customer</th><th>First Seen</th><th>Last Seen</th><th>Repeats</th><th>State</th><th>Incident</th><th>Age</th><th>Comments</th></tr></thead>
+<tbody id="acTableBody"></tbody>
+</table>
+</div>
+</div>
+<!-- /ALERT COMPLIANCE REPORT -->
+<!-- ALERT COMPLIANCE COMMENTS MODAL: additive, safe to delete to revert -->
+<div class="modal-overlay" id="alertCommentModal">
+<div class="modal">
+<div class="modal-header">
+<div class="modal-title" id="acCommentModalTitle">Alert Comments</div>
+<div class="modal-close" onclick="closeModal('alertCommentModal')">✕</div>
+</div>
+<div class="modal-body">
+<div id="acCommentsList" style="display:flex;flex-direction:column;gap:2px;max-height:320px;overflow-y:auto;margin-bottom:14px"></div>
+<div class="form-group form-full" style="margin:0">
+<label class="form-label">Add a comment</label>
+<textarea id="acCommentInput" placeholder="Explain the cause of this alert, or why an incident was or wasn't created…" rows="3" style="width:100%"></textarea>
+</div>
+</div>
+<div class="modal-footer">
+<button class="btn btn-secondary" onclick="closeModal('alertCommentModal')">Close</button>
+<button class="btn btn-primary" onclick="acSubmitComment()">Add Comment</button>
+</div>
+</div>
+</div>
+<!-- /ALERT COMPLIANCE COMMENTS MODAL -->
 </div><!-- /content -->
 </div><!-- /main -->
 <!-- ─── INCIDENT MODAL ──────────────────────────────────────── -->
@@ -1615,6 +1734,9 @@
             </label>
 <label class="perm-check" onclick="togglePerm(this)">
 <input type="checkbox" value="manage_customer_csm"/> Manage Customer CSM
+            </label>
+<label class="perm-check" onclick="togglePerm(this)">
+<input type="checkbox" value="view_alert_compliance_report"/> View Alert Compliance Report
             </label>
 </div>
 </div>
