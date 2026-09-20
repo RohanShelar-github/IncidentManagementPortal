@@ -8,7 +8,7 @@ const PERMISSIONS = [
   'view_incidents', 'create_incidents', 'edit_incidents', 'close_incidents', 'delete_incidents',
   'view_reports', 'export_reports', 'view_customer360', 'view_mailbox', 'send_mailbox',
   'delete_mailbox', 'view_drafts', 'delete_drafts', 'manage_users', 'manage_roles',
-  'assign_roles', 'manage_data'
+  'assign_roles', 'manage_data', 'manage_customer_csm'
 ];
 
 function requireAdmin(req, res) {

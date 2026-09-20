@@ -93,6 +93,22 @@ const createCustomer = async (req, res) => {
   }
 };
 
+const updateCustomerCsm = async (req, res) => {
+  try {
+    const inboundCsmName = String(req.body.inbound_csm_name || '').trim().slice(0, 255);
+    await pool.query(
+      'UPDATE customers SET inbound_csm_name = ?, updated_by = ? WHERE id = ?',
+      [inboundCsmName || null, req.user.id, req.params.id]
+    );
+    const [rows] = await pool.query('SELECT * FROM customers WHERE id = ? LIMIT 1', [req.params.id]);
+    if (!rows.length) return res.status(404).json({ success: false, message: 'Customer not found' });
+    res.json({ success: true, data: customerDto(rows[0]) });
+  } catch (error) {
+    console.error('Update customer CSM error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
+  }
+};
+
 const deactivateCustomer = async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ success: false, message: 'Admin access required' });
   try {
@@ -139,4 +155,4 @@ const deactivateArea = async (req, res) => {
   }
 };
 
-module.exports = { getMasterData, createCustomer, deactivateCustomer, createArea, deactivateArea };
+module.exports = { getMasterData, createCustomer, updateCustomerCsm, deactivateCustomer, createArea, deactivateArea };

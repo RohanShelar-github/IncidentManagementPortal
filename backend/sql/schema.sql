@@ -48,6 +48,9 @@ ON DUPLICATE KEY UPDATE permission_name=VALUES(permission_name);
 INSERT INTO permissions(permission_key, permission_name) VALUES
 ('view_dashboard_total_incidents','Dashboard: Total Incidents'),('view_dashboard_open_active','Dashboard: Open / Active'),('view_dashboard_resolved','Dashboard: Resolved'),('view_dashboard_avg_resolution','Dashboard: Avg Resolution'),('view_dashboard_total_downtime','Dashboard: Total Downtime'),('view_dashboard_historian_downtime','Dashboard: Historian Downtime'),('view_dashboard_sla_breach','Dashboard: SLA Breach Rate'),('view_dashboard_missed_mttr','Dashboard: Missed MTTR Count'),('view_dashboard_missed_mttd','Dashboard: Missed MTTD Count'),('view_dashboard_resolution_rate','Dashboard: Resolution Rate')
 ON DUPLICATE KEY UPDATE permission_name=VALUES(permission_name);
+INSERT INTO permissions(permission_key, permission_name) VALUES
+('manage_customer_csm','Manage Customer CSM')
+ON DUPLICATE KEY UPDATE permission_name=VALUES(permission_name);
 INSERT IGNORE INTO role_permissions(role_id, permission_key)
 SELECT r.id, p.permission_key FROM roles r CROSS JOIN permissions p WHERE r.role_key='admin';
 INSERT IGNORE INTO role_permissions(role_id, permission_key)

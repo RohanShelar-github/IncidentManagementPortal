@@ -1111,6 +1111,7 @@ function openMetricDrillDown(metric, customerName, reportingCategory, extra) {
   var metricIncidents = sourceIncidents.filter(function (inc) {
     if (customerName && inc.customer !== customerName) return false;
     if (metric === 'mttr' && !customerName && !reportingCategory && isCustomer360HistorianIncident(inc)) return false;
+    if (metric === 'sla' && !customerName && !reportingCategory && isCustomer360HistorianIncident(inc)) return false;
     if (reportingCategory === 'application' && isCustomer360HistorianIncident(inc)) return false;
     if (reportingCategory === 'historian' && !isCustomer360HistorianIncident(inc)) return false;
     return predicate(inc);
@@ -1769,11 +1770,9 @@ function renderC360Full(custName) {
 
   var appHeading = document.getElementById('c360ApplicationHeading');
   var historianSection = document.getElementById('c360HistorianSection');
-  var analyticsScope = document.getElementById('c360AnalyticsScope');
   var categoryFilter = document.getElementById('c360FilterCategory');
   if (appHeading) appHeading.style.display = isNgc ? '' : 'none';
   if (historianSection) historianSection.style.display = isNgc ? '' : 'none';
-  if (analyticsScope) analyticsScope.style.display = isNgc ? '' : 'none';
   if (categoryFilter) {
     categoryFilter.style.display = isNgc ? '' : 'none';
     categoryFilter.value = isNgc ? 'application' : '';
@@ -1787,17 +1786,8 @@ function renderC360Full(custName) {
       : total + ' incidents · ' + open + ' open · ' + (totalDT > 0 ? minutesToHM(totalDT) + ' downtime' : 'no downtime recorded');
   }
 
-  // ── Tags (unique tags from customer incidents) ──
-  var tagsEl = document.getElementById('c360Tags');
-  if (tagsEl) {
-    var allTags = {};
-    custIncs.forEach(function (i) { (i.tags || []).forEach(function (t) { allTags[t] = (allTags[t] || 0) + 1; }); });
-    var topTags = Object.keys(allTags).sort(function (a, b) { return allTags[b] - allTags[a]; }).slice(0, 8);
-    tagsEl.innerHTML = topTags.map(function (t) {
-      var col = (typeof TAG_COLORS !== 'undefined' && TAG_COLORS[t]) ? TAG_COLORS[t] : '#6c7a8d';
-      return '<span style="background:' + col + '20;color:' + col + ';border:1px solid ' + col + '40;border-radius:20px;padding:2px 8px;font-size:11px;font-weight:600">' + t + '</span>';
-    }).join('');
-  }
+  // ── Inbound CSM (admin-managed customer contact) ──
+  renderC360InboundCsmDisplay(custName);
 
   // ── Health ring (canvas donut) ──
   var healthScore = total > 0 ? Math.max(0, Math.round(100 - (critical / total * 40) - (open / total * 30) - (breached / Math.max(open, 1) * 30))) : 100;
@@ -1938,6 +1928,43 @@ function renderC360Full(custName) {
 
   // ── Incident table ──
   renderC360Table();
+}
+
+// Inbound CSM name is a customer master-data field, editable only by roles
+// holding the dedicated manage_customer_csm permission (admin-only today).
+function renderC360InboundCsmDisplay(custName) {
+  var el = document.getElementById('c360InboundCsm');
+  if (!el) return;
+  var record = customerRecords.find(function (c) { return c.customer_name === custName; });
+  var csmName = record && record.inbound_csm_name ? record.inbound_csm_name : '';
+  var canEdit = hasPermission('manage_customer_csm');
+  el.innerHTML = '<span style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Inbound CSM</span>'
+    + '<span style="font-size:13px;color:' + (csmName ? 'var(--text)' : 'var(--text-muted)') + ';font-weight:600">' + escapeMetricHtml(csmName || 'Not set') + '</span>'
+    + (canEdit && record ? '<button type="button" class="btn btn-secondary btn-sm" style="padding:2px 8px;font-size:11px" onclick="editC360InboundCsm(\'' + custName.replace(/'/g, "\\'") + '\')">Edit</button>' : '');
+}
+
+function editC360InboundCsm(custName) {
+  if (!hasPermission('manage_customer_csm')) { showToast('Access denied: you cannot edit the CSM name', 'error'); return; }
+  var record = customerRecords.find(function (c) { return c.customer_name === custName; });
+  var el = document.getElementById('c360InboundCsm');
+  if (!el || !record) return;
+  var safeCustName = custName.replace(/'/g, "\\'");
+  el.innerHTML = '<span style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Inbound CSM</span>'
+    + '<input type="text" id="c360InboundCsmInput" value="' + escapeMetricHtml(record.inbound_csm_name || '') + '" placeholder="Enter CSM name" style="font-size:13px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);width:180px">'
+    + '<button type="button" class="btn btn-primary btn-sm" style="padding:2px 8px;font-size:11px" onclick="saveC360InboundCsm(' + record.id + ',\'' + safeCustName + '\')">Save</button>'
+    + '<button type="button" class="btn btn-secondary btn-sm" style="padding:2px 8px;font-size:11px" onclick="renderC360InboundCsmDisplay(\'' + safeCustName + '\')">Cancel</button>';
+  var input = document.getElementById('c360InboundCsmInput');
+  if (input) input.focus();
+}
+
+function saveC360InboundCsm(customerId, custName) {
+  if (!hasPermission('manage_customer_csm')) { showToast('Access denied: you cannot edit the CSM name', 'error'); return; }
+  var input = document.getElementById('c360InboundCsmInput');
+  var value = input ? input.value.trim() : '';
+  masterDataRequest('/master-data/customers/' + customerId + '/csm', 'PATCH', { inbound_csm_name: value }, function () {
+    showToast('Inbound CSM updated', 'success');
+    renderC360InboundCsmDisplay(custName);
+  });
 }
 
 function renderCustomerHealth(custName) {
@@ -3839,13 +3866,14 @@ const PERM_LABELS = {
   manage_roles: 'Manage Roles',
   assign_roles: 'Assign Roles',
   manage_data: 'Manage Data',
+  manage_customer_csm: 'Manage Customer CSM',
 };
 
 let roles = [
   {
     key: 'admin', name: 'Admin', icon: '🛡', color: 'purple', system: true,
     desc: 'Full access to all portal features including user and role management.',
-    perms: ['view_dashboard', ...DASHBOARD_CARD_PERMISSIONS, 'view_incidents', 'create_incidents', 'edit_incidents', 'close_incidents', 'delete_incidents', 'view_reports', 'export_reports', 'view_customer360', 'view_mailbox', 'send_mailbox', 'delete_mailbox', 'view_drafts', 'delete_drafts', 'manage_users', 'manage_roles', 'assign_roles', 'manage_data']
+    perms: ['view_dashboard', ...DASHBOARD_CARD_PERMISSIONS, 'view_incidents', 'create_incidents', 'edit_incidents', 'close_incidents', 'delete_incidents', 'view_reports', 'export_reports', 'view_customer360', 'view_mailbox', 'send_mailbox', 'delete_mailbox', 'view_drafts', 'delete_drafts', 'manage_users', 'manage_roles', 'assign_roles', 'manage_data', 'manage_customer_csm']
   },
   {
     key: 'cso', name: 'CSO', icon: '🌐', color: 'green', system: false,
@@ -6476,8 +6504,9 @@ function updateStats() {
     ? withResolution.length + ' closed incident' + (withResolution.length !== 1 ? 's' : '') + ' measured'
     : 'no resolution time recorded';
 
-  // SLA Breach count
-  var breachCount = data.filter(isActiveSlaBreached).length;
+  // SLA Breach count — Historian incidents are tracked separately and are
+  // excluded here the same way they already are from Missed MTTR.
+  var breachCount = data.filter(function (inc) { return !isCustomer360HistorianIncident(inc) && isActiveSlaBreached(inc); }).length;
   var slEl = document.getElementById('statSLABreach');
   var slSub = document.getElementById('statSLABreachSub');
   if (slEl) slEl.textContent = breachCount;
