@@ -1,0 +1,24 @@
+===== Mon 09/21/2026 15:46:24.69 ===== 
+Starting backup of database: incident_management_db 
+Backup successful: C:\Incident Management Portal\MySQL Database Backup\incident_management_db_~0,4DT:~4,2DT:~6,2DT:~8,2DT:~10,2DT:~12,2.sql 
+Deleting backups older than 2 days... 
+Backup and cleanup completed. 
+ 
+===== Mon 09/21/2026 15:50:12.04 ===== 
+Starting backup of database: incident_management_db 
+ERROR: Backup failed for incident_management_db 
+===== Mon 09/21/2026 15:51:09.93 ===== 
+Starting backup of database: incident_management_db 
+ERROR: Backup failed for incident_management_db 
+===== Mon 09/21/2026 15:51:37.80 ===== 
+Starting backup of database: incident_management_db 
+Backup successful: C:\Incident Management Portal\MySQL Database Backup\incident_management_db_2026-09-21_15-51-37.sql 
+Deleting backups older than 2 days... 
+Backup and cleanup completed. 
+ 
+===== Mon 09/21/2026 15:59:57.41 ===== 
+Starting backup of database: incident_management_db 
+Backup successful: C:\Incident Management Portal\MySQL Database Backup\incident_management_db_2026-09-21_15-59-57.sql 
+Deleting backups older than 2 days... 
+Backup and cleanup completed. 
+ 
