@@ -81,3 +81,43 @@ To https://github.com/RohanShelar-github/IncidentManagementPortal.git
 error: failed to push some refs to 'https://github.com/RohanShelar-github/IncidentManagementPortal.git'
 ERROR: git push failed. Backup was committed locally but not pushed. 
  
+===== Tue 09/22/2026 16:52:24.46 ===== 
+Running database dump... 
+===== Tue 09/22/2026 16:52:25.11 ===== 
+Starting backup of database: incident_management_db 
+Backup successful: C:\Incident Management Portal\MySQL Database Backup\incident_management_db_2026-09-22_16-52-25.sql 
+Deleting backups older than 2 days... 
+Backup and cleanup completed. 
+ 
+Verifying the new backup restores cleanly and matches live row counts... 
+Verifying backup file: C:\Incident Management Portal\MySQL Database Backup\incident_management_db_2026-09-22_16-52-25.sql
+Restoring dump into throwaway database "incident_management_db_backup_verify"...
+mysql: [Warning] Using a password on the command line interface can be insecure.
+┌─────────┬────────────────────────────────────┬──────┬────────┬───────┐
+│ (index) │ table                              │ live │ backup │ match │
+├─────────┼────────────────────────────────────┼──────┼────────┼───────┤
+│ 0       │ 'activity_logs'                    │ 1809 │ 1809   │ 'OK'  │
+│ 1       │ 'area'                             │ 22   │ 22     │ 'OK'  │
+│ 2       │ 'customer_email_recipient_configs' │ 17   │ 17     │ 'OK'  │
+│ 3       │ 'customer_jira_project_code_audit' │ 18   │ 18     │ 'OK'  │
+│ 4       │ 'customers'                        │ 25   │ 25     │ 'OK'  │
+│ 5       │ 'email_recipient_directory'        │ 76   │ 76     │ 'OK'  │
+│ 6       │ 'incident_drafts'                  │ 16   │ 16     │ 'OK'  │
+│ 7       │ 'incident_email_messages'          │ 38   │ 38     │ 'OK'  │
+│ 8       │ 'incident_email_threads'           │ 24   │ 24     │ 'OK'  │
+│ 9       │ 'incident_legacy_metadata'         │ 0    │ 0      │ 'OK'  │
+│ 10      │ 'incident_ref_normalization_audit' │ 70   │ 70     │ 'OK'  │
+│ 11      │ 'incidents'                        │ 313  │ 313    │ 'OK'  │
+│ 12      │ 'notifications'                    │ 2640 │ 2640   │ 'OK'  │
+│ 13      │ 'operations_alert_comments'        │ 8    │ 8      │ 'OK'  │
+│ 14      │ 'operations_email_incident_audit'  │ 190  │ 190    │ 'OK'  │
+│ 15      │ 'permissions'                      │ 30   │ 30     │ 'OK'  │
+│ 16      │ 'role_permissions'                 │ 150  │ 150    │ 'OK'  │
+│ 17      │ 'roles'                            │ 7    │ 7      │ 'OK'  │
+│ 18      │ 'schema_migrations'                │ 30   │ 30     │ 'OK'  │
+│ 19      │ 'user_email_signatures'            │ 2    │ 2      │ 'OK'  │
+│ 20      │ 'users'                            │ 22   │ 22     │ 'OK'  │
+└─────────┴────────────────────────────────────┴──────┴────────┴───────┘
+BACKUP VERIFICATION PASSED: every table in the backup matches the live database row-for-row.
+Backup verification passed. 
+Staging backup files for git... 
