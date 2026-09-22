@@ -22,3 +22,62 @@ Backup successful: C:\Incident Management Portal\MySQL Database Backup\incident_
 Deleting backups older than 2 days... 
 Backup and cleanup completed. 
  
+===== Tue 09/22/2026 16:29:02.52 ===== 
+Running database dump... 
+===== Tue 09/22/2026 16:29:03.20 ===== 
+Starting backup of database: incident_management_db 
+Backup successful: C:\Incident Management Portal\MySQL Database Backup\incident_management_db_2026-09-22_16-29-03.sql 
+Deleting backups older than 2 days... 
+Backup and cleanup completed. 
+ 
+Staging backup files for git... 
+[main b592955] Automated database backup
+ 2 files changed, 828 insertions(+)
+ create mode 100644 MySQL Database Backup/incident_management_db_2026-09-22_16-29-03.sql
+Pushing to origin main... 
+remote: error: GH013: Repository rule violations found for refs/heads/main.        
+remote: 
+remote: - GITHUB PUSH PROTECTION        
+remote:   —————————————————————————————————————————        
+remote:     Resolve the following violations before pushing again        
+remote: 
+remote:     - Push cannot contain secrets        
+remote: 
+remote:             
+remote:      (?) Learn how to resolve a blocked push        
+remote:      https://docs.github.com/code-security/secret-scanning/working-with-secret-scanning-and-push-protection/working-with-push-protection-from-the-command-line#resolving-a-blocked-push        
+remote:             
+remote:             
+remote:       —— OpenAI API Key ————————————————————————————————————        
+remote:        locations:        
+remote:          - commit: 857dbe550c8d19aafb1fe37ed3adc6836406a5f0        
+remote:            path: backend/.env.local:13        
+remote:             
+remote:        (?) To push, remove secret from commit(s) or follow this URL to allow the secret.        
+remote:        https://github.com/RohanShelar-github/IncidentManagementPortal/security/secret-scanning/unblock-secret/3Jdqcven9VbsshZGSdR9ixFSaWm        
+remote:             
+remote:             
+remote:       —— Groq API Key ——————————————————————————————————————        
+remote:        locations:        
+remote:          - commit: 857dbe550c8d19aafb1fe37ed3adc6836406a5f0        
+remote:            path: backend/.env.local:20        
+remote:             
+remote:        (?) To push, remove secret from commit(s) or follow this URL to allow the secret.        
+remote:        https://github.com/RohanShelar-github/IncidentManagementPortal/security/secret-scanning/unblock-secret/3JdqcvsK9HLNml4PB0x6M30ZtUl        
+remote:             
+remote:             
+remote:       —— Azure Active Directory Application Secret —————————        
+remote:        locations:        
+remote:          - commit: 857dbe550c8d19aafb1fe37ed3adc6836406a5f0        
+remote:            path: backend/.env.local:27        
+remote:             
+remote:        (?) To push, remove secret from commit(s) or follow this URL to allow the secret.        
+remote:        https://github.com/RohanShelar-github/IncidentManagementPortal/security/secret-scanning/unblock-secret/3Jdqcw1z952yaQINJJyRyqEtlq4        
+remote:             
+remote: 
+remote: 
+To https://github.com/RohanShelar-github/IncidentManagementPortal.git
+ ! [remote rejected] main -> main (push declined due to repository rule violations)
+error: failed to push some refs to 'https://github.com/RohanShelar-github/IncidentManagementPortal.git'
+ERROR: git push failed. Backup was committed locally but not pushed. 
+ 
