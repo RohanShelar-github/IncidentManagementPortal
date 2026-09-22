@@ -213,3 +213,12 @@ Backup and cleanup completed.
 Verifying the new backup restores cleanly and matches live row counts... 
 Skipping verification — last run was less than 7 day(s) ago. Pass --force to run anyway.
 Staging backup files for git... 
+warning: in the working copy of 'MySQL Database Backup/backup.log', LF will be replaced by CRLF the next time Git touches it
+[main 8622129] Automated database backup
+ 2 files changed, 840 insertions(+)
+ create mode 100644 MySQL Database Backup/incident_management_db_2026-09-22_17-33-28.sql
+Pushing to origin main... 
+To https://github.com/RohanShelar-github/IncidentManagementPortal.git
+   ee9e245..8622129  main -> main
+Backup committed and pushed successfully. 
+ 

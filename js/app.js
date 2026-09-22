@@ -11186,10 +11186,11 @@ function renderAlertComplianceTable() {
       ? '<a href="javascript:void(0)" onclick="acOpenIncident(\'' + escapeMetricHtml(r.incidentRef) + '\')" style="color:var(--accent);font-weight:600">' + escapeMetricHtml(r.incidentRef) + '</a>'
       : '<span style="color:var(--text-muted)">—</span>';
     const commentCount = r.commentCount || 0;
-    const commentCell = '<button class="btn btn-secondary" onclick="acOpenComments(\'' + escapeMetricHtml(r.fingerprintKey) + '\')" style="padding:3px 10px;font-size:11px" title="View or add comments">'
+    const commentCell = '<button class="btn btn-secondary" onclick="acOpenAlertDetail(\'' + escapeMetricHtml(r.fingerprintKey) + '\')" style="padding:3px 10px;font-size:11px" title="View or add comments">'
       + '💬 ' + commentCount + '</button>';
+    const subjectCell = '<a href="javascript:void(0)" onclick="acOpenAlertDetail(\'' + escapeMetricHtml(r.fingerprintKey) + '\')" style="color:var(--accent);font-weight:600">' + escapeMetricHtml(r.subject) + '</a>';
     return '<tr>'
-      + '<td style="max-width:320px">' + escapeMetricHtml(r.subject) + '</td>'
+      + '<td style="max-width:320px">' + subjectCell + '</td>'
       + '<td>' + escapeMetricHtml(r.category) + '</td>'
       + '<td>' + escapeMetricHtml(r.customer || '—') + '</td>'
       + '<td>' + acFormatTimestamp(r.firstSeen) + '</td>'
@@ -11208,26 +11209,110 @@ function acOpenIncident(incidentRef) {
   if (typeof openDetailPanel === 'function') openDetailPanel(incidentRef);
 }
 
-// ── Alert Compliance comments ────────────────────────────────────────────
-// Comment thread per alert group, keyed by the group's fingerprintKey
-// (stable across report reloads for the same recurring alert). Lets
-// admin/PMO record why an alert did or didn't become an incident.
+// ── Alert Compliance detail (summary + occurrence history + comments) ──────
+// One modal per alert group, keyed by the group's fingerprintKey (stable
+// across report reloads for the same recurring alert). Shows the full
+// per-notification history plus lets admin/PMO record why an alert did or
+// didn't become an incident.
 let acActiveCommentFingerprintKey = null;
 let acActiveCommentFingerprint = null;
 
-function acOpenComments(fingerprintKey) {
+function acOpenAlertDetail(fingerprintKey) {
   const row = alertComplianceReportData.find(function (r) { return r.fingerprintKey === fingerprintKey; });
   if (!row) return;
   acActiveCommentFingerprintKey = fingerprintKey;
   acActiveCommentFingerprint = row.fingerprint || '';
-  const title = document.getElementById('acCommentModalTitle');
-  if (title) title.textContent = 'Comments — ' + row.subject;
+
+  const title = document.getElementById('adTitle');
+  if (title) title.textContent = row.subject;
+
+  const stateLabel = ALERT_COMPLIANCE_STATE_LABELS[row.state] || row.state;
+  const stateClass = ALERT_COMPLIANCE_STATE_CLASS[row.state] || 'badge-progress';
+  const badges = document.getElementById('adBadges');
+  if (badges) {
+    badges.innerHTML = '<span class="badge ' + stateClass + '">' + escapeMetricHtml(stateLabel) + '</span>'
+      + '<span class="badge badge-medium">' + escapeMetricHtml(row.category) + '</span>'
+      + (row.incidentRef ? '<a href="javascript:void(0)" onclick="acOpenIncident(\'' + escapeMetricHtml(row.incidentRef) + '\')" class="badge badge-closed" style="cursor:pointer;text-decoration:none">' + escapeMetricHtml(row.incidentRef) + '</a>' : '');
+  }
+
+  const meta = document.getElementById('adMetaGrid');
+  if (meta) {
+    const fields = [
+      ['Customer', row.customer || '—'],
+      ['First Seen', acFormatTimestamp(row.firstSeen)],
+      ['Last Seen', acFormatTimestamp(row.lastSeen)],
+      ['Age', acFormatAge(row.firstSeen)],
+      ['Repeat Count', String(row.occurrenceCount)],
+      ['Incident', row.incidentRef || 'None']
+    ];
+    meta.innerHTML = fields.map(function (f) {
+      return '<div class="detail-field"><div class="detail-field-label">' + escapeMetricHtml(f[0]) + '</div><div class="detail-field-value">' + escapeMetricHtml(f[1]) + '</div></div>';
+    }).join('');
+  }
+
+  const occCountEl = document.getElementById('adOccurrenceCount');
+  if (occCountEl) occCountEl.textContent = row.occurrenceCount;
+  const occList = document.getElementById('adOccurrenceList');
+  if (occList) {
+    const occurrences = row.occurrences || [];
+    if (!occurrences.length) {
+      occList.innerHTML = '<div style="color:var(--text-muted);padding:8px 0">No individual occurrence data available.</div>';
+    } else {
+      occList.innerHTML = occurrences.map(function (o) {
+        const onclickAttr = o.id ? ' onclick="acViewAlertEmail(\'' + escapeMetricHtml(o.id) + '\', this)"' : '';
+        return '<div class="ac-occurrence-row"' + onclickAttr + ' style="display:flex;justify-content:space-between;gap:10px;padding:5px 8px;background:var(--surface2);border-radius:6px;cursor:' + (o.id ? 'pointer' : 'default') + '">'
+          + '<span>' + acFormatTimestamp(o.receivedAt) + '</span>'
+          + '<span style="color:' + (o.resolved ? 'var(--success)' : 'var(--text-muted)') + '">' + (o.resolved ? 'Resolved signal' : 'Firing') + '</span>'
+          + '</div>';
+      }).join('');
+    }
+  }
+
+  const viewer = document.getElementById('adEmailViewer');
+  if (viewer) viewer.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:14px;font-size:12px;background:var(--surface2);border-radius:8px">Click an occurrence above to view its full email content.</div>';
+
   const input = document.getElementById('acCommentInput');
   if (input) input.value = '';
   const list = document.getElementById('acCommentsList');
   if (list) list.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:16px;font-size:12px">Loading comments…</div>';
-  openModal('alertCommentModal');
+  openModal('alertDetailModal');
   acLoadComments(fingerprintKey);
+}
+
+// Fetches and renders the full HTML content of one individual alert
+// notification email (not just its subject/timestamp), reusing the same
+// sandboxed-iframe sanitizer the Mailbox page uses (mailboxSafeRichHtml) so
+// untrusted email HTML is never rendered unescaped.
+function acViewAlertEmail(messageId, rowEl) {
+  const viewer = document.getElementById('adEmailViewer');
+  if (!viewer || !messageId) return;
+  document.querySelectorAll('#adOccurrenceList .ac-occurrence-row').forEach(function (el) { el.classList.remove('active'); el.style.outline = ''; });
+  if (rowEl) rowEl.style.outline = '2px solid var(--accent)';
+  viewer.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:14px;font-size:12px">Loading email…</div>';
+  const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) { showToast('Not authenticated. Please login first.', 'error'); return; }
+  fetch(window.APP_CONFIG.API_BASE_URL + '/operations-alerts/message/' + encodeURIComponent(messageId), {
+    headers: { Authorization: 'Bearer ' + token }
+  })
+    .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+    .then(function (result) {
+      if (!result.ok || !result.data.success) throw new Error(result.data.message || 'Unable to load the alert email');
+      const message = result.data.data || {};
+      const header = document.createElement('div');
+      header.style.cssText = 'padding:9px 14px;background:var(--surface2);border:1px solid var(--border);border-bottom:none;border-radius:8px 8px 0 0;font-size:11.5px;color:var(--text-muted)';
+      header.textContent = 'From: ' + (message.fromName || message.from || 'Unknown sender') + '  ·  ' + acFormatTimestamp(message.receivedAt);
+      const frame = document.createElement('iframe');
+      frame.setAttribute('sandbox', 'allow-popups allow-popups-to-escape-sandbox');
+      frame.setAttribute('referrerpolicy', 'no-referrer');
+      frame.title = 'Safe rich email preview';
+      frame.style.cssText = 'width:100%;height:260px;border:1px solid var(--border);border-radius:0 0 8px 8px;background:var(--surface);display:block';
+      frame.srcdoc = mailboxSafeRichHtml(message.body || message.preview || 'This message has no readable text body.', document.body.classList.contains('light-mode'));
+      viewer.innerHTML = '';
+      viewer.append(header, frame);
+    })
+    .catch(function (err) {
+      viewer.innerHTML = '<div style="text-align:center;color:var(--danger);padding:14px;font-size:12px">' + escapeMetricHtml(err.message || 'Unable to load the alert email') + '</div>';
+    });
 }
 
 function acLoadComments(fingerprintKey) {

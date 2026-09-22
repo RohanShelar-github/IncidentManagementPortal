@@ -14,7 +14,7 @@
 // No new tables, no writes anywhere in this file.
 
 const pool = require('../config/database');
-const { listMailboxFolderMessages } = require('../services/emailService');
+const { listMailboxFolderMessages, getInboxMessage } = require('../services/emailService');
 const { classifyOperationsMessage } = require('../services/operationsMailClassificationService');
 const { attachMailboxIncidentLinks, matchingCustomersByName } = require('./mailboxController');
 const { groupMessagesIntoAlerts, deriveAlertState, fingerprintKey } = require('../services/operationsAlertGroupingService');
@@ -74,7 +74,14 @@ const getAlertComplianceReport = async (req, res) => {
         lastSeen: group.lastSeen,
         occurrenceCount: group.occurrenceCount,
         state,
-        incidentRef: linkedIncidentRef
+        incidentRef: linkedIncidentRef,
+        // Full per-notification history so the report's detail view can show
+        // exactly when each individual alert email arrived, not just the
+        // aggregated first/last-seen summary.
+        occurrences: group.occurrences
+          .slice()
+          .sort((a, b) => new Date(b.receivedAt) - new Date(a.receivedAt))
+          .map((o) => ({ id: o.id, receivedAt: o.receivedAt, subject: o.subject, resolved: o.resolved }))
       };
     }).sort((a, b) => new Date(b.lastSeen) - new Date(a.lastSeen));
 
@@ -165,4 +172,26 @@ const addAlertComment = async (req, res) => {
   }
 };
 
-module.exports = { getAlertComplianceReport, listAlertComments, addAlertComment };
+// Full content (HTML body + attachments) of one individual alert notification
+// email, for the report's detail view. Reuses emailService.getInboxMessage —
+// the same Graph fetch the Mailbox page uses — but is exposed on this
+// separate, view_alert_compliance_report-gated route so Admin/PMO can read an
+// alert's full email without also being granted general Mailbox access
+// (view_mailbox), which carries send/delete capabilities they don't need
+// here. Restricted to Coralogix/Azure alert messages only, so this route
+// cannot be used to browse arbitrary mailbox content.
+const getAlertMessage = async (req, res) => {
+  try {
+    const message = await getInboxMessage(req.params.id);
+    const { category } = classifyOperationsMessage(message);
+    if (!ALERT_CATEGORIES.has(category)) {
+      return res.status(403).json({ success: false, message: 'Only Coralogix/Azure alert emails are available here.' });
+    }
+    res.json({ success: true, data: message });
+  } catch (error) {
+    console.error('Alert message detail error:', error.message);
+    res.status(502).json({ success: false, message: 'Unable to load the alert email.' });
+  }
+};
+
+module.exports = { getAlertComplianceReport, listAlertComments, addAlertComment, getAlertMessage };

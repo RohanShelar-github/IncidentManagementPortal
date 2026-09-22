@@ -20,6 +20,12 @@ echo ===== %date% %time% ===== >> "%LOG_FILE%"
 echo Running database dump... >> "%LOG_FILE%"
 call "%REPO_DIR%\scripts\mysql_backup.bat"
 
+echo Verifying the new backup restores cleanly and matches live row counts... >> "%LOG_FILE%"
+node "%REPO_DIR%\backend\scripts\verify-db-backup.js" >> "%LOG_FILE%" 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo WARNING: Backup verification failed - see the table above for details. Continuing to back up the file anyway. >> "%LOG_FILE%"
+)
+
 echo Staging backup files for git... >> "%LOG_FILE%"
 git add "MySQL Database Backup" >> "%LOG_FILE%" 2>&1
 

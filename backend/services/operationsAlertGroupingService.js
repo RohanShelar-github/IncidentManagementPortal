@@ -71,12 +71,14 @@ function groupMessagesIntoAlerts(messages) {
         lastSeen: receivedAt,
         occurrenceCount: 0,
         hasResolvedSignal: false,
-        messageIds: []
+        messageIds: [],
+        occurrences: []
       };
       groups.set(fingerprint, group);
     }
     group.occurrenceCount += 1;
     group.messageIds.push(message.id);
+    group.occurrences.push({ id: message.id, receivedAt, subject: String(message.subject || ''), resolved });
     if (resolved) group.hasResolvedSignal = true;
     if (receivedAt && (!group.firstSeen || new Date(receivedAt) < new Date(group.firstSeen))) group.firstSeen = receivedAt;
     if (receivedAt && (!group.lastSeen || new Date(receivedAt) > new Date(group.lastSeen))) group.lastSeen = receivedAt;

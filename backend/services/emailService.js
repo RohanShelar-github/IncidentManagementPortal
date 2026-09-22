@@ -399,14 +399,52 @@ function mailboxCategoryGraphFilter(category) {
   return '';
 }
 
+const MAILBOX_SELECT_FIELDS = 'id,subject,from,toRecipients,receivedDateTime,sentDateTime,isRead,bodyPreview,hasAttachments,conversationId,internetMessageId';
+// Coralogix/Azure alerts can't use a server-side $filter (see the comment in
+// listMailboxFolderMessages below), so a single page of the newest messages
+// can legitimately contain zero matches when a noisier category floods the
+// top of the inbox. This bounds how many extra pages get scanned to find
+// enough matches, keeping worst case Graph calls per list request bounded.
+const MAILBOX_CATEGORY_SCAN_MAX_PAGES = 5;
+
 async function listMailboxFolderMessages(folder, limit = 50, category = 'all', cursor = null) {
   const selectedCategory = normalizedOperationsCategory(category);
-  // Microsoft Graph rejects some sender-filter + receivedDateTime-sort combinations
-  // ("InefficientFilter"), while the matching unread-count call succeeds.  Fetch the
-  // page in its normal order and apply the same deterministic classification locally.
-  // This keeps sender-based alert lists reliable. Jira tickets can safely use
-  // a subject filter, which lets their dedicated view reach older tickets that
-  // are outside the newest general Inbox page.
+  const effectiveLimit = Math.min(Math.max(Number(limit) || 50, 1), 100);
+
+  // Microsoft Graph rejects a sender $filter combined with a receivedDateTime
+  // $orderby ("InefficientFilter"), and a sender $filter with no $orderby
+  // comes back oldest-first (verified against this mailbox) — neither gives a
+  // "newest N alerts" page directly. So for Coralogix/Azure, fetch the inbox
+  // in its normal newest-first order and classify locally, paging forward
+  // (bounded by MAILBOX_CATEGORY_SCAN_MAX_PAGES) until enough matches are
+  // found — otherwise a category that's rarer than others right now (e.g.
+  // Azure alerts buried under a flood of Coralogix ones) would show "no
+  // messages found" even though plenty exist further back.
+  const needsClientSideScan = folder === 'inbox' && (selectedCategory === 'coralogix' || selectedCategory === 'azure');
+  if (needsClientSideScan) {
+    const matched = [];
+    let scanCursor = cursor;
+    let nextLink = null;
+    for (let page = 0; page < MAILBOX_CATEGORY_SCAN_MAX_PAGES; page += 1) {
+      let data;
+      if (scanCursor) {
+        data = await graphInboxRequestByUrl(scanCursor);
+      } else {
+        const query = new URLSearchParams({ '$top': '100', '$select': MAILBOX_SELECT_FIELDS, '$orderby': 'receivedDateTime DESC' });
+        data = await graphInboxRequest(`/mailFolders/${folder}/messages?${query}`);
+      }
+      const pageMessages = Array.isArray(data.value) ? data.value.map((message) => mailboxDto(message, false)) : [];
+      matched.push(...pageMessages.filter((message) => message.category === selectedCategory));
+      nextLink = data['@odata.nextLink'] || null;
+      scanCursor = nextLink;
+      if (matched.length >= effectiveLimit || !nextLink) break;
+    }
+    return { messages: matched.slice(0, effectiveLimit), nextLink };
+  }
+
+  // Jira tickets can safely use a subject $filter (with $orderby dropped),
+  // which lets their dedicated view reach older tickets beyond the newest
+  // general Inbox page without the multi-page scan above.
   const jiraFilter = selectedCategory === 'jira' && folder === 'inbox' ? mailboxCategoryGraphFilter('jira') : '';
   const extraHeaders = jiraFilter ? { ConsistencyLevel: 'eventual' } : {};
   let data;
@@ -415,7 +453,7 @@ async function listMailboxFolderMessages(folder, limit = 50, category = 'all', c
     // $orderby — request it verbatim rather than rebuilding the query.
     data = await graphInboxRequestByUrl(cursor, extraHeaders);
   } else {
-    const query = new URLSearchParams({ '$top': String(Math.min(Math.max(Number(limit) || 50, 1), 100)), '$select': 'id,subject,from,toRecipients,receivedDateTime,sentDateTime,isRead,bodyPreview,hasAttachments,conversationId,internetMessageId', '$orderby': folder === 'sentitems' ? 'sentDateTime DESC' : 'receivedDateTime DESC' });
+    const query = new URLSearchParams({ '$top': String(effectiveLimit), '$select': MAILBOX_SELECT_FIELDS, '$orderby': folder === 'sentitems' ? 'sentDateTime DESC' : 'receivedDateTime DESC' });
     if (jiraFilter) {
       // Graph rejects a contains(subject, ...) filter combined with its default
       // receivedDateTime sort. The UI already orders conversations by timestamp.

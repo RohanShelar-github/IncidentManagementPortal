@@ -1351,27 +1351,33 @@
 </div>
 </div>
 <!-- /ALERT COMPLIANCE REPORT -->
-<!-- ALERT COMPLIANCE COMMENTS MODAL: additive, safe to delete to revert -->
-<div class="modal-overlay" id="alertCommentModal">
-<div class="modal">
+<!-- ALERT COMPLIANCE DETAIL MODAL: additive, safe to delete to revert -->
+<div class="modal-overlay" id="alertDetailModal">
+<div class="modal" style="max-width:720px">
 <div class="modal-header">
-<div class="modal-title" id="acCommentModalTitle">Alert Comments</div>
-<div class="modal-close" onclick="closeModal('alertCommentModal')">✕</div>
+<div class="modal-title" id="adTitle">Alert Detail</div>
+<div class="modal-close" onclick="closeModal('alertDetailModal')">✕</div>
 </div>
 <div class="modal-body">
-<div id="acCommentsList" style="display:flex;flex-direction:column;gap:2px;max-height:320px;overflow-y:auto;margin-bottom:14px"></div>
+<div id="adBadges" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"></div>
+<div class="detail-fields-grid" id="adMetaGrid" style="margin-bottom:20px"></div>
+<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Occurrence History (<span id="adOccurrenceCount">0</span>) — click one to view its full email</div>
+<div id="adOccurrenceList" style="display:flex;flex-direction:column;gap:3px;max-height:140px;overflow-y:auto;margin-bottom:14px;font-size:12px"></div>
+<div id="adEmailViewer" style="margin-bottom:20px"></div>
+<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Comments</div>
+<div id="acCommentsList" style="display:flex;flex-direction:column;gap:2px;max-height:220px;overflow-y:auto;margin-bottom:14px"></div>
 <div class="form-group form-full" style="margin:0">
 <label class="form-label">Add a comment</label>
 <textarea id="acCommentInput" placeholder="Explain the cause of this alert, or why an incident was or wasn't created…" rows="3" style="width:100%"></textarea>
 </div>
 </div>
 <div class="modal-footer">
-<button class="btn btn-secondary" onclick="closeModal('alertCommentModal')">Close</button>
+<button class="btn btn-secondary" onclick="closeModal('alertDetailModal')">Close</button>
 <button class="btn btn-primary" onclick="acSubmitComment()">Add Comment</button>
 </div>
 </div>
 </div>
-<!-- /ALERT COMPLIANCE COMMENTS MODAL -->
+<!-- /ALERT COMPLIANCE DETAIL MODAL -->
 </div><!-- /content -->
 </div><!-- /main -->
 <!-- ─── INCIDENT MODAL ──────────────────────────────────────── -->

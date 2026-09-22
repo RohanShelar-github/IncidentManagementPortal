@@ -144,7 +144,7 @@ test('comment endpoints validate the fingerprintKey shape and are exported/wired
   assert.match(reportController, /const FINGERPRINT_KEY_PATTERN = \/\^\[a-f0-9\]\{64\}\$\//);
   assert.match(reportController, /const listAlertComments = async \(req, res\) => \{/);
   assert.match(reportController, /const addAlertComment = async \(req, res\) => \{/);
-  assert.match(reportController, /module\.exports = \{ getAlertComplianceReport, listAlertComments, addAlertComment \};/);
+  assert.match(reportController, /module\.exports = \{ getAlertComplianceReport, listAlertComments, addAlertComment, getAlertMessage \};/);
   assert.match(reportRoutes, /router\.get\('\/comments', requirePermission\('view_alert_compliance_report'\), listAlertComments\)/);
   assert.match(reportRoutes, /router\.post\('\/comments', requirePermission\('view_alert_compliance_report'\), addAlertComment\)/);
 });
@@ -154,11 +154,47 @@ test('comment text length and emptiness are validated server-side', () => {
   assert.match(reportController, /commentText\.length > 2000/);
 });
 
-test('the frontend comment modal, functions, and Comments table column exist', () => {
-  assert.match(html, /id="alertCommentModal"/);
+test('the frontend alert detail modal, functions, and Comments table column exist', () => {
+  assert.match(html, /id="alertDetailModal"/);
   assert.match(html, /<th>Comments<\/th>/);
-  assert.match(frontend, /function acOpenComments\(fingerprintKey\) \{/);
+  assert.match(frontend, /function acOpenAlertDetail\(fingerprintKey\) \{/);
   assert.match(frontend, /function acLoadComments\(fingerprintKey\) \{/);
   assert.match(frontend, /function acSubmitComment\(\) \{/);
   assert.match(frontend, /API_BASE_URL \+ '\/operations-alerts\/comments'/);
+});
+
+test('the alert subject and comments button both open the same alert detail view', () => {
+  assert.match(frontend, /const subjectCell = '<a href="javascript:void\(0\)" onclick="acOpenAlertDetail\(/);
+  assert.match(frontend, /const commentCell = '<button class="btn btn-secondary" onclick="acOpenAlertDetail\(/);
+});
+
+test('the report includes per-occurrence history (timestamp + resolved flag) for the detail view', () => {
+  assert.match(reportController, /occurrences: group\.occurrences/);
+  assert.match(frontend, /const occCountEl = document\.getElementById\('adOccurrenceCount'\);/);
+  assert.match(frontend, /const occList = document\.getElementById\('adOccurrenceList'\);/);
+});
+
+test('the full alert email endpoint is gated by view_alert_compliance_report and restricted to alert categories', () => {
+  assert.match(reportRoutes, /router\.get\('\/message\/:id', requirePermission\('view_alert_compliance_report'\), getAlertMessage\)/);
+  assert.match(reportController, /const message = await getInboxMessage\(req\.params\.id\);/);
+  assert.match(reportController, /if \(!ALERT_CATEGORIES\.has\(category\)\) \{/);
+});
+
+test('occurrence rows are clickable and load the full email via mailboxSafeRichHtml (the same sanitizer the Mailbox page uses)', () => {
+  assert.match(frontend, /function acViewAlertEmail\(messageId, rowEl\) \{/);
+  assert.match(frontend, /API_BASE_URL \+ '\/operations-alerts\/message\/' \+ encodeURIComponent\(messageId\)/);
+  assert.match(frontend, /frame\.srcdoc = mailboxSafeRichHtml\(message\.body \|\| message\.preview \|\| 'This message has no readable text body\.', document\.body\.classList\.contains\('light-mode'\)\);/);
+  assert.match(frontend, /onclickAttr = o\.id \? ' onclick="acViewAlertEmail\(\\''/);
+});
+
+test('groupMessagesIntoAlerts records a timestamped, resolved-flagged occurrence per message', () => {
+  const messages = [
+    { id: 'x1', from: 'ops@example.com', subject: "Alert 'Disk Low' was fired", receivedAt: '2026-09-21T10:00:00Z', category: 'azure' },
+    { id: 'x2', from: 'ops@example.com', subject: "Alert 'Disk Low' was fired", receivedAt: '2026-09-21T10:10:00Z', category: 'azure' },
+    { id: 'x3', from: 'ops@example.com', subject: "Alert 'Disk Low' was resolved", receivedAt: '2026-09-21T10:20:00Z', category: 'azure' }
+  ];
+  const [group] = grouping.groupMessagesIntoAlerts(messages);
+  assert.equal(group.occurrences.length, 3);
+  assert.equal(group.occurrences.filter((o) => o.resolved).length, 1);
+  assert.ok(group.occurrences.every((o) => typeof o.receivedAt === 'string'));
 });

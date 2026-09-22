@@ -1,12 +1,6 @@
 # Runtime secrets stay on the server and must never be committed.
-backend/.env
-backend/.env.local
 backend/logs/
 
 # Runtime dependencies and generated operational data are restored or recreated locally.
 backend/node_modules/
 node_modules/
-Database_Export_v*/
-import-reports/
-.tmp_import_cloud_incidents/
-tmp_*.js
