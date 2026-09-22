@@ -171,3 +171,24 @@ Verification result email sent to initsuser@magicsw365.onmicrosoft.com
 BACKUP VERIFICATION PASSED: every table in the backup matches the live database row-for-row.
 Backup verification passed. 
 Staging backup files for git... 
+warning: in the working copy of 'MySQL Database Backup/backup.log', LF will be replaced by CRLF the next time Git touches it
+[main 736ae73] Automated database backup
+ 2 files changed, 869 insertions(+)
+ create mode 100644 MySQL Database Backup/incident_management_db_2026-09-22_17-00-50.sql
+Pushing to origin main... 
+To https://github.com/RohanShelar-github/IncidentManagementPortal.git
+   a15e702..736ae73  main -> main
+Backup committed and pushed successfully. 
+ 
+===== Tue 09/22/2026 17:08:56.45 ===== 
+Running database dump... 
+===== Tue 09/22/2026 17:08:57.06 ===== 
+Starting backup of database: incident_management_db 
+Backup successful: C:\Incident Management Portal\MySQL Database Backup\incident_management_db_2026-09-22_17-08-57.sql 
+Deleting backups older than 2 days... 
+Backup and cleanup completed. 
+ 
+Verifying the new backup restores cleanly and matches live row counts... 
+Skipping verification — last run was less than 7 day(s) ago. Pass --force to run anyway.
+Backup verification passed. 
+Staging backup files for git... 
