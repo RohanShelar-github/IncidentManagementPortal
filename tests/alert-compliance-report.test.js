@@ -356,3 +356,7 @@ test('the detail modal explicitly labels an incident link "Incident Created ·  
   const occurrences = (frontend.match(/class="badge badge-closed" style="cursor:pointer;text-decoration:none">Incident Created · ' \+ escapeMetricHtml\(row\.incidentRef\)/g) || []).length;
   assert.equal(occurrences, 2, 'both acOpenAlertDetail and acResolveAlert must render the explicit incident-created label');
 });
+
+test('each occurrence row explicitly labels its incident link "Incident Created", not a bare ref next to Firing/Resolved signal', () => {
+  assert.match(frontend, /' · Incident Created · <a href="javascript:void\(0\)" onclick="event\.stopPropagation\(\);acOpenIncident/);
+});
