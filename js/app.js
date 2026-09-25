@@ -11560,7 +11560,6 @@ function acSubmitComment() {
 function acResolveAlert() {
   const input = document.getElementById('acCommentInput');
   const text = input ? input.value.trim() : '';
-  if (!text) { showToast('A comment describing the action taken or root cause is required to resolve this alert', 'error'); return; }
   if (!acActiveCommentFingerprintKey) return;
   const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
   if (!token) { showToast('Not authenticated. Please login first.', 'error'); return; }

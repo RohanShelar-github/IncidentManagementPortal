@@ -245,10 +245,11 @@ test('the summary includes a manuallyResolved count, computed after the state ov
   assert.ok(overrideIndex > -1 && summaryIndex > -1 && overrideIndex < summaryIndex);
 });
 
-test('resolveAlertManually requires a valid fingerprintKey and a non-empty, length-bounded note, and is exported/routed', () => {
+test('resolveAlertManually requires a valid fingerprintKey and a length-bounded (but optional) note, falling back to a default comment when blank, and is exported/routed', () => {
   assert.match(reportController, /const resolveAlertManually = async \(req, res\) => \{/);
-  assert.match(reportController, /if \(!note\) return res\.status\(400\)/);
+  assert.doesNotMatch(reportController, /if \(!note\) return res\.status\(400\)/, 'a comment must no longer be mandatory to manually resolve an alert');
   assert.match(reportController, /note\.length > 2000/);
+  assert.match(reportController, /const commentText = note \|\| 'Marked as resolved \(no comment provided\)';/);
   assert.match(reportController, /module\.exports = \{ getAlertComplianceReport, listAlertComments, addAlertComment, resolveAlertManually, updateTicketStatus, deleteAlert, getAlertMessage \};/);
   assert.match(reportRoutes, /router\.post\('\/resolve', requirePermission\('view_alert_compliance_report'\), resolveAlertManually\)/);
 });
@@ -275,9 +276,9 @@ test('the Mark as Resolved button exists, is hidden by default, and only appears
   assert.match(frontend, /resolveBtn\.style\.display = row\.state === 'went_quiet' \? '' : 'none';/);
 });
 
-test('acResolveAlert requires the shared comment textarea to be non-empty and posts to the dedicated /resolve endpoint', () => {
+test('acResolveAlert does not require the shared comment textarea to be filled in, and posts to the dedicated /resolve endpoint', () => {
   assert.match(frontend, /function acResolveAlert\(\) \{/);
-  assert.match(frontend, /A comment describing the action taken or root cause is required to resolve this alert/);
+  assert.doesNotMatch(frontend, /A comment describing the action taken or root cause is required to resolve this alert/, 'the comment must be optional when manually resolving an alert');
   assert.match(frontend, /API_BASE_URL \+ '\/operations-alerts\/resolve'/);
 });
 

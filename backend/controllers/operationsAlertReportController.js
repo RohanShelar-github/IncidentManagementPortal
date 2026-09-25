@@ -246,17 +246,19 @@ const resolveAlertManually = async (req, res) => {
     if (!FINGERPRINT_KEY_PATTERN.test(key)) {
       return res.status(400).json({ success: false, message: 'A valid fingerprintKey is required' });
     }
-    if (!note) return res.status(400).json({ success: false, message: 'A comment describing the action taken or the identified root cause is required to resolve this alert' });
     if (note.length > 2000) return res.status(400).json({ success: false, message: 'Resolution note is too long (max 2000 characters)' });
+    // The comment is optional here — the audit trail still records who
+    // resolved it and when even without a note, via this fallback text.
+    const commentText = note || 'Marked as resolved (no comment provided)';
 
     await pool.query(
       'INSERT INTO operations_alert_comments (fingerprint_key, alert_fingerprint, comment_text, is_resolution, created_by) VALUES (?, ?, ?, 1, ?)',
-      [key, fingerprint.slice(0, 1000) || null, note, req.user.id]
+      [key, fingerprint.slice(0, 1000) || null, commentText, req.user.id]
     );
     res.status(201).json({
       success: true,
       message: 'Alert marked as resolved',
-      data: { comment: note, isResolution: true, author: req.user.name || req.user.email || 'User', createdAt: new Date().toISOString() }
+      data: { comment: commentText, isResolution: true, author: req.user.name || req.user.email || 'User', createdAt: new Date().toISOString() }
     });
   } catch (error) {
     console.error('Resolve alert error:', error.message);
