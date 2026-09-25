@@ -11198,14 +11198,17 @@ function renderAlertComplianceTable() {
   tbody.innerHTML = rows.map(function (r) {
     const stateLabel = ALERT_COMPLIANCE_STATE_LABELS[r.state] || r.state;
     const stateClass = ALERT_COMPLIANCE_STATE_CLASS[r.state] || 'badge-progress';
+    // The incident link must stop the click from bubbling up to the row's
+    // own onclick — otherwise navigating to the incident would also pop
+    // open this alert's detail modal right behind it.
     const incidentCell = r.incidentRef
-      ? '<a href="javascript:void(0)" onclick="acOpenIncident(\'' + escapeMetricHtml(r.incidentRef) + '\')" style="color:var(--accent);font-weight:600">' + escapeMetricHtml(r.incidentRef) + '</a>'
+      ? '<a href="javascript:void(0)" onclick="event.stopPropagation();acOpenIncident(\'' + escapeMetricHtml(r.incidentRef) + '\')" style="color:var(--accent);font-weight:600">' + escapeMetricHtml(r.incidentRef) + '</a>'
       : '<span style="color:var(--text-muted)">—</span>';
     const commentCount = r.commentCount || 0;
-    const commentCell = '<button class="btn btn-secondary" onclick="acOpenAlertDetail(\'' + escapeMetricHtml(r.fingerprintKey) + '\')" style="padding:3px 10px;font-size:11px" title="View or add comments">'
+    const commentCell = '<button class="btn btn-secondary" onclick="event.stopPropagation();acOpenAlertDetail(\'' + escapeMetricHtml(r.fingerprintKey) + '\')" style="padding:3px 10px;font-size:11px" title="View or add comments">'
       + '💬 ' + commentCount + '</button>';
-    const subjectCell = '<a href="javascript:void(0)" onclick="acOpenAlertDetail(\'' + escapeMetricHtml(r.fingerprintKey) + '\')" style="color:var(--accent);font-weight:600">' + escapeMetricHtml(r.subject) + '</a>';
-    return '<tr>'
+    const subjectCell = '<span style="color:var(--accent);font-weight:600">' + escapeMetricHtml(r.subject) + '</span>';
+    return '<tr onclick="acOpenAlertDetail(\'' + escapeMetricHtml(r.fingerprintKey) + '\')" style="cursor:pointer" tabindex="0" onkeydown="if(event.key===\'Enter\'){acOpenAlertDetail(\'' + escapeMetricHtml(r.fingerprintKey) + '\')}">'
       + '<td style="max-width:320px">' + subjectCell + '</td>'
       + '<td>' + escapeMetricHtml(acCategoryLabel(r.category)) + '</td>'
       + '<td>' + escapeMetricHtml(r.customer || '—') + '</td>'

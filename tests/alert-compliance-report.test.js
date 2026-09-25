@@ -184,9 +184,11 @@ test('the frontend alert detail modal, functions, and Comments table column exis
   assert.match(frontend, /API_BASE_URL \+ '\/operations-alerts\/comments'/);
 });
 
-test('the alert subject and comments button both open the same alert detail view', () => {
-  assert.match(frontend, /const subjectCell = '<a href="javascript:void\(0\)" onclick="acOpenAlertDetail\(/);
-  assert.match(frontend, /const commentCell = '<button class="btn btn-secondary" onclick="acOpenAlertDetail\(/);
+test('the whole row opens the alert detail view (click and Enter-key), with the incident link and comments button stopping propagation so they act independently', () => {
+  assert.match(frontend, /return '<tr onclick="acOpenAlertDetail\(\\''/);
+  assert.match(frontend, /onkeydown="if\(event\.key===\\'Enter\\'\)\{acOpenAlertDetail\(/);
+  assert.match(frontend, /const commentCell = '<button class="btn btn-secondary" onclick="event\.stopPropagation\(\);acOpenAlertDetail\(/);
+  assert.match(frontend, /onclick="event\.stopPropagation\(\);acOpenIncident\(\\''/);
 });
 
 test('the report includes per-occurrence history (timestamp + resolved flag) for the detail view', () => {
