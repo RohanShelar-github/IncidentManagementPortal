@@ -204,7 +204,7 @@ test('comment text length and emptiness are validated server-side', () => {
 
 test('the frontend alert detail modal, functions, and Comments table column exist', () => {
   assert.match(html, /id="alertDetailModal"/);
-  assert.match(html, /<th>Comments<\/th>/);
+  assert.match(html, />Comments<\/th>/);
   assert.match(frontend, /function acOpenAlertDetail\(fingerprintKey, commentsOnly\) \{/);
   assert.match(frontend, /function acLoadComments\(fingerprintKey\) \{/);
   assert.match(frontend, /function acSubmitComment\(\) \{/);
@@ -592,7 +592,7 @@ test('renderAlertComplianceTable paginates the filtered rows with acCurrentPage/
   assert.match(frontend, /let acCurrentPage = 1;/);
   assert.match(frontend, /let acPerPage = 25;/);
   assert.match(frontend, /const totalPages = Math\.max\(1, Math\.ceil\(rows\.length \/ acPerPage\)\);\s*\n\s*if \(acCurrentPage > totalPages\) acCurrentPage = totalPages;/);
-  assert.match(frontend, /const pageStart = \(acCurrentPage - 1\) \* acPerPage;\s*\n\s*const pageRows = rows\.slice\(pageStart, pageStart \+ acPerPage\);\s*\n\s*tbody\.innerHTML = pageRows\.map\(function \(r\) \{/);
+  assert.match(frontend, /const sortedRows = acSortRows\(rows\);\s*\n\s*const pageStart = \(acCurrentPage - 1\) \* acPerPage;\s*\n\s*const pageRows = sortedRows\.slice\(pageStart, pageStart \+ acPerPage\);\s*\n\s*tbody\.innerHTML = pageRows\.map\(function \(r\) \{/);
 });
 
 test('acChangePerPage and acGoToPage reset/move the current page and re-render; filter changes (category/state/customer) reset back to page 1 via acFilterChanged', () => {
@@ -676,4 +676,30 @@ test('acUpdateIncidentSubstatus posts to /incident-substatus without requiring a
   assert.match(frontend, /if \(row\) row\.incidentSubstatus = substatus;/);
   const body = frontend.slice(frontend.indexOf('function acUpdateIncidentSubstatus'), frontend.indexOf('function acUpdateIncidentSubstatus') + 1200);
   assert.doesNotMatch(body, /row\.state = substatus;/, 'must never overwrite the alert\'s own activity state');
+});
+
+// ── Requirement: sortable (ascending/descending) column headers ───────────
+
+test('every sortable column header uses its own ac-sort-th class (kept separate from the Incidents table\'s sort-th, so the two tables\' click handlers can never collide) with a data-col and an acSortBy(...) click handler', () => {
+  const cols = ['subject', 'category', 'customer', 'firstSeen', 'lastSeen', 'state', 'incidentRef', 'commentCount'];
+  cols.forEach(function (col) {
+    const re = new RegExp('<th class="ac-sort-th" data-col="' + col + '" onclick="acSortBy\\(\'' + col + '\'\\)"');
+    assert.match(html, re, 'missing sortable header for column: ' + col);
+  });
+});
+
+test('acSortBy toggles asc/desc on repeat clicks of the same column, and resets to asc on a new column; acCurrentPage resets to 1 so a re-sort doesn\'t leave you stranded on a now-invalid page', () => {
+  assert.match(frontend, /let acSortCol = 'lastSeen';/);
+  assert.match(frontend, /let acSortDir = 'desc';/);
+  assert.match(frontend, /function acSortBy\(col\) \{\s*\n\s*if \(acSortCol === col\) \{\s*\n\s*acSortDir = acSortDir === 'asc' \? 'desc' : 'asc';\s*\n\s*\} else \{\s*\n\s*acSortCol = col;\s*\n\s*acSortDir = 'asc';\s*\n\s*\}\s*\n\s*acCurrentPage = 1;\s*\n\s*renderAlertComplianceTable\(\);\s*\n\}/);
+});
+
+test('acSortRows sorts a copy of the array (never mutates the input) by acSortCol/acSortDir, case-insensitively for strings, and is applied to the filtered rows before the pagination slice', () => {
+  assert.match(frontend, /function acSortRows\(arr\) \{\s*\n\s*if \(!acSortCol\) return arr;\s*\n\s*return arr\.slice\(\)\.sort\(function \(a, b\) \{/);
+  assert.match(frontend, /if \(typeof av === 'string'\) av = av\.toLowerCase\(\);/);
+  assert.match(frontend, /const sortedRows = acSortRows\(rows\);\s*\n\s*const pageStart = \(acCurrentPage - 1\) \* acPerPage;\s*\n\s*const pageRows = sortedRows\.slice\(pageStart, pageStart \+ acPerPage\);/);
+});
+
+test('renderAlertComplianceTable updates each ac-sort-th header\'s arrow (↑/↓) and highlight to reflect the current acSortCol/acSortDir', () => {
+  assert.match(frontend, /document\.querySelectorAll\('\.ac-sort-th'\)\.forEach\(function \(th\) \{\s*\n\s*const col = th\.dataset\.col;\s*\n\s*const arrow = col === acSortCol \? \(acSortDir === 'asc' \? ' ↑' : ' ↓'\) : '';\s*\n\s*th\.textContent = th\.textContent\.replace\(\/ \[↑↓\]\$\/, ''\) \+ arrow;\s*\n\s*th\.style\.color = col === acSortCol \? 'var\(--accent\)' : '';\s*\n\s*\}\);/);
 });

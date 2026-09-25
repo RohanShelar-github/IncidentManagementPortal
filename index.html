@@ -1366,7 +1366,7 @@
 </div>
 </div>
 <table>
-<thead><tr><th id="acSelectHeaderCell" style="display:none"><input id="acSelectAll" type="checkbox" aria-label="Select all alerts" onchange="acToggleSelectAll(this.checked)"/></th><th>Alert</th><th>Category</th><th>Customer</th><th>First Seen</th><th>Last Seen</th><th>State</th><th>Incident</th><th>Comments</th></tr></thead>
+<thead><tr><th id="acSelectHeaderCell" style="display:none"><input id="acSelectAll" type="checkbox" aria-label="Select all alerts" onchange="acToggleSelectAll(this.checked)"/></th><th class="ac-sort-th" data-col="subject" onclick="acSortBy('subject')" style="cursor:pointer;user-select:none">Alert</th><th class="ac-sort-th" data-col="category" onclick="acSortBy('category')" style="cursor:pointer;user-select:none">Category</th><th class="ac-sort-th" data-col="customer" onclick="acSortBy('customer')" style="cursor:pointer;user-select:none">Customer</th><th class="ac-sort-th" data-col="firstSeen" onclick="acSortBy('firstSeen')" style="cursor:pointer;user-select:none;white-space:nowrap">First Seen</th><th class="ac-sort-th" data-col="lastSeen" onclick="acSortBy('lastSeen')" style="cursor:pointer;user-select:none;white-space:nowrap">Last Seen</th><th class="ac-sort-th" data-col="state" onclick="acSortBy('state')" style="cursor:pointer;user-select:none">State</th><th class="ac-sort-th" data-col="incidentRef" onclick="acSortBy('incidentRef')" style="cursor:pointer;user-select:none">Incident</th><th class="ac-sort-th" data-col="commentCount" onclick="acSortBy('commentCount')" style="cursor:pointer;user-select:none">Comments</th></tr></thead>
 <tbody id="acTableBody"></tbody>
 </table>
 <div class="pagination-bar">

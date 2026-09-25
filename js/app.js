@@ -11221,6 +11221,38 @@ let acSelectedAlerts = new Set();
 let acCurrentPage = 1;
 let acPerPage = 25;
 
+// Column sort state — defaults to the same "most recent activity first"
+// order the backend already returns, so applying a sort has no visible
+// effect until the user actually clicks a header, mirroring the Incidents
+// table's sortCol/sortDir/sort-th pattern (kept separate — ac-sort-th — so
+// the two tables' header click handlers never collide via a shared class).
+let acSortCol = 'lastSeen';
+let acSortDir = 'desc';
+
+function acSortRows(arr) {
+  if (!acSortCol) return arr;
+  return arr.slice().sort(function (a, b) {
+    var av = a[acSortCol] !== undefined && a[acSortCol] !== null ? a[acSortCol] : '';
+    var bv = b[acSortCol] !== undefined && b[acSortCol] !== null ? b[acSortCol] : '';
+    if (typeof av === 'string') av = av.toLowerCase();
+    if (typeof bv === 'string') bv = bv.toLowerCase();
+    if (av < bv) return acSortDir === 'asc' ? -1 : 1;
+    if (av > bv) return acSortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+}
+
+function acSortBy(col) {
+  if (acSortCol === col) {
+    acSortDir = acSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    acSortCol = col;
+    acSortDir = 'asc';
+  }
+  acCurrentPage = 1;
+  renderAlertComplianceTable();
+}
+
 // Shared by the table render and "select all", so the two can never
 // silently drift out of sync on which rows count as "currently filtered".
 function acRowMatchesFilters(r) {
@@ -11256,6 +11288,13 @@ function renderAlertComplianceTable() {
   if (selectHeaderCell) selectHeaderCell.style.display = canDelete ? '' : 'none';
   if (!canDelete) acSelectedAlerts.clear();
 
+  document.querySelectorAll('.ac-sort-th').forEach(function (th) {
+    const col = th.dataset.col;
+    const arrow = col === acSortCol ? (acSortDir === 'asc' ? ' ↑' : ' ↓') : '';
+    th.textContent = th.textContent.replace(/ [↑↓]$/, '') + arrow;
+    th.style.color = col === acSortCol ? 'var(--accent)' : '';
+  });
+
   const rows = alertComplianceReportData.filter(acRowMatchesFilters);
   // Drop selections for rows no longer visible under the current filter, so
   // "select all" + delete never silently acts on something hidden.
@@ -11272,8 +11311,9 @@ function renderAlertComplianceTable() {
     acRenderPagination(0);
     return;
   }
+  const sortedRows = acSortRows(rows);
   const pageStart = (acCurrentPage - 1) * acPerPage;
-  const pageRows = rows.slice(pageStart, pageStart + acPerPage);
+  const pageRows = sortedRows.slice(pageStart, pageStart + acPerPage);
   tbody.innerHTML = pageRows.map(function (r) {
     const stateLabel = acStateLabel(r);
     const stateClass = ALERT_COMPLIANCE_STATE_CLASS[r.state] || 'badge-progress';
