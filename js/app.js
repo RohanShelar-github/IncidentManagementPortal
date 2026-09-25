@@ -11116,7 +11116,7 @@ function loadAlertComplianceReport() {
   const daysEl = document.getElementById('acFilterDays');
   const days = daysEl ? daysEl.value : '14';
   const tbody = document.getElementById('acTableBody');
-  const colCount = hasPermission('delete_alert_compliance_alerts') ? 10 : 9;
+  const colCount = hasPermission('delete_alert_compliance_alerts') ? 9 : 8;
   acSelectedAlerts.clear();
   if (tbody) tbody.innerHTML = '<tr><td colspan="' + colCount + '" style="text-align:center;color:var(--text-muted);padding:20px">Loading alert activity…</td></tr>';
   fetch(window.APP_CONFIG.API_BASE_URL + '/operations-alerts?days=' + encodeURIComponent(days), {
@@ -11183,7 +11183,7 @@ function renderAlertComplianceTable() {
   const countEl = document.getElementById('acRowCount');
   if (!tbody) return;
   const canDelete = hasPermission('delete_alert_compliance_alerts');
-  const colCount = canDelete ? 10 : 9;
+  const colCount = canDelete ? 9 : 8;
 
   const selectHeaderCell = document.getElementById('acSelectHeaderCell');
   if (selectHeaderCell) selectHeaderCell.style.display = canDelete ? '' : 'none';
@@ -11243,7 +11243,6 @@ function renderAlertComplianceTable() {
       + '<td>' + escapeMetricHtml(r.customer || '—') + '</td>'
       + '<td>' + acFormatTimestamp(r.firstSeen) + '</td>'
       + '<td>' + acFormatTimestamp(r.lastSeen) + '</td>'
-      + '<td>' + escapeMetricHtml(r.occurrenceCount) + '</td>'
       + '<td><span class="badge ' + stateClass + '">' + escapeMetricHtml(stateLabel) + '</span></td>'
       + '<td>' + incidentCell + '</td>'
       + '<td>' + commentCell + '</td>'
