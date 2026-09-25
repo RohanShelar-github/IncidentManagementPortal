@@ -11296,27 +11296,29 @@ function acUpdateBulkDeleteButton() {
 // confirm message + item list and hands off the actual request here.
 function acRequestDelete(items, confirmMessage) {
   if (!items.length) return;
-  if (!window.confirm(confirmMessage)) return;
-  const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
-  if (!token) { showToast('Not authenticated. Please login first.', 'error'); return; }
-  fetch(window.APP_CONFIG.API_BASE_URL + '/operations-alerts/delete', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ items: items })
-  })
-    .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
-    .then(function (result) {
-      if (!result.ok || !result.data.success) throw new Error(result.data.message || 'Unable to delete the selected alert(s)');
-      const deletedKeys = new Set(items.map(function (item) { return item.fingerprintKey; }));
-      alertComplianceReportData = alertComplianceReportData.filter(function (r) { return !deletedKeys.has(r.fingerprintKey); });
-      deletedKeys.forEach(function (key) { acSelectedAlerts.delete(key); });
-      if (deletedKeys.has(acActiveCommentFingerprintKey)) closeModal('alertDetailModal');
-      renderAlertComplianceTable();
-      showToast(result.data.message || 'Alert(s) removed from the report', 'success');
+  showConfirm({ icon: '🗑', title: 'Delete Alert?', msg: confirmMessage, ok: 'Delete', danger: true }).then(function (ok) {
+    if (!ok) return;
+    const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+    if (!token) { showToast('Not authenticated. Please login first.', 'error'); return; }
+    fetch(window.APP_CONFIG.API_BASE_URL + '/operations-alerts/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ items: items })
     })
-    .catch(function (err) {
-      showToast(err.message || 'Unable to delete the selected alert(s)', 'error');
-    });
+      .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+      .then(function (result) {
+        if (!result.ok || !result.data.success) throw new Error(result.data.message || 'Unable to delete the selected alert(s)');
+        const deletedKeys = new Set(items.map(function (item) { return item.fingerprintKey; }));
+        alertComplianceReportData = alertComplianceReportData.filter(function (r) { return !deletedKeys.has(r.fingerprintKey); });
+        deletedKeys.forEach(function (key) { acSelectedAlerts.delete(key); });
+        if (deletedKeys.has(acActiveCommentFingerprintKey)) closeModal('alertDetailModal');
+        renderAlertComplianceTable();
+        showToast(result.data.message || 'Alert(s) removed from the report', 'success');
+      })
+      .catch(function (err) {
+        showToast(err.message || 'Unable to delete the selected alert(s)', 'error');
+      });
+  });
 }
 
 // Admin-only: removes one false/irrelevant alert directly from its table

@@ -453,7 +453,8 @@ test('the Delete Alert button is hidden by default and only shown per hasPermiss
   assert.match(html, /id="adDeleteBtn"[^>]*style="display:none/);
   assert.match(frontend, /deleteBtn\.style\.display = hasPermission\('delete_alert_compliance_alerts'\) \? '' : 'none';/);
   assert.match(frontend, /function acDeleteAlert\(\) \{/);
-  assert.match(frontend, /if \(!window\.confirm\(/);
+  assert.match(frontend, /showConfirm\(\{ icon: '🗑', title: 'Delete Alert\?', msg: confirmMessage, ok: 'Delete', danger: true \}\)\.then\(function \(ok\) \{/);
+  assert.doesNotMatch(frontend, /acRequestDelete[\s\S]{0,10}window\.confirm/, 'must use the in-app showConfirm modal, not the native browser confirm() dialog');
 });
 
 test('acRequestDelete (shared by the modal, per-row icon, and bulk action) removes deleted rows locally and closes the modal only if the deleted alert was the one open in it', () => {
@@ -504,9 +505,9 @@ test('acToggleSelectAll only selects rows matching the current category/state/cu
   assert.match(body, /if \(state === 'incident_created'\)/);
 });
 
-test('acDeleteSelectedAlerts confirms once, posts all selected items in a single bulk request, and clears the selection on success', () => {
+test('acDeleteSelectedAlerts confirms once (via the shared acRequestDelete helper), posts all selected items in a single bulk request, and clears the selection on success', () => {
   assert.match(frontend, /function acDeleteSelectedAlerts\(\) \{/);
-  assert.match(frontend, /if \(!window\.confirm\(/);
+  assert.match(frontend, /acRequestDelete\(items, 'Remove ' \+ label \+ /);
   assert.match(frontend, /body: JSON\.stringify\(\{ items: items \}\)/);
   assert.match(frontend, /acSelectedAlerts\.clear\(\);/);
 });
