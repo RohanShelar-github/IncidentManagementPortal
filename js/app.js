@@ -11103,6 +11103,23 @@ const ALERT_COMPLIANCE_CATEGORY_LABELS = {
   azure: 'Azure',
   jira: 'Customer Raised Tickets'
 };
+// Manual, optional tracking of whether a real incident is still pending for
+// a resolved alert that has no incidentRef auto-linked to it — independent
+// of the automatic link, and only shown/settable for confirmed_resolved or
+// manually_resolved rows without one (see acShowsIncidentSubstatus).
+const ALERT_INCIDENT_SUBSTATUS_LABELS = {
+  pending: 'Incident Pending',
+  created: 'Incident Created',
+  not_required: 'Not Required'
+};
+const ALERT_INCIDENT_SUBSTATUS_CLASS = {
+  pending: 'badge-high',
+  created: 'badge-closed',
+  not_required: 'badge-medium'
+};
+function acShowsIncidentSubstatus(r) {
+  return !r.incidentRef && (r.state === 'confirmed_resolved' || r.state === 'manually_resolved');
+}
 
 // The STATE badge text for confirmed_resolved/manually_resolved only cares
 // whether an incident actually exists for the alert, not which of the two
@@ -11265,7 +11282,9 @@ function renderAlertComplianceTable() {
     // open this alert's detail modal right behind it.
     const incidentCell = r.incidentRef
       ? '<a href="javascript:void(0)" onclick="event.stopPropagation();acOpenIncident(\'' + escapeMetricHtml(r.incidentRef) + '\')" style="color:var(--accent);font-weight:600">' + escapeMetricHtml(r.incidentRef) + '</a>'
-      : '<span style="color:var(--text-muted)">—</span>';
+      : (acShowsIncidentSubstatus(r) && r.incidentSubstatus && ALERT_INCIDENT_SUBSTATUS_LABELS[r.incidentSubstatus])
+        ? '<span class="badge ' + ALERT_INCIDENT_SUBSTATUS_CLASS[r.incidentSubstatus] + '" style="font-size:10px">' + escapeMetricHtml(ALERT_INCIDENT_SUBSTATUS_LABELS[r.incidentSubstatus]) + '</span>'
+        : '<span style="color:var(--text-muted)">—</span>';
     const commentCount = r.commentCount || 0;
     const deleteIcon = canDelete
       ? '<button class="btn btn-sm" onclick="event.stopPropagation();acDeleteAlertRow(\'' + escapeMetricHtml(r.fingerprintKey) + '\')" style="background:transparent;color:#f75c7c;border:none;font-size:15px;padding:3px 7px" title="Delete alert" aria-label="Delete alert">&#128465;</button>'
@@ -11551,6 +11570,17 @@ function acOpenAlertDetail(fingerprintKey, commentsOnly) {
     if (ticketSelect && row.category === 'jira') ticketSelect.value = row.state || 'open';
   }
 
+  // Only offered for resolved alerts with no incidentRef auto-linked —
+  // where whether a real incident is still needed is genuinely ambiguous
+  // and worth a human tracking it explicitly.
+  const substatusSection = document.getElementById('adIncidentSubstatusSection');
+  if (substatusSection) {
+    const showSubstatus = acShowsIncidentSubstatus(row);
+    substatusSection.style.display = showSubstatus ? '' : 'none';
+    const substatusSelect = document.getElementById('adIncidentSubstatusSelect');
+    if (substatusSelect && showSubstatus) substatusSelect.value = row.incidentSubstatus || '';
+  }
+
   const deleteBtn = document.getElementById('adDeleteBtn');
   if (deleteBtn) deleteBtn.style.display = (!commentsOnly && hasPermission('delete_alert_compliance_alerts')) ? '' : 'none';
 
@@ -11747,6 +11777,34 @@ function acUpdateTicketStatus() {
     })
     .catch(function (err) {
       showToast(err.message || 'Unable to update the ticket status', 'error');
+    });
+}
+
+// Updates the manual "is a real incident still pending?" sub-status for a
+// resolved alert with no incidentRef auto-linked. Purely a human tracking
+// note — it never changes the alert's own STATE badge (still "Resolved" /
+// "Action Taken & Resolved"), only what shows in the Incident column.
+function acUpdateIncidentSubstatus() {
+  const select = document.getElementById('adIncidentSubstatusSelect');
+  const substatus = select ? select.value : '';
+  if (!acActiveCommentFingerprintKey || !substatus) return;
+  const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) { showToast('Not authenticated. Please login first.', 'error'); return; }
+  fetch(window.APP_CONFIG.API_BASE_URL + '/operations-alerts/incident-substatus', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ fingerprintKey: acActiveCommentFingerprintKey, fingerprint: acActiveCommentFingerprint, substatus: substatus })
+  })
+    .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+    .then(function (result) {
+      if (!result.ok || !result.data.success) throw new Error(result.data.message || 'Unable to update the incident sub-status');
+      const row = alertComplianceReportData.find(function (r) { return r.fingerprintKey === acActiveCommentFingerprintKey; });
+      if (row) row.incidentSubstatus = substatus;
+      renderAlertComplianceTable();
+      showToast('Incident sub-status updated', 'success');
+    })
+    .catch(function (err) {
+      showToast(err.message || 'Unable to update the incident sub-status', 'error');
     });
 }
 

@@ -1406,6 +1406,18 @@
 <button class="btn btn-primary" onclick="acUpdateTicketStatus()" style="padding:6px 14px;font-size:12px">Update Status</button>
 </div>
 </div>
+<div id="adIncidentSubstatusSection" style="display:none;margin-bottom:16px;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
+<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Incident Sub-Status</div>
+<div style="display:flex;gap:8px;align-items:center">
+<select id="adIncidentSubstatusSelect">
+<option value="">Not set</option>
+<option value="pending">Incident Pending</option>
+<option value="created">Incident Created</option>
+<option value="not_required">Not Required</option>
+</select>
+<button class="btn btn-primary" onclick="acUpdateIncidentSubstatus()" style="padding:6px 14px;font-size:12px">Update Sub-Status</button>
+</div>
+</div>
 <div class="detail-fields-grid" id="adMetaGrid" style="margin-bottom:20px"></div>
 <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Occurrence History (<span id="adOccurrenceCount">0</span>) — click one to view its full email</div>
 <div id="adOccurrenceList" style="display:flex;flex-direction:column;gap:3px;max-height:140px;overflow-y:auto;margin-bottom:14px;font-size:12px"></div>

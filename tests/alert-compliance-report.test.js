@@ -166,7 +166,7 @@ test('comment endpoints validate the fingerprintKey shape and are exported/wired
   assert.match(reportController, /const FINGERPRINT_KEY_PATTERN = \/\^\[a-f0-9\]\{64\}\$\//);
   assert.match(reportController, /const listAlertComments = async \(req, res\) => \{/);
   assert.match(reportController, /const addAlertComment = async \(req, res\) => \{/);
-  assert.match(reportController, /module\.exports = \{ getAlertComplianceReport, listAlertComments, addAlertComment, resolveAlertManually, updateTicketStatus, deleteAlert, getAlertMessage \};/);
+  assert.match(reportController, /module\.exports = \{ getAlertComplianceReport, listAlertComments, addAlertComment, resolveAlertManually, updateTicketStatus, updateIncidentSubstatus, deleteAlert, getAlertMessage \};/);
   assert.match(reportRoutes, /router\.get\('\/comments', requirePermission\('view_alert_compliance_report'\), listAlertComments\)/);
   assert.match(reportRoutes, /router\.post\('\/comments', requirePermission\('view_alert_compliance_report'\), addAlertComment\)/);
 });
@@ -259,7 +259,7 @@ test('resolveAlertManually requires a valid fingerprintKey and a length-bounded 
   assert.doesNotMatch(reportController, /if \(!note\) return res\.status\(400\)/, 'a comment must no longer be mandatory to manually resolve an alert');
   assert.match(reportController, /note\.length > 2000/);
   assert.match(reportController, /const commentText = note \|\| 'Marked as resolved \(no comment provided\)';/);
-  assert.match(reportController, /module\.exports = \{ getAlertComplianceReport, listAlertComments, addAlertComment, resolveAlertManually, updateTicketStatus, deleteAlert, getAlertMessage \};/);
+  assert.match(reportController, /module\.exports = \{ getAlertComplianceReport, listAlertComments, addAlertComment, resolveAlertManually, updateTicketStatus, updateIncidentSubstatus, deleteAlert, getAlertMessage \};/);
   assert.match(reportRoutes, /router\.post\('\/resolve', requirePermission\('view_alert_compliance_report'\), resolveAlertManually\)/);
 });
 
@@ -608,4 +608,46 @@ test('the table, the detail modal, and acResolveAlert\'s local badge update all 
   // statuses, never confirmed_resolved/manually_resolved, so it's
   // deliberately left on the plain label lookup, not acStateLabel.
   assert.match(frontend, /function acUpdateTicketStatus\(\) \{[\s\S]*?const stateLabel = ALERT_COMPLIANCE_STATE_LABELS\[row\.state\] \|\| row\.state;/);
+});
+
+// ── Requirement: manual "incident pending/created/not required" sub-status ──
+// ── for resolved alerts with no auto-linked incident, shown in the       ──
+// ── Incident column without changing the STATE badge itself             ──
+
+test('the migration adds operations_alert_incident_substatus (pending/created/not_required), and the report attaches r.incidentSubstatus to every group', () => {
+  const migration = fs.readFileSync(path.join(root, 'backend', 'sql', '041_alert_incident_substatus.sql'), 'utf8');
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS operations_alert_incident_substatus/);
+  assert.match(migration, /substatus ENUM\('pending','created','not_required'\) NOT NULL/);
+  assert.match(reportController, /SELECT fingerprint_key, substatus FROM operations_alert_incident_substatus WHERE fingerprint_key IN \(\?\)/);
+  assert.match(reportController, /report\.forEach\(\(r\) => \{ r\.incidentSubstatus = substatusByKey\.get\(r\.fingerprintKey\) \|\| null; \}\);/);
+});
+
+test('updateIncidentSubstatus validates fingerprintKey and restricts substatus to pending/created/not_required, and is routed under view_alert_compliance_report (any viewer can triage)', () => {
+  assert.match(reportController, /const INCIDENT_SUBSTATUSES = new Set\(\['pending', 'created', 'not_required'\]\);/);
+  assert.match(reportController, /const updateIncidentSubstatus = async \(req, res\) => \{/);
+  assert.match(reportController, /if \(!INCIDENT_SUBSTATUSES\.has\(substatus\)\) \{/);
+  assert.match(reportController, /module\.exports = \{ getAlertComplianceReport, listAlertComments, addAlertComment, resolveAlertManually, updateTicketStatus, updateIncidentSubstatus, deleteAlert, getAlertMessage \};/);
+  assert.match(reportRoutes, /router\.post\('\/incident-substatus', requirePermission\('view_alert_compliance_report'\), updateIncidentSubstatus\)/);
+});
+
+test('the incident sub-status section and select exist in the detail modal, hidden by default', () => {
+  assert.match(html, /id="adIncidentSubstatusSection" style="display:none/);
+  assert.match(html, /id="adIncidentSubstatusSelect"/);
+  assert.match(html, /<option value="pending">Incident Pending<\/option>/);
+  assert.match(html, /<option value="created">Incident Created<\/option>/);
+  assert.match(html, /<option value="not_required">Not Required<\/option>/);
+});
+
+test('acShowsIncidentSubstatus is true only for confirmed_resolved/manually_resolved rows with no incidentRef, and gates both the table\'s Incident-column badge and the detail modal\'s sub-status section', () => {
+  assert.match(frontend, /function acShowsIncidentSubstatus\(r\) \{\s*\n\s*return !r\.incidentRef && \(r\.state === 'confirmed_resolved' \|\| r\.state === 'manually_resolved'\);\s*\n\}/);
+  assert.match(frontend, /\(acShowsIncidentSubstatus\(r\) && r\.incidentSubstatus && ALERT_INCIDENT_SUBSTATUS_LABELS\[r\.incidentSubstatus\]\)/);
+  assert.match(frontend, /const showSubstatus = acShowsIncidentSubstatus\(row\);\s*\n\s*substatusSection\.style\.display = showSubstatus \? '' : 'none';/);
+});
+
+test('acUpdateIncidentSubstatus posts to /incident-substatus without requiring a comment, updates the row locally, and never touches row.state (the STATE badge stays "Resolved"/"Action Taken & Resolved")', () => {
+  assert.match(frontend, /function acUpdateIncidentSubstatus\(\) \{/);
+  assert.match(frontend, /API_BASE_URL \+ '\/operations-alerts\/incident-substatus'/);
+  assert.match(frontend, /if \(row\) row\.incidentSubstatus = substatus;/);
+  const body = frontend.slice(frontend.indexOf('function acUpdateIncidentSubstatus'), frontend.indexOf('function acUpdateIncidentSubstatus') + 1200);
+  assert.doesNotMatch(body, /row\.state = substatus;/, 'must never overwrite the alert\'s own activity state');
 });

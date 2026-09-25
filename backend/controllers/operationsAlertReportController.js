@@ -149,6 +149,18 @@ const getAlertComplianceReport = async (req, res) => {
       );
       const statusByKey = new Map(ticketStatusRows.map((row) => [row.fingerprint_key, row.status]));
       report.forEach((r) => { if (r.category === 'jira') r.state = statusByKey.get(r.fingerprintKey) || 'open'; });
+
+      // Manual, optional tracking of whether a real incident is still
+      // pending for a resolved-but-not-linked alert (see
+      // updateIncidentSubstatus below) — unset until someone picks a value,
+      // and only meaningful for confirmed_resolved/manually_resolved rows
+      // with no incidentRef, which the frontend enforces when it renders it.
+      const [substatusRows] = await pool.query(
+        'SELECT fingerprint_key, substatus FROM operations_alert_incident_substatus WHERE fingerprint_key IN (?)',
+        [keys]
+      );
+      const substatusByKey = new Map(substatusRows.map((row) => [row.fingerprint_key, row.substatus]));
+      report.forEach((r) => { r.incidentSubstatus = substatusByKey.get(r.fingerprintKey) || null; });
     }
 
     const summary = {
@@ -297,6 +309,37 @@ const updateTicketStatus = async (req, res) => {
   }
 };
 
+// Sets the manual "is a real incident still pending for this resolved
+// alert?" sub-status (see the comment on operations_alert_incident_substatus
+// in its migration). Independent of the automatic incidentRef link — this
+// is a human's own tracking note, not something the system derives.
+const INCIDENT_SUBSTATUSES = new Set(['pending', 'created', 'not_required']);
+
+const updateIncidentSubstatus = async (req, res) => {
+  try {
+    const key = String(req.body.fingerprintKey || '').trim().toLowerCase();
+    const fingerprint = String(req.body.fingerprint || '').trim();
+    const substatus = String(req.body.substatus || '').trim().toLowerCase();
+    if (!FINGERPRINT_KEY_PATTERN.test(key)) {
+      return res.status(400).json({ success: false, message: 'A valid fingerprintKey is required' });
+    }
+    if (!INCIDENT_SUBSTATUSES.has(substatus)) {
+      return res.status(400).json({ success: false, message: 'Sub-status must be one of pending, created, not_required' });
+    }
+
+    await pool.query(
+      `INSERT INTO operations_alert_incident_substatus (fingerprint_key, alert_fingerprint, substatus, updated_by)
+       VALUES (?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE substatus = VALUES(substatus), updated_by = VALUES(updated_by), updated_at = CURRENT_TIMESTAMP`,
+      [key, fingerprint.slice(0, 1000) || null, substatus, req.user.id]
+    );
+    res.json({ success: true, message: 'Incident sub-status updated', data: { substatus } });
+  } catch (error) {
+    console.error('Update incident sub-status error:', error.message);
+    res.status(500).json({ success: false, message: 'Unable to update the incident sub-status' });
+  }
+};
+
 // Admin-only: removes a false/irrelevant alert group from the report. See
 // the comment above the deletion filter in getAlertComplianceReport for why
 // this is a suppression list rather than a literal row delete.
@@ -368,4 +411,4 @@ const getAlertMessage = async (req, res) => {
   }
 };
 
-module.exports = { getAlertComplianceReport, listAlertComments, addAlertComment, resolveAlertManually, updateTicketStatus, deleteAlert, getAlertMessage };
+module.exports = { getAlertComplianceReport, listAlertComments, addAlertComment, resolveAlertManually, updateTicketStatus, updateIncidentSubstatus, deleteAlert, getAlertMessage };
