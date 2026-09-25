@@ -11116,7 +11116,9 @@ function loadAlertComplianceReport() {
   const daysEl = document.getElementById('acFilterDays');
   const days = daysEl ? daysEl.value : '14';
   const tbody = document.getElementById('acTableBody');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);padding:20px">Loading alert activity…</td></tr>';
+  const colCount = hasPermission('delete_alert_compliance_alerts') ? 11 : 10;
+  acSelectedAlerts.clear();
+  if (tbody) tbody.innerHTML = '<tr><td colspan="' + colCount + '" style="text-align:center;color:var(--text-muted);padding:20px">Loading alert activity…</td></tr>';
   fetch(window.APP_CONFIG.API_BASE_URL + '/operations-alerts?days=' + encodeURIComponent(days), {
     headers: { Authorization: 'Bearer ' + token }
   })
@@ -11132,7 +11134,7 @@ function loadAlertComplianceReport() {
     .catch(function (err) {
       console.error('Alert compliance report error:', err);
       showToast(err.message || 'Unable to load the Alert Compliance report', 'error');
-      if (tbody) tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--danger);padding:20px">Failed to load alert activity</td></tr>';
+      if (tbody) tbody.innerHTML = '<tr><td colspan="' + colCount + '" style="text-align:center;color:var(--danger);padding:20px">Failed to load alert activity</td></tr>';
     });
 }
 
@@ -11181,10 +11183,22 @@ function acFormatTimestamp(value) {
   return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+// Selection state for the table's multi-select delete — a Set of
+// fingerprintKeys, persisting across filter changes within the same load
+// so switching filters doesn't silently drop what's selected.
+let acSelectedAlerts = new Set();
+
 function renderAlertComplianceTable() {
   const tbody = document.getElementById('acTableBody');
   const countEl = document.getElementById('acRowCount');
   if (!tbody) return;
+  const canDelete = hasPermission('delete_alert_compliance_alerts');
+  const colCount = canDelete ? 11 : 10;
+
+  const selectHeaderCell = document.getElementById('acSelectHeaderCell');
+  if (selectHeaderCell) selectHeaderCell.style.display = canDelete ? '' : 'none';
+  if (!canDelete) acSelectedAlerts.clear();
+
   const category = document.getElementById('acFilterCategory')?.value || '';
   const state = document.getElementById('acFilterState')?.value || '';
   const customer = document.getElementById('acFilterCustomer')?.value || '';
@@ -11199,9 +11213,15 @@ function renderAlertComplianceTable() {
     if (customer && r.customer !== customer) return false;
     return true;
   });
+  // Drop selections for rows no longer visible under the current filter, so
+  // "select all" + delete never silently acts on something hidden.
+  const visibleKeys = new Set(rows.map(function (r) { return r.fingerprintKey; }));
+  acSelectedAlerts.forEach(function (key) { if (!visibleKeys.has(key)) acSelectedAlerts.delete(key); });
+
   if (countEl) countEl.textContent = rows.length + ' alert group' + (rows.length === 1 ? '' : 's');
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);padding:20px">No alert activity in the selected window</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="' + colCount + '" style="text-align:center;color:var(--text-muted);padding:20px">No alert activity in the selected window</td></tr>';
+    acUpdateBulkDeleteButton();
     return;
   }
   tbody.innerHTML = rows.map(function (r) {
@@ -11217,7 +11237,11 @@ function renderAlertComplianceTable() {
     const commentCell = '<button class="btn btn-secondary" onclick="event.stopPropagation();acOpenAlertDetail(\'' + escapeMetricHtml(r.fingerprintKey) + '\')" style="padding:3px 10px;font-size:11px" title="View or add comments">'
       + '💬 ' + commentCount + '</button>';
     const subjectCell = '<span style="color:var(--accent);font-weight:600">' + escapeMetricHtml(r.subject) + '</span>';
+    const checkCell = canDelete
+      ? '<td onclick="event.stopPropagation()"><input type="checkbox" aria-label="Select this alert" onchange="acToggleRowSelect(\'' + escapeMetricHtml(r.fingerprintKey) + '\', this.checked)"' + (acSelectedAlerts.has(r.fingerprintKey) ? ' checked' : '') + '/></td>'
+      : '';
     return '<tr onclick="acOpenAlertDetail(\'' + escapeMetricHtml(r.fingerprintKey) + '\')" style="cursor:pointer" tabindex="0" onkeydown="if(event.key===\'Enter\'){acOpenAlertDetail(\'' + escapeMetricHtml(r.fingerprintKey) + '\')}">'
+      + checkCell
       + '<td style="max-width:320px">' + subjectCell + '</td>'
       + '<td>' + escapeMetricHtml(acCategoryLabel(r.category)) + '</td>'
       + '<td>' + escapeMetricHtml(r.customer || '—') + '</td>'
@@ -11230,6 +11254,80 @@ function renderAlertComplianceTable() {
       + '<td>' + commentCell + '</td>'
       + '</tr>';
   }).join('');
+
+  const selectAll = document.getElementById('acSelectAll');
+  if (selectAll) {
+    selectAll.checked = rows.length > 0 && rows.every(function (r) { return acSelectedAlerts.has(r.fingerprintKey); });
+    selectAll.indeterminate = !selectAll.checked && rows.some(function (r) { return acSelectedAlerts.has(r.fingerprintKey); });
+  }
+  acUpdateBulkDeleteButton();
+}
+
+function acToggleSelectAll(checked) {
+  const category = document.getElementById('acFilterCategory')?.value || '';
+  const state = document.getElementById('acFilterState')?.value || '';
+  const customer = document.getElementById('acFilterCustomer')?.value || '';
+  alertComplianceReportData.filter(function (r) {
+    if (category && r.category !== category) return false;
+    if (state === 'incident_created') { if (!r.incidentRef) return false; }
+    else if (state && r.state !== state) return false;
+    if (customer && r.customer !== customer) return false;
+    return true;
+  }).forEach(function (r) {
+    if (checked) acSelectedAlerts.add(r.fingerprintKey); else acSelectedAlerts.delete(r.fingerprintKey);
+  });
+  renderAlertComplianceTable();
+}
+
+function acToggleRowSelect(fingerprintKey, checked) {
+  if (checked) acSelectedAlerts.add(fingerprintKey); else acSelectedAlerts.delete(fingerprintKey);
+  acUpdateBulkDeleteButton();
+  const selectAll = document.getElementById('acSelectAll');
+  if (selectAll) selectAll.checked = false;
+}
+
+function acUpdateBulkDeleteButton() {
+  const btn = document.getElementById('acBulkDeleteBtn');
+  if (!btn) return;
+  if (acSelectedAlerts.size > 0) {
+    btn.style.display = '';
+    btn.textContent = 'Delete selected (' + acSelectedAlerts.size + ')';
+  } else {
+    btn.style.display = 'none';
+  }
+}
+
+// Bulk multi-select delete from the table itself (admin only — the button
+// is only ever visible when hasPermission('delete_alert_compliance_alerts')
+// is true, and the server independently re-checks the same permission).
+function acDeleteSelectedAlerts() {
+  const keys = Array.from(acSelectedAlerts);
+  if (!keys.length) return;
+  const label = keys.length === 1 ? 'this alert' : keys.length + ' selected alerts';
+  if (!window.confirm('Remove ' + label + ' from the Alert Compliance report? This only hides them going forward — it does not affect the underlying mailbox or any incident.')) return;
+  const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) { showToast('Not authenticated. Please login first.', 'error'); return; }
+  const items = keys.map(function (key) {
+    const row = alertComplianceReportData.find(function (r) { return r.fingerprintKey === key; });
+    return { fingerprintKey: key, fingerprint: row ? row.fingerprint : '' };
+  });
+  fetch(window.APP_CONFIG.API_BASE_URL + '/operations-alerts/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ items: items })
+  })
+    .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+    .then(function (result) {
+      if (!result.ok || !result.data.success) throw new Error(result.data.message || 'Unable to delete the selected alert(s)');
+      const deletedKeys = new Set(keys);
+      alertComplianceReportData = alertComplianceReportData.filter(function (r) { return !deletedKeys.has(r.fingerprintKey); });
+      acSelectedAlerts.clear();
+      renderAlertComplianceTable();
+      showToast(result.data.message || 'Selected alerts removed', 'success');
+    })
+    .catch(function (err) {
+      showToast(err.message || 'Unable to delete the selected alert(s)', 'error');
+    });
 }
 
 function acOpenIncident(incidentRef) {

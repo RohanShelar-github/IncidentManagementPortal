@@ -442,3 +442,51 @@ test('acDeleteAlert removes the row locally and closes the modal on success, mat
   assert.match(frontend, /alertComplianceReportData = alertComplianceReportData\.filter\(function \(r\) \{ return r\.fingerprintKey !== acActiveCommentFingerprintKey; \}\);/);
   assert.match(frontend, /closeModal\('alertDetailModal'\);/);
 });
+
+// ── Requirement: table-view delete + multi-select delete ──
+
+test('deleteAlert accepts either a single {fingerprintKey} (backward compatible) or a bulk {items: [...]}, capped and validated', () => {
+  assert.match(reportController, /const rawItems = Array\.isArray\(req\.body\.items\) && req\.body\.items\.length/);
+  assert.match(reportController, /const MAX_BULK_DELETE = 200;/);
+  assert.match(reportController, /if \(items\.length > MAX_BULK_DELETE\)/);
+  assert.match(reportController, /items\.some\(\(item\) => !FINGERPRINT_KEY_PATTERN\.test\(item\.key\)\)/);
+});
+
+test('the table has a checkbox column, hidden by default, shown per hasPermission, with a Select All header checkbox', () => {
+  assert.match(html, /id="acSelectHeaderCell" style="display:none"><input id="acSelectAll" type="checkbox"/);
+  assert.match(html, /onchange="acToggleSelectAll\(this\.checked\)"/);
+  assert.match(frontend, /const canDelete = hasPermission\('delete_alert_compliance_alerts'\);/);
+  assert.match(frontend, /if \(selectHeaderCell\) selectHeaderCell\.style\.display = canDelete \? '' : 'none';/);
+});
+
+test('the table has a "Delete selected" bulk-action button, hidden by default, updated with the current selection count', () => {
+  assert.match(html, /id="acBulkDeleteBtn" class="btn btn-danger btn-sm" onclick="acDeleteSelectedAlerts\(\)" style="display:none"/);
+  assert.match(frontend, /function acUpdateBulkDeleteButton\(\) \{/);
+  assert.match(frontend, /btn\.textContent = 'Delete selected \(' \+ acSelectedAlerts\.size \+ '\)';/);
+});
+
+test('a row checkbox stops propagation so clicking it never also opens the alert detail modal', () => {
+  assert.match(frontend, /'<td onclick="event\.stopPropagation\(\)"><input type="checkbox"/);
+});
+
+test('selections are dropped for rows no longer visible under the active filter, so a stale hidden selection can never be bulk-deleted by surprise', () => {
+  assert.match(frontend, /acSelectedAlerts\.forEach\(function \(key\) \{ if \(!visibleKeys\.has\(key\)\) acSelectedAlerts\.delete\(key\); \}\);/);
+});
+
+test('acToggleSelectAll only selects rows matching the current category/state/customer filters, mirroring renderAlertComplianceTable\'s own filter logic', () => {
+  assert.match(frontend, /function acToggleSelectAll\(checked\) \{/);
+  const body = frontend.slice(frontend.indexOf('function acToggleSelectAll'), frontend.indexOf('function acToggleRowSelect'));
+  assert.match(body, /if \(state === 'incident_created'\)/);
+});
+
+test('acDeleteSelectedAlerts confirms once, posts all selected items in a single bulk request, and clears the selection on success', () => {
+  assert.match(frontend, /function acDeleteSelectedAlerts\(\) \{/);
+  assert.match(frontend, /if \(!window\.confirm\(/);
+  assert.match(frontend, /body: JSON\.stringify\(\{ items: items \}\)/);
+  assert.match(frontend, /acSelectedAlerts\.clear\(\);/);
+});
+
+test('loadAlertComplianceReport resets the selection and uses a permission-aware colspan for the loading/error placeholder rows', () => {
+  assert.match(frontend, /const colCount = hasPermission\('delete_alert_compliance_alerts'\) \? 11 : 10;/);
+  assert.match(frontend, /acSelectedAlerts\.clear\(\);\s*\n\s*if \(tbody\) tbody\.innerHTML = '<tr><td colspan="' \+ colCount \+ '"/);
+});

@@ -298,24 +298,49 @@ const updateTicketStatus = async (req, res) => {
 // Admin-only: removes a false/irrelevant alert group from the report. See
 // the comment above the deletion filter in getAlertComplianceReport for why
 // this is a suppression list rather than a literal row delete.
+// Accepts either a single { fingerprintKey, fingerprint } (the detail
+// view's delete button) or a bulk { items: [{ fingerprintKey, fingerprint }, ...] }
+// (the table's multi-select delete), inserting all of them in one query.
+const MAX_BULK_DELETE = 200;
+
 const deleteAlert = async (req, res) => {
   try {
-    const key = String(req.body.fingerprintKey || '').trim().toLowerCase();
-    const fingerprint = String(req.body.fingerprint || '').trim();
-    if (!FINGERPRINT_KEY_PATTERN.test(key)) {
-      return res.status(400).json({ success: false, message: 'A valid fingerprintKey is required' });
+    const rawItems = Array.isArray(req.body.items) && req.body.items.length
+      ? req.body.items
+      : [{ fingerprintKey: req.body.fingerprintKey, fingerprint: req.body.fingerprint }];
+
+    const items = rawItems.map((item) => ({
+      key: String(item && item.fingerprintKey || '').trim().toLowerCase(),
+      fingerprint: String(item && item.fingerprint || '').trim()
+    }));
+
+    if (!items.length || items.some((item) => !FINGERPRINT_KEY_PATTERN.test(item.key))) {
+      return res.status(400).json({ success: false, message: 'One or more fingerprintKeys are invalid' });
     }
+    if (items.length > MAX_BULK_DELETE) {
+      return res.status(400).json({ success: false, message: 'Too many alerts selected at once (max ' + MAX_BULK_DELETE + ')' });
+    }
+
+    const values = [];
+    const placeholders = items.map((item) => {
+      values.push(item.key, item.fingerprint.slice(0, 1000) || null, req.user.id);
+      return '(?, ?, ?)';
+    }).join(', ');
 
     await pool.query(
       `INSERT INTO operations_alert_deletions (fingerprint_key, alert_fingerprint, deleted_by)
-       VALUES (?, ?, ?)
+       VALUES ${placeholders}
        ON DUPLICATE KEY UPDATE deleted_by = VALUES(deleted_by), deleted_at = CURRENT_TIMESTAMP`,
-      [key, fingerprint.slice(0, 1000) || null, req.user.id]
+      values
     );
-    res.json({ success: true, message: 'Alert removed from the report' });
+    res.json({
+      success: true,
+      message: items.length === 1 ? 'Alert removed from the report' : items.length + ' alerts removed from the report',
+      data: { count: items.length }
+    });
   } catch (error) {
     console.error('Delete alert error:', error.message);
-    res.status(500).json({ success: false, message: 'Unable to delete this alert' });
+    res.status(500).json({ success: false, message: 'Unable to delete the selected alert(s)' });
   }
 };
 

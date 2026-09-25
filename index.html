@@ -1352,10 +1352,13 @@
 <div class="chart-card">
 <div class="chart-header" style="margin-bottom:16px">
 <div class="chart-title">Alert Groups</div>
+<div style="display:flex;align-items:center;gap:10px">
+<button id="acBulkDeleteBtn" class="btn btn-danger btn-sm" onclick="acDeleteSelectedAlerts()" style="display:none">Delete selected</button>
 <span id="acRowCount" style="font-size:12px;color:var(--text-muted)"></span>
 </div>
+</div>
 <table>
-<thead><tr><th>Alert</th><th>Category</th><th>Customer</th><th>First Seen</th><th>Last Seen</th><th>Repeats</th><th>State</th><th>Incident</th><th>Age</th><th>Comments</th></tr></thead>
+<thead><tr><th id="acSelectHeaderCell" style="display:none"><input id="acSelectAll" type="checkbox" aria-label="Select all alerts" onchange="acToggleSelectAll(this.checked)"/></th><th>Alert</th><th>Category</th><th>Customer</th><th>First Seen</th><th>Last Seen</th><th>Repeats</th><th>State</th><th>Incident</th><th>Age</th><th>Comments</th></tr></thead>
 <tbody id="acTableBody"></tbody>
 </table>
 </div>
