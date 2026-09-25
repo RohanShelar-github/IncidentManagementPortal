@@ -87,13 +87,20 @@ function alertDayKey(receivedAt) {
 // "yesterday" group can show as went_quiet once enough time has passed,
 // while the alert is really still firing under today's group. This matches
 // the explicit "unique alerts per day" requirement.
+//
+// Customer Raised Tickets (category 'jira') are deliberately exempt from
+// day-splitting: a support ticket is a single ongoing case, not a
+// repeating alert, so its "Re:" replies over several days must stay one
+// row — otherwise its manually-set Open/In Progress/Resolved status (see
+// operationsAlertReportController) would reset to "open" on every new
+// day's row instead of tracking the one real ticket end to end.
 function groupMessagesIntoAlerts(messages) {
   const groups = new Map();
   (messages || []).forEach((message) => {
     if (!message || !message.subject) return;
     const fingerprint = alertFingerprint(message);
     const day = alertDayKey(message.receivedAt);
-    const dayFingerprint = fingerprint + '::' + day;
+    const dayFingerprint = message.category === 'jira' ? fingerprint : (fingerprint + '::' + day);
     const resolved = isResolvedVariant(message.subject);
     const receivedAt = message.receivedAt || null;
     let group = groups.get(dayFingerprint);

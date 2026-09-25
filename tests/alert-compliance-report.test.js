@@ -316,6 +316,24 @@ test('Jira tickets are fingerprinted by their issue key, not subject text, since
   assert.equal(as41.occurrenceCount, 2, 'both messages referencing AS-41 belong to the same group');
 });
 
+test('Jira tickets stay as ONE row across multiple days, unlike Coralogix/Azure alerts — a support ticket is a single ongoing case, not a repeating alert', () => {
+  const messages = [
+    { id: 'k1', from: 'automation@example.atlassian.net', subject: 'A new support issue CD-170 was reported by the customer', category: 'jira', jiraIssueKey: 'CD-170', receivedAt: '2026-09-22T17:13:00Z' },
+    { id: 'k2', from: 'rohan_shelar@magicsoftware.com', subject: 'Re: A new support issue CD-170 was reported by the customer', category: 'jira', jiraIssueKey: 'CD-170', receivedAt: '2026-09-23T13:02:00Z' }
+  ];
+  const groups = grouping.groupMessagesIntoAlerts(messages);
+  assert.equal(groups.length, 1, 'the same ticket correspondence on two different days must stay one row, not split like a monitoring alert');
+  assert.equal(groups[0].occurrenceCount, 2);
+  assert.equal(groups[0].fingerprint, 'jira::CD-170', 'the jira fingerprint must never carry a day suffix');
+
+  // Contrast: a monitoring alert with the same day gap DOES split.
+  const alertMessages = [
+    { id: 'a1', from: 'alerts@coralogix.com', subject: 'Coralogix Alert on magic / X', category: 'coralogix', receivedAt: '2026-09-22T17:13:00Z' },
+    { id: 'a2', from: 'alerts@coralogix.com', subject: 'Coralogix Alert on magic / X', category: 'coralogix', receivedAt: '2026-09-23T13:02:00Z' }
+  ];
+  assert.equal(grouping.groupMessagesIntoAlerts(alertMessages).length, 2);
+});
+
 test('Jira grouping ignores sender, since the same ticket thread is replied to by several different addresses (customer, agent, automation)', () => {
   const messages = [
     { id: 'j1', from: 'automation@magicsoftware2.atlassian.net', subject: 'A new support issue CD-170 was reported by the customer', category: 'jira', jiraIssueKey: 'CD-170', receivedAt: '2026-09-23T04:00:00Z' },
