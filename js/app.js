@@ -11118,6 +11118,7 @@ function loadAlertComplianceReport() {
   const tbody = document.getElementById('acTableBody');
   const colCount = hasPermission('delete_alert_compliance_alerts') ? 9 : 8;
   acSelectedAlerts.clear();
+  acCurrentPage = 1;
   if (tbody) tbody.innerHTML = '<tr><td colspan="' + colCount + '" style="text-align:center;color:var(--text-muted);padding:20px">Loading alert activity…</td></tr>';
   fetch(window.APP_CONFIG.API_BASE_URL + '/operations-alerts?days=' + encodeURIComponent(days), {
     headers: { Authorization: 'Bearer ' + token }
@@ -11159,10 +11160,16 @@ function renderAlertComplianceSummary() {
   set('acStatManualResolved', s.manuallyResolved || 0);
 }
 
+function acFilterChanged() {
+  acCurrentPage = 1;
+  renderAlertComplianceTable();
+}
+
 function acFilterByState(state) {
   const sel = document.getElementById('acFilterState');
   if (!sel) return;
   sel.value = sel.value === state ? '' : state;
+  acCurrentPage = 1;
   renderAlertComplianceTable();
 }
 
@@ -11177,6 +11184,12 @@ function acFormatTimestamp(value) {
 // fingerprintKeys, persisting across filter changes within the same load
 // so switching filters doesn't silently drop what's selected.
 let acSelectedAlerts = new Set();
+
+// Client-side pagination state for the table — the report itself is loaded
+// as one full list (see loadAlertComplianceReport), only the render step
+// slices it into pages, mirroring the Incidents table's pagination pattern.
+let acCurrentPage = 1;
+let acPerPage = 25;
 
 function renderAlertComplianceTable() {
   const tbody = document.getElementById('acTableBody');
@@ -11209,12 +11222,18 @@ function renderAlertComplianceTable() {
   acSelectedAlerts.forEach(function (key) { if (!visibleKeys.has(key)) acSelectedAlerts.delete(key); });
 
   if (countEl) countEl.textContent = rows.length + ' alert group' + (rows.length === 1 ? '' : 's');
+  const totalPages = Math.max(1, Math.ceil(rows.length / acPerPage));
+  if (acCurrentPage > totalPages) acCurrentPage = totalPages;
+  if (acCurrentPage < 1) acCurrentPage = 1;
   if (!rows.length) {
     tbody.innerHTML = '<tr><td colspan="' + colCount + '" style="text-align:center;color:var(--text-muted);padding:20px">No alert activity in the selected window</td></tr>';
     acUpdateBulkDeleteButton();
+    acRenderPagination(0);
     return;
   }
-  tbody.innerHTML = rows.map(function (r) {
+  const pageStart = (acCurrentPage - 1) * acPerPage;
+  const pageRows = rows.slice(pageStart, pageStart + acPerPage);
+  tbody.innerHTML = pageRows.map(function (r) {
     const stateLabel = ALERT_COMPLIANCE_STATE_LABELS[r.state] || r.state;
     const stateClass = ALERT_COMPLIANCE_STATE_CLASS[r.state] || 'badge-progress';
     // The incident link must stop the click from bubbling up to the row's
@@ -11255,6 +11274,71 @@ function renderAlertComplianceTable() {
     selectAll.indeterminate = !selectAll.checked && rows.some(function (r) { return acSelectedAlerts.has(r.fingerprintKey); });
   }
   acUpdateBulkDeleteButton();
+  acRenderPagination(rows.length);
+}
+
+function acChangePerPage(val) {
+  acPerPage = parseInt(val, 10) || 25;
+  acCurrentPage = 1;
+  renderAlertComplianceTable();
+}
+
+function acGoToPage(page) {
+  acCurrentPage = page;
+  renderAlertComplianceTable();
+}
+
+function acRenderPagination(total) {
+  const totalPages = Math.max(1, Math.ceil(total / acPerPage));
+  const start = total === 0 ? 0 : (acCurrentPage - 1) * acPerPage;
+  const end = Math.min(start + acPerPage, total);
+
+  const infoEl = document.getElementById('acPaginationInfo');
+  if (infoEl) infoEl.textContent = total === 0 ? 'No alerts found' : 'Showing ' + (start + 1) + '–' + end + ' of ' + total + ' alerts';
+
+  const container = document.getElementById('acPaginationBtns');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const prev = document.createElement('button');
+  prev.className = 'pg-btn';
+  prev.innerHTML = '&#8592;';
+  prev.disabled = acCurrentPage === 1;
+  prev.onclick = function () { acGoToPage(acCurrentPage - 1); };
+  container.appendChild(prev);
+
+  const pages = [];
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i);
+  } else {
+    pages.push(1);
+    if (acCurrentPage > 3) pages.push('…');
+    for (let i = Math.max(2, acCurrentPage - 1); i <= Math.min(totalPages - 1, acCurrentPage + 1); i++) pages.push(i);
+    if (acCurrentPage < totalPages - 2) pages.push('…');
+    pages.push(totalPages);
+  }
+
+  pages.forEach(function (p) {
+    if (p === '…') {
+      const span = document.createElement('span');
+      span.className = 'pg-ellipsis';
+      span.textContent = '…';
+      container.appendChild(span);
+    } else {
+      const b = document.createElement('button');
+      b.className = 'pg-btn' + (p === acCurrentPage ? ' active' : '');
+      b.textContent = p;
+      b.onclick = function () { acGoToPage(p); };
+      container.appendChild(b);
+    }
+  });
+
+  const next = document.createElement('button');
+  next.className = 'pg-btn';
+  next.innerHTML = '&#8594;';
+  next.disabled = acCurrentPage === totalPages || totalPages === 0;
+  next.onclick = function () { acGoToPage(acCurrentPage + 1); };
+  container.appendChild(next);
 }
 
 function acToggleSelectAll(checked) {

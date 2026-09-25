@@ -1322,7 +1322,7 @@
 </div>
 <div class="filter-group">
 <div class="filter-label">Category</div>
-<select id="acFilterCategory" onchange="renderAlertComplianceTable()">
+<select id="acFilterCategory" onchange="acFilterChanged()">
 <option value="">All Categories</option>
 <option value="coralogix">Coralogix</option>
 <option value="azure">Azure</option>
@@ -1331,7 +1331,7 @@
 </div>
 <div class="filter-group">
 <div class="filter-label">State</div>
-<select id="acFilterState" onchange="renderAlertComplianceTable()">
+<select id="acFilterState" onchange="acFilterChanged()">
 <option value="">All States</option>
 <option value="went_quiet">Went Quiet — Unconfirmed</option>
 <option value="actively_repeating">Actively Repeating</option>
@@ -1345,7 +1345,7 @@
 </div>
 <div class="filter-group">
 <div class="filter-label">Customer</div>
-<select id="acFilterCustomer" onchange="renderAlertComplianceTable()"><option value="">All Customers</option></select>
+<select id="acFilterCustomer" onchange="acFilterChanged()"><option value="">All Customers</option></select>
 </div>
 </div>
 <!-- Results table -->
@@ -1361,6 +1361,19 @@
 <thead><tr><th id="acSelectHeaderCell" style="display:none"><input id="acSelectAll" type="checkbox" aria-label="Select all alerts" onchange="acToggleSelectAll(this.checked)"/></th><th>Alert</th><th>Category</th><th>Customer</th><th>First Seen</th><th>Last Seen</th><th>State</th><th>Incident</th><th>Comments</th></tr></thead>
 <tbody id="acTableBody"></tbody>
 </table>
+<div class="pagination-bar">
+<div class="pg-perpage">
+            Rows per page:
+            <select id="acPerPageSelect" onchange="acChangePerPage(this.value)">
+<option value="10">10</option>
+<option selected="" value="25">25</option>
+<option value="50">50</option>
+<option value="100">100</option>
+</select>
+</div>
+<span class="pagination-info" id="acPaginationInfo">Showing all results</span>
+<div class="pagination-controls" id="acPaginationBtns"></div>
+</div>
 </div>
 </div>
 <!-- /ALERT COMPLIANCE REPORT -->

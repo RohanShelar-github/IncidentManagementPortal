@@ -515,7 +515,7 @@ test('acDeleteSelectedAlerts confirms once (via the shared acRequestDelete helpe
 
 test('loadAlertComplianceReport resets the selection and uses a permission-aware colspan for the loading/error placeholder rows', () => {
   assert.match(frontend, /const colCount = hasPermission\('delete_alert_compliance_alerts'\) \? 9 : 8;/);
-  assert.match(frontend, /acSelectedAlerts\.clear\(\);\s*\n\s*if \(tbody\) tbody\.innerHTML = '<tr><td colspan="' \+ colCount \+ '"/);
+  assert.match(frontend, /acSelectedAlerts\.clear\(\);\s*\n\s*acCurrentPage = 1;\s*\n\s*if \(tbody\) tbody\.innerHTML = '<tr><td colspan="' \+ colCount \+ '"/);
 });
 
 // ── Requirement: delete icon matching the rest of the app, in the table too ──
@@ -532,4 +532,40 @@ test('the modal delete button is now the same icon style, not a text button', ()
 test('the per-row delete icon only embeds the safe fingerprintKey (hex hash) in its onclick, never the raw fingerprint text — which can contain literal quote characters from alert subjects like "Alert \'X\' was fired" and would break the generated JS if embedded directly', () => {
   assert.match(frontend, /function acDeleteAlertRow\(fingerprintKey\) \{/);
   assert.doesNotMatch(frontend, /acDeleteAlertRow\(\\'' \+ escapeMetricHtml\(r\.fingerprintKey\) \+ '\\', \\''/, 'must not take a second inline argument built from raw fingerprint/subject text');
+});
+
+// ── Requirement: pagination in the table view ──────────────────────────────
+
+test('the table has a pagination bar (rows-per-page select, info label, and controls container) mirroring the Incidents table pattern', () => {
+  assert.match(html, /<select id="acPerPageSelect" onchange="acChangePerPage\(this\.value\)">/);
+  assert.match(html, /<span class="pagination-info" id="acPaginationInfo">Showing all results<\/span>/);
+  assert.match(html, /<div class="pagination-controls" id="acPaginationBtns"><\/div>/);
+});
+
+test('renderAlertComplianceTable paginates the filtered rows with acCurrentPage/acPerPage, clamping the page in range and rendering only the current page slice', () => {
+  assert.match(frontend, /let acCurrentPage = 1;/);
+  assert.match(frontend, /let acPerPage = 25;/);
+  assert.match(frontend, /const totalPages = Math\.max\(1, Math\.ceil\(rows\.length \/ acPerPage\)\);\s*\n\s*if \(acCurrentPage > totalPages\) acCurrentPage = totalPages;/);
+  assert.match(frontend, /const pageStart = \(acCurrentPage - 1\) \* acPerPage;\s*\n\s*const pageRows = rows\.slice\(pageStart, pageStart \+ acPerPage\);\s*\n\s*tbody\.innerHTML = pageRows\.map\(function \(r\) \{/);
+});
+
+test('acChangePerPage and acGoToPage reset/move the current page and re-render; filter changes (category/state/customer) reset back to page 1 via acFilterChanged', () => {
+  assert.match(frontend, /function acChangePerPage\(val\) \{\s*\n\s*acPerPage = parseInt\(val, 10\) \|\| 25;\s*\n\s*acCurrentPage = 1;\s*\n\s*renderAlertComplianceTable\(\);\s*\n\}/);
+  assert.match(frontend, /function acGoToPage\(page\) \{\s*\n\s*acCurrentPage = page;\s*\n\s*renderAlertComplianceTable\(\);\s*\n\}/);
+  assert.match(frontend, /function acFilterChanged\(\) \{\s*\n\s*acCurrentPage = 1;\s*\n\s*renderAlertComplianceTable\(\);\s*\n\}/);
+  assert.match(html, /id="acFilterCategory" onchange="acFilterChanged\(\)"/);
+  assert.match(html, /id="acFilterState" onchange="acFilterChanged\(\)"/);
+  assert.match(html, /id="acFilterCustomer" onchange="acFilterChanged\(\)"/);
+});
+
+test('acRenderPagination builds prev/next and numbered page buttons into acPaginationBtns, matching the pg-btn/pg-ellipsis styling used by the Incidents table pagination', () => {
+  assert.match(frontend, /function acRenderPagination\(total\) \{/);
+  assert.match(frontend, /prev\.className = 'pg-btn';/);
+  assert.match(frontend, /span\.className = 'pg-ellipsis';/);
+  assert.match(frontend, /b\.className = 'pg-btn' \+ \(p === acCurrentPage \? ' active' : ''\);/);
+});
+
+test('loadAlertComplianceReport and acFilterByState both reset acCurrentPage back to 1', () => {
+  assert.match(frontend, /acSelectedAlerts\.clear\(\);\s*\n\s*acCurrentPage = 1;\s*\n\s*if \(tbody\) tbody\.innerHTML = '<tr><td colspan="' \+ colCount \+ '" style="text-align:center;color:var\(--text-muted\);padding:20px">Loading alert activity/);
+  assert.match(frontend, /function acFilterByState\(state\) \{[\s\S]{0,150}acCurrentPage = 1;\s*\n\s*renderAlertComplianceTable\(\);\s*\n\}/);
 });
