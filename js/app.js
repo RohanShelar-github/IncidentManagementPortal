@@ -11234,8 +11234,14 @@ function renderAlertComplianceTable() {
       ? '<a href="javascript:void(0)" onclick="event.stopPropagation();acOpenIncident(\'' + escapeMetricHtml(r.incidentRef) + '\')" style="color:var(--accent);font-weight:600">' + escapeMetricHtml(r.incidentRef) + '</a>'
       : '<span style="color:var(--text-muted)">—</span>';
     const commentCount = r.commentCount || 0;
-    const commentCell = '<button class="btn btn-secondary" onclick="event.stopPropagation();acOpenAlertDetail(\'' + escapeMetricHtml(r.fingerprintKey) + '\')" style="padding:3px 10px;font-size:11px" title="View or add comments">'
-      + '💬 ' + commentCount + '</button>';
+    const deleteIcon = canDelete
+      ? '<button class="btn btn-sm" onclick="event.stopPropagation();acDeleteAlertRow(\'' + escapeMetricHtml(r.fingerprintKey) + '\')" style="background:transparent;color:#f75c7c;border:none;font-size:15px;padding:3px 7px" title="Delete alert" aria-label="Delete alert">&#128465;</button>'
+      : '';
+    const commentCell = '<div style="display:flex;gap:4px;align-items:center">'
+      + '<button class="btn btn-secondary" onclick="event.stopPropagation();acOpenAlertDetail(\'' + escapeMetricHtml(r.fingerprintKey) + '\')" style="padding:3px 10px;font-size:11px" title="View or add comments">'
+      + '💬 ' + commentCount + '</button>'
+      + deleteIcon
+      + '</div>';
     const subjectCell = '<span style="color:var(--accent);font-weight:600">' + escapeMetricHtml(r.subject) + '</span>';
     const checkCell = canDelete
       ? '<td onclick="event.stopPropagation()"><input type="checkbox" aria-label="Select this alert" onchange="acToggleRowSelect(\'' + escapeMetricHtml(r.fingerprintKey) + '\', this.checked)"' + (acSelectedAlerts.has(r.fingerprintKey) ? ' checked' : '') + '/></td>'
@@ -11297,20 +11303,14 @@ function acUpdateBulkDeleteButton() {
   }
 }
 
-// Bulk multi-select delete from the table itself (admin only — the button
-// is only ever visible when hasPermission('delete_alert_compliance_alerts')
-// is true, and the server independently re-checks the same permission).
-function acDeleteSelectedAlerts() {
-  const keys = Array.from(acSelectedAlerts);
-  if (!keys.length) return;
-  const label = keys.length === 1 ? 'this alert' : keys.length + ' selected alerts';
-  if (!window.confirm('Remove ' + label + ' from the Alert Compliance report? This only hides them going forward — it does not affect the underlying mailbox or any incident.')) return;
+// Shared by the table's per-row delete icon, the table's multi-select bulk
+// action, and the detail modal's delete icon — each just builds its own
+// confirm message + item list and hands off the actual request here.
+function acRequestDelete(items, confirmMessage) {
+  if (!items.length) return;
+  if (!window.confirm(confirmMessage)) return;
   const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
   if (!token) { showToast('Not authenticated. Please login first.', 'error'); return; }
-  const items = keys.map(function (key) {
-    const row = alertComplianceReportData.find(function (r) { return r.fingerprintKey === key; });
-    return { fingerprintKey: key, fingerprint: row ? row.fingerprint : '' };
-  });
   fetch(window.APP_CONFIG.API_BASE_URL + '/operations-alerts/delete', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
@@ -11319,15 +11319,45 @@ function acDeleteSelectedAlerts() {
     .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
     .then(function (result) {
       if (!result.ok || !result.data.success) throw new Error(result.data.message || 'Unable to delete the selected alert(s)');
-      const deletedKeys = new Set(keys);
+      const deletedKeys = new Set(items.map(function (item) { return item.fingerprintKey; }));
       alertComplianceReportData = alertComplianceReportData.filter(function (r) { return !deletedKeys.has(r.fingerprintKey); });
-      acSelectedAlerts.clear();
+      deletedKeys.forEach(function (key) { acSelectedAlerts.delete(key); });
+      if (deletedKeys.has(acActiveCommentFingerprintKey)) closeModal('alertDetailModal');
       renderAlertComplianceTable();
-      showToast(result.data.message || 'Selected alerts removed', 'success');
+      showToast(result.data.message || 'Alert(s) removed from the report', 'success');
     })
     .catch(function (err) {
       showToast(err.message || 'Unable to delete the selected alert(s)', 'error');
     });
+}
+
+// Admin-only: removes one false/irrelevant alert directly from its table
+// row, without opening the detail modal first. Only the fingerprintKey (a
+// safe hex hash) is embedded in the row's onclick attribute — the raw
+// fingerprint (built from the alert's subject text, which can contain
+// literal quote characters, e.g. "Alert 'X' was fired") is looked up here
+// instead of ever being placed inside an inline HTML attribute.
+function acDeleteAlertRow(fingerprintKey) {
+  const row = alertComplianceReportData.find(function (r) { return r.fingerprintKey === fingerprintKey; });
+  if (!row) return;
+  acRequestDelete(
+    [{ fingerprintKey: fingerprintKey, fingerprint: row.fingerprint || '' }],
+    'Remove this alert from the Alert Compliance report? This only hides it going forward — it does not affect the underlying mailbox or any incident.'
+  );
+}
+
+// Bulk multi-select delete from the table itself (admin only — the button
+// is only ever visible when hasPermission('delete_alert_compliance_alerts')
+// is true, and the server independently re-checks the same permission).
+function acDeleteSelectedAlerts() {
+  const keys = Array.from(acSelectedAlerts);
+  if (!keys.length) return;
+  const items = keys.map(function (key) {
+    const row = alertComplianceReportData.find(function (r) { return r.fingerprintKey === key; });
+    return { fingerprintKey: key, fingerprint: row ? row.fingerprint : '' };
+  });
+  const label = keys.length === 1 ? 'this alert' : keys.length + ' selected alerts';
+  acRequestDelete(items, 'Remove ' + label + ' from the Alert Compliance report? This only hides them going forward — it does not affect the underlying mailbox or any incident.');
 }
 
 function acOpenIncident(incidentRef) {
@@ -11624,25 +11654,10 @@ function acUpdateTicketStatus() {
 // operationsAlertReportController.deleteAlert.
 function acDeleteAlert() {
   if (!acActiveCommentFingerprintKey) return;
-  if (!window.confirm('Remove this alert from the Alert Compliance report? This only hides it going forward — it does not affect the underlying mailbox or any incident.')) return;
-  const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
-  if (!token) { showToast('Not authenticated. Please login first.', 'error'); return; }
-  fetch(window.APP_CONFIG.API_BASE_URL + '/operations-alerts/delete', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ fingerprintKey: acActiveCommentFingerprintKey, fingerprint: acActiveCommentFingerprint })
-  })
-    .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
-    .then(function (result) {
-      if (!result.ok || !result.data.success) throw new Error(result.data.message || 'Unable to delete this alert');
-      alertComplianceReportData = alertComplianceReportData.filter(function (r) { return r.fingerprintKey !== acActiveCommentFingerprintKey; });
-      closeModal('alertDetailModal');
-      renderAlertComplianceTable();
-      showToast('Alert removed from the report', 'success');
-    })
-    .catch(function (err) {
-      showToast(err.message || 'Unable to delete this alert', 'error');
-    });
+  acRequestDelete(
+    [{ fingerprintKey: acActiveCommentFingerprintKey, fingerprint: acActiveCommentFingerprint }],
+    'Remove this alert from the Alert Compliance report? This only hides it going forward — it does not affect the underlying mailbox or any incident.'
+  );
 }
 // ── /ALERT COMPLIANCE REPORT ────────────────────────────────────────────
 

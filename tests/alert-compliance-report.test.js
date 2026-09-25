@@ -188,7 +188,7 @@ test('the frontend alert detail modal, functions, and Comments table column exis
 test('the whole row opens the alert detail view (click and Enter-key), with the incident link and comments button stopping propagation so they act independently', () => {
   assert.match(frontend, /return '<tr onclick="acOpenAlertDetail\(\\''/);
   assert.match(frontend, /onkeydown="if\(event\.key===\\'Enter\\'\)\{acOpenAlertDetail\(/);
-  assert.match(frontend, /const commentCell = '<button class="btn btn-secondary" onclick="event\.stopPropagation\(\);acOpenAlertDetail\(/);
+  assert.match(frontend, /'<button class="btn btn-secondary" onclick="event\.stopPropagation\(\);acOpenAlertDetail\(/);
   assert.match(frontend, /onclick="event\.stopPropagation\(\);acOpenIncident\(\\''/);
 });
 
@@ -456,9 +456,16 @@ test('the Delete Alert button is hidden by default and only shown per hasPermiss
   assert.match(frontend, /if \(!window\.confirm\(/);
 });
 
-test('acDeleteAlert removes the row locally and closes the modal on success, matching the suppression-list semantics', () => {
-  assert.match(frontend, /alertComplianceReportData = alertComplianceReportData\.filter\(function \(r\) \{ return r\.fingerprintKey !== acActiveCommentFingerprintKey; \}\);/);
-  assert.match(frontend, /closeModal\('alertDetailModal'\);/);
+test('acRequestDelete (shared by the modal, per-row icon, and bulk action) removes deleted rows locally and closes the modal only if the deleted alert was the one open in it', () => {
+  assert.match(frontend, /function acRequestDelete\(items, confirmMessage\) \{/);
+  assert.match(frontend, /alertComplianceReportData = alertComplianceReportData\.filter\(function \(r\) \{ return !deletedKeys\.has\(r\.fingerprintKey\); \}\);/);
+  assert.match(frontend, /if \(deletedKeys\.has\(acActiveCommentFingerprintKey\)\) closeModal\('alertDetailModal'\);/);
+});
+
+test('acDeleteAlert (modal) and acDeleteAlertRow (table icon) both delegate to the shared acRequestDelete helper', () => {
+  assert.match(frontend, /function acDeleteAlert\(\) \{\s*\n\s*if \(!acActiveCommentFingerprintKey\) return;\s*\n\s*acRequestDelete\(/);
+  assert.match(frontend, /function acDeleteAlertRow\(fingerprintKey\) \{/);
+  assert.match(frontend, /const row = alertComplianceReportData\.find\(function \(r\) \{ return r\.fingerprintKey === fingerprintKey; \}\);\s*\n\s*if \(!row\) return;\s*\n\s*acRequestDelete\(/);
 });
 
 // ── Requirement: table-view delete + multi-select delete ──
@@ -507,4 +514,20 @@ test('acDeleteSelectedAlerts confirms once, posts all selected items in a single
 test('loadAlertComplianceReport resets the selection and uses a permission-aware colspan for the loading/error placeholder rows', () => {
   assert.match(frontend, /const colCount = hasPermission\('delete_alert_compliance_alerts'\) \? 11 : 10;/);
   assert.match(frontend, /acSelectedAlerts\.clear\(\);\s*\n\s*if \(tbody\) tbody\.innerHTML = '<tr><td colspan="' \+ colCount \+ '"/);
+});
+
+// ── Requirement: delete icon matching the rest of the app, in the table too ──
+
+test('the per-row delete icon uses the same 🗑 (&#128465;) style already used for delete actions elsewhere in the app (Incidents, Users, Roles, Drafts)', () => {
+  assert.match(frontend, /class="btn btn-sm" onclick="event\.stopPropagation\(\);acDeleteAlertRow\(\\''[\s\S]{0,200}background:transparent;color:#f75c7c;border:none;font-size:15px;padding:3px 7px[\s\S]{0,100}&#128465;<\/button>/);
+});
+
+test('the modal delete button is now the same icon style, not a text button', () => {
+  assert.match(html, /id="adDeleteBtn" onclick="acDeleteAlert\(\)" style="display:none;background:transparent;color:#f75c7c;border:none;font-size:15px;padding:3px 7px" title="Delete alert — admin only" aria-label="Delete alert">&#128465;<\/button>/);
+  assert.doesNotMatch(html, />Delete Alert<\/button>/);
+});
+
+test('the per-row delete icon only embeds the safe fingerprintKey (hex hash) in its onclick, never the raw fingerprint text — which can contain literal quote characters from alert subjects like "Alert \'X\' was fired" and would break the generated JS if embedded directly', () => {
+  assert.match(frontend, /function acDeleteAlertRow\(fingerprintKey\) \{/);
+  assert.doesNotMatch(frontend, /acDeleteAlertRow\(\\'' \+ escapeMetricHtml\(r\.fingerprintKey\) \+ '\\', \\''/, 'must not take a second inline argument built from raw fingerprint/subject text');
 });
