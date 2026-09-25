@@ -11116,7 +11116,7 @@ function loadAlertComplianceReport() {
   const daysEl = document.getElementById('acFilterDays');
   const days = daysEl ? daysEl.value : '14';
   const tbody = document.getElementById('acTableBody');
-  const colCount = hasPermission('delete_alert_compliance_alerts') ? 11 : 10;
+  const colCount = hasPermission('delete_alert_compliance_alerts') ? 10 : 9;
   acSelectedAlerts.clear();
   if (tbody) tbody.innerHTML = '<tr><td colspan="' + colCount + '" style="text-align:center;color:var(--text-muted);padding:20px">Loading alert activity…</td></tr>';
   fetch(window.APP_CONFIG.API_BASE_URL + '/operations-alerts?days=' + encodeURIComponent(days), {
@@ -11166,16 +11166,6 @@ function acFilterByState(state) {
   renderAlertComplianceTable();
 }
 
-function acFormatAge(firstSeen) {
-  if (!firstSeen) return '—';
-  const ms = Date.now() - new Date(firstSeen).getTime();
-  if (!Number.isFinite(ms) || ms < 0) return '—';
-  const hours = ms / 3600000;
-  if (hours < 1) return Math.round(ms / 60000) + 'm';
-  if (hours < 24) return Math.round(hours) + 'h';
-  return Math.round(hours / 24) + 'd';
-}
-
 function acFormatTimestamp(value) {
   if (!value) return '—';
   const d = new Date(value);
@@ -11193,7 +11183,7 @@ function renderAlertComplianceTable() {
   const countEl = document.getElementById('acRowCount');
   if (!tbody) return;
   const canDelete = hasPermission('delete_alert_compliance_alerts');
-  const colCount = canDelete ? 11 : 10;
+  const colCount = canDelete ? 10 : 9;
 
   const selectHeaderCell = document.getElementById('acSelectHeaderCell');
   if (selectHeaderCell) selectHeaderCell.style.display = canDelete ? '' : 'none';
@@ -11256,7 +11246,6 @@ function renderAlertComplianceTable() {
       + '<td>' + escapeMetricHtml(r.occurrenceCount) + '</td>'
       + '<td><span class="badge ' + stateClass + '">' + escapeMetricHtml(stateLabel) + '</span></td>'
       + '<td>' + incidentCell + '</td>'
-      + '<td>' + acFormatAge(r.firstSeen) + '</td>'
       + '<td>' + commentCell + '</td>'
       + '</tr>';
   }).join('');
@@ -11397,7 +11386,6 @@ function acOpenAlertDetail(fingerprintKey) {
       ['Customer', row.customer || '—'],
       ['First Seen', acFormatTimestamp(row.firstSeen)],
       ['Last Seen', acFormatTimestamp(row.lastSeen)],
-      ['Age', acFormatAge(row.firstSeen)],
       ['Repeat Count', String(row.occurrenceCount)],
       ['Incident', row.incidentRef || 'None']
     ];

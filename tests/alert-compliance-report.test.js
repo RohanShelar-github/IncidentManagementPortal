@@ -512,7 +512,7 @@ test('acDeleteSelectedAlerts confirms once, posts all selected items in a single
 });
 
 test('loadAlertComplianceReport resets the selection and uses a permission-aware colspan for the loading/error placeholder rows', () => {
-  assert.match(frontend, /const colCount = hasPermission\('delete_alert_compliance_alerts'\) \? 11 : 10;/);
+  assert.match(frontend, /const colCount = hasPermission\('delete_alert_compliance_alerts'\) \? 10 : 9;/);
   assert.match(frontend, /acSelectedAlerts\.clear\(\);\s*\n\s*if \(tbody\) tbody\.innerHTML = '<tr><td colspan="' \+ colCount \+ '"/);
 });
 
