@@ -179,17 +179,26 @@ test('comment text length and emptiness are validated server-side', () => {
 test('the frontend alert detail modal, functions, and Comments table column exist', () => {
   assert.match(html, /id="alertDetailModal"/);
   assert.match(html, /<th>Comments<\/th>/);
-  assert.match(frontend, /function acOpenAlertDetail\(fingerprintKey\) \{/);
+  assert.match(frontend, /function acOpenAlertDetail\(fingerprintKey, commentsOnly\) \{/);
   assert.match(frontend, /function acLoadComments\(fingerprintKey\) \{/);
   assert.match(frontend, /function acSubmitComment\(\) \{/);
   assert.match(frontend, /API_BASE_URL \+ '\/operations-alerts\/comments'/);
 });
 
-test('the whole row opens the alert detail view (click and Enter-key), with the incident link and comments button stopping propagation so they act independently', () => {
+test('the whole row opens the full alert detail view (click and Enter-key), with the incident link and comments button stopping propagation so they act independently', () => {
   assert.match(frontend, /return '<tr onclick="acOpenAlertDetail\(\\''/);
   assert.match(frontend, /onkeydown="if\(event\.key===\\'Enter\\'\)\{acOpenAlertDetail\(/);
-  assert.match(frontend, /'<button class="btn btn-secondary" onclick="event\.stopPropagation\(\);acOpenAlertDetail\(/);
+  assert.match(frontend, /'<button class="btn btn-secondary" onclick="event\.stopPropagation\(\);acOpenAlertComments\(/);
   assert.match(frontend, /onclick="event\.stopPropagation\(\);acOpenIncident\(\\''/);
+});
+
+test('the table\'s 💬 comment icon opens a comments-only view (acOpenAlertComments), not the full alert detail — hiding badges/meta/occurrence history/resolve/delete and showing just the Comments section', () => {
+  assert.match(frontend, /function acOpenAlertComments\(fingerprintKey\) \{\s*\n\s*acOpenAlertDetail\(fingerprintKey, true\);\s*\n\}/);
+  assert.match(html, /<div class="modal-body">\s*\n<div id="adDetailSections">/);
+  assert.match(frontend, /const detailSections = document\.getElementById\('adDetailSections'\);\s*\n\s*if \(detailSections\) detailSections\.style\.display = commentsOnly \? 'none' : '';/);
+  assert.match(frontend, /title\.textContent = commentsOnly \? 'Comments — ' \+ row\.subject : row\.subject;/);
+  assert.match(frontend, /resolveBtn\.style\.display = \(!commentsOnly && row\.state === 'went_quiet'\) \? '' : 'none';/);
+  assert.match(frontend, /deleteBtn\.style\.display = \(!commentsOnly && hasPermission\('delete_alert_compliance_alerts'\)\) \? '' : 'none';/);
 });
 
 test('the report includes per-occurrence history (timestamp + resolved flag) for the detail view', () => {
@@ -273,7 +282,7 @@ test('the frontend recognizes manually_resolved as a distinct, labeled state', (
 
 test('the Mark as Resolved button exists, is hidden by default, and only appears for went_quiet alerts', () => {
   assert.match(html, /id="adResolveBtn"[^>]*style="display:none/);
-  assert.match(frontend, /resolveBtn\.style\.display = row\.state === 'went_quiet' \? '' : 'none';/);
+  assert.match(frontend, /resolveBtn\.style\.display = \(!commentsOnly && row\.state === 'went_quiet'\) \? '' : 'none';/);
 });
 
 test('acResolveAlert does not require the shared comment textarea to be filled in, and posts to the dedicated /resolve endpoint', () => {
@@ -452,7 +461,7 @@ test('the Delete Alert Compliance Alerts permission checkbox exists in Role Mana
 
 test('the Delete Alert button is hidden by default and only shown per hasPermission, with a confirmation before deleting', () => {
   assert.match(html, /id="adDeleteBtn"[^>]*style="display:none/);
-  assert.match(frontend, /deleteBtn\.style\.display = hasPermission\('delete_alert_compliance_alerts'\) \? '' : 'none';/);
+  assert.match(frontend, /deleteBtn\.style\.display = \(!commentsOnly && hasPermission\('delete_alert_compliance_alerts'\)\) \? '' : 'none';/);
   assert.match(frontend, /function acDeleteAlert\(\) \{/);
   assert.match(frontend, /showConfirm\(\{ icon: '🗑', title: 'Delete Alert\?', msg: confirmMessage, ok: 'Delete', danger: true \}\)\.then\(function \(ok\) \{/);
   assert.doesNotMatch(frontend, /acRequestDelete[\s\S]{0,10}window\.confirm/, 'must use the in-app showConfirm modal, not the native browser confirm() dialog');

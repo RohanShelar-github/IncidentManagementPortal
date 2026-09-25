@@ -11258,7 +11258,7 @@ function renderAlertComplianceTable() {
       ? '<button class="btn btn-sm" onclick="event.stopPropagation();acDeleteAlertRow(\'' + escapeMetricHtml(r.fingerprintKey) + '\')" style="background:transparent;color:#f75c7c;border:none;font-size:15px;padding:3px 7px" title="Delete alert" aria-label="Delete alert">&#128465;</button>'
       : '';
     const commentCell = '<div style="display:flex;gap:4px;align-items:center">'
-      + '<button class="btn btn-secondary" onclick="event.stopPropagation();acOpenAlertDetail(\'' + escapeMetricHtml(r.fingerprintKey) + '\')" style="padding:3px 10px;font-size:11px" title="View or add comments">'
+      + '<button class="btn btn-secondary" onclick="event.stopPropagation();acOpenAlertComments(\'' + escapeMetricHtml(r.fingerprintKey) + '\')" style="padding:3px 10px;font-size:11px" title="View or add comments">'
       + '💬 ' + commentCount + '</button>'
       + deleteIcon
       + '</div>';
@@ -11449,14 +11449,21 @@ function acOpenIncident(incidentRef) {
 let acActiveCommentFingerprintKey = null;
 let acActiveCommentFingerprint = null;
 
-function acOpenAlertDetail(fingerprintKey) {
+// commentsOnly hides everything but the Comments section itself (badges,
+// meta grid, occurrence history, email viewer, and the resolve/delete
+// actions) — used when the user only clicked the table's 💬 comment icon
+// and isn't asking to see the alert's full detail.
+function acOpenAlertDetail(fingerprintKey, commentsOnly) {
   const row = alertComplianceReportData.find(function (r) { return r.fingerprintKey === fingerprintKey; });
   if (!row) return;
   acActiveCommentFingerprintKey = fingerprintKey;
   acActiveCommentFingerprint = row.fingerprint || '';
 
+  const detailSections = document.getElementById('adDetailSections');
+  if (detailSections) detailSections.style.display = commentsOnly ? 'none' : '';
+
   const title = document.getElementById('adTitle');
-  if (title) title.textContent = row.subject;
+  if (title) title.textContent = commentsOnly ? 'Comments — ' + row.subject : row.subject;
 
   const stateLabel = ALERT_COMPLIANCE_STATE_LABELS[row.state] || row.state;
   const stateClass = ALERT_COMPLIANCE_STATE_CLASS[row.state] || 'badge-progress';
@@ -11519,7 +11526,7 @@ function acOpenAlertDetail(fingerprintKey) {
   // Tickets never reach "went_quiet" (they use their own status below), so
   // this naturally stays hidden for them too.
   const resolveBtn = document.getElementById('adResolveBtn');
-  if (resolveBtn) resolveBtn.style.display = row.state === 'went_quiet' ? '' : 'none';
+  if (resolveBtn) resolveBtn.style.display = (!commentsOnly && row.state === 'went_quiet') ? '' : 'none';
 
   // Customer Raised Tickets (category 'jira') get a simple manually-set
   // Open / In Progress / Resolved status instead of the alert activity
@@ -11532,10 +11539,18 @@ function acOpenAlertDetail(fingerprintKey) {
   }
 
   const deleteBtn = document.getElementById('adDeleteBtn');
-  if (deleteBtn) deleteBtn.style.display = hasPermission('delete_alert_compliance_alerts') ? '' : 'none';
+  if (deleteBtn) deleteBtn.style.display = (!commentsOnly && hasPermission('delete_alert_compliance_alerts')) ? '' : 'none';
 
   openModal('alertDetailModal');
   acLoadComments(fingerprintKey);
+}
+
+// Opens the same modal as acOpenAlertDetail, but scoped to just the
+// Comments section — this is what the table's 💬 icon triggers, since
+// clicking it is a request to read/add a comment, not to see the alert's
+// full activity/occurrence detail (that's what clicking the row itself is for).
+function acOpenAlertComments(fingerprintKey) {
+  acOpenAlertDetail(fingerprintKey, true);
 }
 
 // Fetches and renders the full HTML content of one individual alert
