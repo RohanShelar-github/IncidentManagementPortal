@@ -96,13 +96,12 @@ test('alertDayKey resolves the calendar day in IST (UTC+5:30), not UTC', () => {
   assert.equal(grouping.alertDayKey('2026-09-19T18:00:00Z'), '2026-09-19');
 });
 
-test('deriveAlertState prioritizes incident creation, then a resolved signal, then recency', () => {
+test('deriveAlertState reflects only the alert\'s own activity signal — resolved, then recency — never "incident_created"', () => {
   const now = Date.parse('2026-09-20T12:00:00Z');
   const base = { hasResolvedSignal: false, lastSeen: '2026-09-20T11:50:00Z' };
-  assert.equal(grouping.deriveAlertState(base, true, now), 'incident_created');
-  assert.equal(grouping.deriveAlertState({ ...base, hasResolvedSignal: true }, false, now), 'confirmed_resolved');
-  assert.equal(grouping.deriveAlertState(base, false, now), 'actively_repeating');
-  assert.equal(grouping.deriveAlertState({ ...base, lastSeen: '2026-09-20T11:00:00Z' }, false, now), 'went_quiet');
+  assert.equal(grouping.deriveAlertState({ ...base, hasResolvedSignal: true }, now), 'confirmed_resolved');
+  assert.equal(grouping.deriveAlertState(base, now), 'actively_repeating');
+  assert.equal(grouping.deriveAlertState({ ...base, lastSeen: '2026-09-20T11:00:00Z' }, now), 'went_quiet');
 });
 
 test('the report route is gated behind the dedicated view_alert_compliance_report permission', () => {
@@ -334,4 +333,26 @@ test('the frontend category filter and display labels recognize Customer Raised 
 
 test('every Azure alert is attributed to NGC regardless of subject text, since NGC is the only customer hosted on Azure', () => {
   assert.match(reportController, /const customer = group\.category === 'azure'\s*\n\s*\? 'NGC'\s*\n\s*: \(customerMatches\[0\] \? customerMatches\[0\]\.customer_name : null\);/);
+});
+
+// ── Requirement: table STATE column shows only the real activity state; ──
+// ── "Incident Created" is surfaced separately, inside the alert detail   ──
+
+test('the controller calls deriveAlertState without hasIncident — state is never driven by incident presence', () => {
+  assert.match(reportController, /const state = deriveAlertState\(group, now\);/);
+  assert.doesNotMatch(reportController, /deriveAlertState\(group, hasIncident, now\)/);
+});
+
+test('the incidentCreated summary count is based on incidentRef presence, not on r.state (which can no longer be "incident_created")', () => {
+  assert.match(reportController, /incidentCreated: report\.filter\(\(r\) => Boolean\(r\.incidentRef\)\)\.length,/);
+});
+
+test('the frontend table filter treats "incident_created" as "has an incidentRef", not a literal state match, since r.state never equals it', () => {
+  assert.match(frontend, /if \(state === 'incident_created'\) \{ if \(!r\.incidentRef\) return false; \}/);
+  assert.match(frontend, /else if \(state && r\.state !== state\) return false;/);
+});
+
+test('the detail modal explicitly labels an incident link "Incident Created ·  <ref>" rather than a bare ref, since the STATE badge no longer conveys it', () => {
+  const occurrences = (frontend.match(/class="badge badge-closed" style="cursor:pointer;text-decoration:none">Incident Created · ' \+ escapeMetricHtml\(row\.incidentRef\)/g) || []).length;
+  assert.equal(occurrences, 2, 'both acOpenAlertDetail and acResolveAlert must render the explicit incident-created label');
 });

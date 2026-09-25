@@ -69,8 +69,7 @@ const getAlertComplianceReport = async (req, res) => {
     const now = Date.now();
     const report = groups.map((group) => {
       const linkedIncidentRef = group.messageIds.map((id) => incidentByMessageId.get(id)).find(Boolean) || null;
-      const hasIncident = Boolean(linkedIncidentRef);
-      const state = deriveAlertState(group, hasIncident, now);
+      const state = deriveAlertState(group, now);
       const customerMatches = matchingCustomersByName(customerRows, group.sampleSubject);
       // Azure alert subjects rarely name a customer explicitly (e.g. "Azure:
       // Activated Severity: 0 SHO No Historian Read"), so subject matching
@@ -122,9 +121,8 @@ const getAlertComplianceReport = async (req, res) => {
       );
       const resolvedKeys = new Set(resolvedRows.map((row) => row.fingerprint_key));
       // A manual resolution only changes the displayed state for alerts
-      // that were otherwise stuck at "went_quiet" — it never overrides a
-      // group that already has a real incident or an automatic resolved
-      // signal, since those outcomes are more authoritative.
+      // that were otherwise stuck at "went_quiet" — it never overrides an
+      // automatic resolved signal, since that outcome is more authoritative.
       report.forEach((r) => { if (r.state === 'went_quiet' && resolvedKeys.has(r.fingerprintKey)) r.state = 'manually_resolved'; });
     }
 
@@ -132,7 +130,12 @@ const getAlertComplianceReport = async (req, res) => {
       wentQuiet: report.filter((r) => r.state === 'went_quiet').length,
       activelyRepeating: report.filter((r) => r.state === 'actively_repeating').length,
       confirmedResolved: report.filter((r) => r.state === 'confirmed_resolved').length,
-      incidentCreated: report.filter((r) => r.state === 'incident_created').length,
+      // "Incident Created" is not one of the activity states above — an
+      // alert that led to an incident still shows its real activity state
+      // (e.g. went_quiet, actively_repeating) in the table; this count is
+      // purely "how many alert groups have an incidentRef at all", shown
+      // only in the summary tile / detail view, never in the STATE column.
+      incidentCreated: report.filter((r) => Boolean(r.incidentRef)).length,
       manuallyResolved: report.filter((r) => r.state === 'manually_resolved').length
     };
 

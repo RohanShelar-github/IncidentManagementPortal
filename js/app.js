@@ -11181,7 +11181,12 @@ function renderAlertComplianceTable() {
   const customer = document.getElementById('acFilterCustomer')?.value || '';
   const rows = alertComplianceReportData.filter(function (r) {
     if (category && r.category !== category) return false;
-    if (state && r.state !== state) return false;
+    // "Incident Created" is not a real activity state (see
+    // operationsAlertGroupingService.deriveAlertState) — it's a separate
+    // fact shown in the detail view, so filtering by it means "has an
+    // incidentRef at all", not a literal r.state match.
+    if (state === 'incident_created') { if (!r.incidentRef) return false; }
+    else if (state && r.state !== state) return false;
     if (customer && r.customer !== customer) return false;
     return true;
   });
@@ -11243,7 +11248,7 @@ function acOpenAlertDetail(fingerprintKey) {
   if (badges) {
     badges.innerHTML = '<span class="badge ' + stateClass + '">' + escapeMetricHtml(stateLabel) + '</span>'
       + '<span class="badge badge-medium">' + escapeMetricHtml(acCategoryLabel(row.category)) + '</span>'
-      + (row.incidentRef ? '<a href="javascript:void(0)" onclick="acOpenIncident(\'' + escapeMetricHtml(row.incidentRef) + '\')" class="badge badge-closed" style="cursor:pointer;text-decoration:none">' + escapeMetricHtml(row.incidentRef) + '</a>' : '');
+      + (row.incidentRef ? '<a href="javascript:void(0)" onclick="acOpenIncident(\'' + escapeMetricHtml(row.incidentRef) + '\')" class="badge badge-closed" style="cursor:pointer;text-decoration:none">Incident Created · ' + escapeMetricHtml(row.incidentRef) + '</a>' : '');
   }
 
   const meta = document.getElementById('adMetaGrid');
@@ -11436,7 +11441,7 @@ function acResolveAlert() {
         const stateClass = ALERT_COMPLIANCE_STATE_CLASS[row.state] || 'badge-progress';
         badges.innerHTML = '<span class="badge ' + stateClass + '">' + escapeMetricHtml(stateLabel) + '</span>'
           + '<span class="badge badge-medium">' + escapeMetricHtml(acCategoryLabel(row.category)) + '</span>'
-          + (row.incidentRef ? '<a href="javascript:void(0)" onclick="acOpenIncident(\'' + escapeMetricHtml(row.incidentRef) + '\')" class="badge badge-closed" style="cursor:pointer;text-decoration:none">' + escapeMetricHtml(row.incidentRef) + '</a>' : '');
+          + (row.incidentRef ? '<a href="javascript:void(0)" onclick="acOpenIncident(\'' + escapeMetricHtml(row.incidentRef) + '\')" class="badge badge-closed" style="cursor:pointer;text-decoration:none">Incident Created · ' + escapeMetricHtml(row.incidentRef) + '</a>' : '');
       }
       const resolveBtn = document.getElementById('adResolveBtn');
       if (resolveBtn) resolveBtn.style.display = 'none';

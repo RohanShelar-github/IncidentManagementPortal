@@ -132,11 +132,15 @@ function fingerprintKey(fingerprint) {
   return crypto.createHash('sha256').update(String(fingerprint || '')).digest('hex');
 }
 
-// hasIncident is supplied by the caller (a DB lookup against
-// operations_email_incident_audit / incident_drafts) — this function stays
-// pure and DB-agnostic so it can be unit tested without a database.
-function deriveAlertState(group, hasIncident, now = Date.now()) {
-  if (hasIncident) return 'incident_created';
+// Reflects the alert's own activity/resolution signal only — never
+// "incident_created". Whether an incident exists is a separate, orthogonal
+// fact (the caller attaches it as incidentRef), shown in the alert's detail
+// view rather than replacing its real activity state in the table: an
+// alert that already led to an incident can still legitimately be
+// "actively_repeating" or "went_quiet" depending on whether it's still
+// firing, and collapsing that into a single "Incident Created" state hid
+// that signal.
+function deriveAlertState(group, now = Date.now()) {
   if (group.hasResolvedSignal) return 'confirmed_resolved';
   const lastSeenMs = group.lastSeen ? new Date(group.lastSeen).getTime() : NaN;
   const minutesSinceLastSeen = Number.isFinite(lastSeenMs) ? (now - lastSeenMs) / 60000 : Infinity;
