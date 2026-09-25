@@ -626,8 +626,8 @@ test('acStateLabel: confirmed_resolved/manually_resolved with an incidentRef sho
   assert.match(body, /return ALERT_COMPLIANCE_STATE_LABELS\[r\.state\] \|\| r\.state;/);
 });
 
-test('the table, the detail modal, and acResolveAlert\'s local badge update all use acStateLabel instead of the raw ALERT_COMPLIANCE_STATE_LABELS lookup, so the incident-aware label is consistent everywhere the STATE badge is rendered', () => {
-  assert.match(frontend, /tbody\.innerHTML = pageRows\.map\(function \(r\) \{\s*\n\s*const stateLabel = acStateLabel\(r\);/);
+test('the table uses acTableStateLabel, and the detail modal + acResolveAlert\'s local badge update use acStateLabel, instead of the raw ALERT_COMPLIANCE_STATE_LABELS lookup, so the incident-aware label is consistent everywhere the STATE badge is rendered', () => {
+  assert.match(frontend, /tbody\.innerHTML = pageRows\.map\(function \(r\) \{\s*\n\s*const stateLabel = acTableStateLabel\(r\);/);
   assert.match(frontend, /const stateLabel = acStateLabel\(row\);\s*\n\s*const stateClass = ALERT_COMPLIANCE_STATE_CLASS\[row\.state\] \|\| 'badge-progress';\s*\n\s*const badges = document\.getElementById\('adBadges'\);\s*\n\s*if \(badges\) \{/);
   assert.match(frontend, /const badges = document\.getElementById\('adBadges'\);\s*\n\s*if \(badges && row\) \{\s*\n\s*const stateLabel = acStateLabel\(row\);/);
   // acUpdateTicketStatus deals with open/in_progress/resolved ticket
@@ -702,4 +702,21 @@ test('acSortRows sorts a copy of the array (never mutates the input) by acSortCo
 
 test('renderAlertComplianceTable updates each ac-sort-th header\'s arrow (↑/↓) and highlight to reflect the current acSortCol/acSortDir', () => {
   assert.match(frontend, /document\.querySelectorAll\('\.ac-sort-th'\)\.forEach\(function \(th\) \{\s*\n\s*const col = th\.dataset\.col;\s*\n\s*const arrow = col === acSortCol \? \(acSortDir === 'asc' \? ' ↑' : ' ↓'\) : '';\s*\n\s*th\.textContent = th\.textContent\.replace\(\/ \[↑↓\]\$\/, ''\) \+ arrow;\s*\n\s*th\.style\.color = col === acSortCol \? 'var\(--accent\)' : '';\s*\n\s*\}\);/);
+});
+
+// ── Requirement: table STATE column shows "went_quiet" as just "Active" ──
+// ── until resolved; the specific "Went Quiet — Unconfirmed" wording only ──
+// ── appears once the alert is opened in the detail view                 ──
+
+test('acTableStateLabel relabels went_quiet as "Active" but otherwise delegates to acStateLabel unchanged (so Resolved/Action Taken & Resolved/etc. still show as before)', () => {
+  assert.match(frontend, /function acTableStateLabel\(r\) \{\s*\n\s*if \(r\.state === 'went_quiet'\) return 'Active';\s*\n\s*return acStateLabel\(r\);\s*\n\}/);
+});
+
+test('the table row uses acTableStateLabel, while the detail modal open and acResolveAlert\'s local badge update still use the unmodified acStateLabel — so "Went Quiet — Unconfirmed" only ever appears once you open the alert', () => {
+  assert.match(frontend, /tbody\.innerHTML = pageRows\.map\(function \(r\) \{\s*\n\s*const stateLabel = acTableStateLabel\(r\);/);
+  // acOpenAlertDetail's badge build and acResolveAlert's local badge
+  // refresh must be the only two remaining acStateLabel(row) call sites —
+  // acTableStateLabel is only for the table.
+  const stateLabelCalls = frontend.match(/const stateLabel = acStateLabel\(row\);/g) || [];
+  assert.equal(stateLabelCalls.length, 2, 'expected exactly two remaining acStateLabel(row) call sites (detail modal open + acResolveAlert badge refresh)');
 });

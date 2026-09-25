@@ -11133,6 +11133,15 @@ function acStateLabel(r) {
   }
   return ALERT_COMPLIANCE_STATE_LABELS[r.state] || r.state;
 }
+// The table's STATE column keeps "went_quiet" simply labeled "Active" —
+// it hasn't been resolved (manually or automatically) yet, so surfacing the
+// more specific "Went Quiet — Unconfirmed" wording only matters once
+// someone opens the alert to investigate; the full detail view (and its
+// badges) still shows that exact wording via acStateLabel unchanged.
+function acTableStateLabel(r) {
+  if (r.state === 'went_quiet') return 'Active';
+  return acStateLabel(r);
+}
 function acCategoryLabel(category) {
   return ALERT_COMPLIANCE_CATEGORY_LABELS[category] || category;
 }
@@ -11315,7 +11324,7 @@ function renderAlertComplianceTable() {
   const pageStart = (acCurrentPage - 1) * acPerPage;
   const pageRows = sortedRows.slice(pageStart, pageStart + acPerPage);
   tbody.innerHTML = pageRows.map(function (r) {
-    const stateLabel = acStateLabel(r);
+    const stateLabel = acTableStateLabel(r);
     const stateClass = ALERT_COMPLIANCE_STATE_CLASS[r.state] || 'badge-progress';
     // The incident link must stop the click from bubbling up to the row's
     // own onclick — otherwise navigating to the incident would also pop
