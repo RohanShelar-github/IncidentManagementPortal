@@ -11191,6 +11191,30 @@ let acSelectedAlerts = new Set();
 let acCurrentPage = 1;
 let acPerPage = 25;
 
+// Shared by the table render and "select all", so the two can never
+// silently drift out of sync on which rows count as "currently filtered".
+function acRowMatchesFilters(r) {
+  const category = document.getElementById('acFilterCategory')?.value || '';
+  const state = document.getElementById('acFilterState')?.value || '';
+  const customer = document.getElementById('acFilterCustomer')?.value || '';
+  const dateFrom = document.getElementById('acFilterDateFrom')?.value || '';
+  const dateTo = document.getElementById('acFilterDateTo')?.value || '';
+  if (category && r.category !== category) return false;
+  // "Incident Created" is not a real activity state (see
+  // operationsAlertGroupingService.deriveAlertState) — it's a separate
+  // fact shown in the detail view, so filtering by it means "has an
+  // incidentRef at all", not a literal r.state match.
+  if (state === 'incident_created') { if (!r.incidentRef) return false; }
+  else if (state && r.state !== state) return false;
+  if (customer && r.customer !== customer) return false;
+  // r.day is the group's IST calendar-day key (YYYY-MM-DD), already
+  // computed server-side — same format as the date inputs' values, so it
+  // compares lexically without any parsing.
+  if (dateFrom && r.day < dateFrom) return false;
+  if (dateTo && r.day > dateTo) return false;
+  return true;
+}
+
 function renderAlertComplianceTable() {
   const tbody = document.getElementById('acTableBody');
   const countEl = document.getElementById('acRowCount');
@@ -11202,20 +11226,7 @@ function renderAlertComplianceTable() {
   if (selectHeaderCell) selectHeaderCell.style.display = canDelete ? '' : 'none';
   if (!canDelete) acSelectedAlerts.clear();
 
-  const category = document.getElementById('acFilterCategory')?.value || '';
-  const state = document.getElementById('acFilterState')?.value || '';
-  const customer = document.getElementById('acFilterCustomer')?.value || '';
-  const rows = alertComplianceReportData.filter(function (r) {
-    if (category && r.category !== category) return false;
-    // "Incident Created" is not a real activity state (see
-    // operationsAlertGroupingService.deriveAlertState) — it's a separate
-    // fact shown in the detail view, so filtering by it means "has an
-    // incidentRef at all", not a literal r.state match.
-    if (state === 'incident_created') { if (!r.incidentRef) return false; }
-    else if (state && r.state !== state) return false;
-    if (customer && r.customer !== customer) return false;
-    return true;
-  });
+  const rows = alertComplianceReportData.filter(acRowMatchesFilters);
   // Drop selections for rows no longer visible under the current filter, so
   // "select all" + delete never silently acts on something hidden.
   const visibleKeys = new Set(rows.map(function (r) { return r.fingerprintKey; }));
@@ -11342,16 +11353,7 @@ function acRenderPagination(total) {
 }
 
 function acToggleSelectAll(checked) {
-  const category = document.getElementById('acFilterCategory')?.value || '';
-  const state = document.getElementById('acFilterState')?.value || '';
-  const customer = document.getElementById('acFilterCustomer')?.value || '';
-  alertComplianceReportData.filter(function (r) {
-    if (category && r.category !== category) return false;
-    if (state === 'incident_created') { if (!r.incidentRef) return false; }
-    else if (state && r.state !== state) return false;
-    if (customer && r.customer !== customer) return false;
-    return true;
-  }).forEach(function (r) {
+  alertComplianceReportData.filter(acRowMatchesFilters).forEach(function (r) {
     if (checked) acSelectedAlerts.add(r.fingerprintKey); else acSelectedAlerts.delete(r.fingerprintKey);
   });
   renderAlertComplianceTable();

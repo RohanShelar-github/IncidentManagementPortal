@@ -500,10 +500,21 @@ test('selections are dropped for rows no longer visible under the active filter,
   assert.match(frontend, /acSelectedAlerts\.forEach\(function \(key\) \{ if \(!visibleKeys\.has\(key\)\) acSelectedAlerts\.delete\(key\); \}\);/);
 });
 
-test('acToggleSelectAll only selects rows matching the current category/state/customer filters, mirroring renderAlertComplianceTable\'s own filter logic', () => {
-  assert.match(frontend, /function acToggleSelectAll\(checked\) \{/);
-  const body = frontend.slice(frontend.indexOf('function acToggleSelectAll'), frontend.indexOf('function acToggleRowSelect'));
-  assert.match(body, /if \(state === 'incident_created'\)/);
+test('acToggleSelectAll only selects rows matching the current filters, via the same acRowMatchesFilters predicate used by renderAlertComplianceTable (so the two can never drift out of sync)', () => {
+  assert.match(frontend, /function acToggleSelectAll\(checked\) \{\s*\n\s*alertComplianceReportData\.filter\(acRowMatchesFilters\)\.forEach\(function \(r\) \{/);
+  assert.match(frontend, /function acRowMatchesFilters\(r\) \{/);
+  assert.match(frontend, /if \(state === 'incident_created'\)/);
+  assert.match(frontend, /const rows = alertComplianceReportData\.filter\(acRowMatchesFilters\);/);
+});
+
+test('acRowMatchesFilters also filters by a From/To date range against the group\'s IST day key (r.day), matching the date inputs\' YYYY-MM-DD format', () => {
+  assert.match(frontend, /const dateFrom = document\.getElementById\('acFilterDateFrom'\)\?\.value \|\| '';/);
+  assert.match(frontend, /const dateTo = document\.getElementById\('acFilterDateTo'\)\?\.value \|\| '';/);
+  assert.match(frontend, /if \(dateFrom && r\.day < dateFrom\) return false;/);
+  assert.match(frontend, /if \(dateTo && r\.day > dateTo\) return false;/);
+  assert.match(html, /<input id="acFilterDateFrom" onchange="acFilterChanged\(\)" type="date"\/>/);
+  assert.match(html, /<input id="acFilterDateTo" onchange="acFilterChanged\(\)" type="date"\/>/);
+  assert.match(reportController, /day: group\.day,/, 'the report row must expose the IST day key the date filter relies on');
 });
 
 test('acDeleteSelectedAlerts confirms once (via the shared acRequestDelete helper), posts all selected items in a single bulk request, and clears the selection on success', () => {
