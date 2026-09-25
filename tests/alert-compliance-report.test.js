@@ -60,6 +60,7 @@ test('groupMessagesIntoAlerts collapses a real 35-repeat alert into a single gro
   assert.equal(groups[0].occurrenceCount, 35);
   assert.equal(groups[0].messageIds.length, 35);
   assert.equal(groups[0].hasResolvedSignal, false);
+  assert.equal(groups[0].lastOccurrenceResolved, false);
 });
 
 test('groupMessagesIntoAlerts pairs a firing/resolved pair from different providers into distinct groups', () => {
@@ -74,6 +75,21 @@ test('groupMessagesIntoAlerts pairs a firing/resolved pair from different provid
   assert.ok(historianGroup);
   assert.equal(historianGroup.occurrenceCount, 2);
   assert.equal(historianGroup.hasResolvedSignal, true);
+  assert.equal(historianGroup.lastOccurrenceResolved, true, 'the resolved message here is also chronologically the latest one');
+});
+
+test('groupMessagesIntoAlerts.lastOccurrenceResolved reflects the chronologically LATEST message\'s resolved flag, not whichever message happens to be resolved or processed last — a fired message received after an earlier resolved one must flip it back to false', () => {
+  const messages = [
+    { id: 'r1', from: 'azure@example.com', subject: "Alert 'Node Memory' was fired", receivedAt: '2026-09-20T04:55:00Z', category: 'azure' },
+    { id: 'r2', from: 'azure@example.com', subject: "Alert 'Node Memory' was resolved", receivedAt: '2026-09-20T05:02:00Z', category: 'azure' },
+    { id: 'r3', from: 'azure@example.com', subject: "Alert 'Node Memory' was fired", receivedAt: '2026-09-20T15:21:00Z', category: 'azure' },
+    { id: 'r4', from: 'azure@example.com', subject: "Alert 'Node Memory' was fired", receivedAt: '2026-09-20T15:41:00Z', category: 'azure' }
+  ];
+  const groups = grouping.groupMessagesIntoAlerts(messages);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].hasResolvedSignal, true, 'it did resolve once, so this historical flag stays true');
+  assert.equal(groups[0].lastOccurrenceResolved, false, 'but the latest message (15:41) is a fresh fire, so the current signal must be false');
+  assert.equal(grouping.deriveAlertState(groups[0], Date.parse('2026-09-20T15:45:00Z')), 'actively_repeating');
 });
 
 test('groupMessagesIntoAlerts splits the same alert into separate groups per IST calendar day', () => {
@@ -97,12 +113,22 @@ test('alertDayKey resolves the calendar day in IST (UTC+5:30), not UTC', () => {
   assert.equal(grouping.alertDayKey('2026-09-19T18:00:00Z'), '2026-09-19');
 });
 
-test('deriveAlertState reflects only the alert\'s own activity signal — resolved, then recency — never "incident_created"', () => {
+test('deriveAlertState reflects only the alert\'s own activity signal — whether the LATEST occurrence resolved, then recency — never "incident_created"', () => {
   const now = Date.parse('2026-09-20T12:00:00Z');
-  const base = { hasResolvedSignal: false, lastSeen: '2026-09-20T11:50:00Z' };
-  assert.equal(grouping.deriveAlertState({ ...base, hasResolvedSignal: true }, now), 'confirmed_resolved');
+  const base = { lastOccurrenceResolved: false, lastSeen: '2026-09-20T11:50:00Z' };
+  assert.equal(grouping.deriveAlertState({ ...base, lastOccurrenceResolved: true }, now), 'confirmed_resolved');
   assert.equal(grouping.deriveAlertState(base, now), 'actively_repeating');
   assert.equal(grouping.deriveAlertState({ ...base, lastSeen: '2026-09-20T11:00:00Z' }, now), 'went_quiet');
+});
+
+test('deriveAlertState is NOT fooled by a resolved signal that happened earlier if the alert has since fired again — a re-fire after resolving means it\'s actively repeating again, not resolved', () => {
+  const now = Date.parse('2026-09-20T12:00:00Z');
+  // hasResolvedSignal is still true here (it DID resolve once), but the
+  // latest occurrence is a fresh fire, so the current state must not be
+  // "confirmed_resolved" — this is the exact bug: a group with an earlier
+  // resolved email and a later re-fire must show as still firing.
+  const reFired = { hasResolvedSignal: true, lastOccurrenceResolved: false, lastSeen: '2026-09-20T11:55:00Z' };
+  assert.equal(grouping.deriveAlertState(reFired, now), 'actively_repeating');
 });
 
 test('the report route is gated behind the dedicated view_alert_compliance_report permission', () => {

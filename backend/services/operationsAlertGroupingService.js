@@ -116,6 +116,13 @@ function groupMessagesIntoAlerts(messages) {
         lastSeen: receivedAt,
         occurrenceCount: 0,
         hasResolvedSignal: false,
+        // Whether the chronologically LATEST occurrence (not just whichever
+        // message happened to be processed last — Graph pages aren't always
+        // strictly ordered) is itself a resolved-variant. An alert that
+        // resolved once but then fired again later is firing again, not
+        // resolved, so only this — not "was ever resolved at some point" —
+        // may drive the state below.
+        lastOccurrenceResolved: resolved,
         messageIds: [],
         occurrences: []
       };
@@ -126,7 +133,10 @@ function groupMessagesIntoAlerts(messages) {
     group.occurrences.push({ id: message.id, receivedAt, subject: String(message.subject || ''), resolved });
     if (resolved) group.hasResolvedSignal = true;
     if (receivedAt && (!group.firstSeen || new Date(receivedAt) < new Date(group.firstSeen))) group.firstSeen = receivedAt;
-    if (receivedAt && (!group.lastSeen || new Date(receivedAt) > new Date(group.lastSeen))) group.lastSeen = receivedAt;
+    if (receivedAt && (!group.lastSeen || new Date(receivedAt) > new Date(group.lastSeen))) {
+      group.lastSeen = receivedAt;
+      group.lastOccurrenceResolved = resolved;
+    }
   });
   return Array.from(groups.values());
 }
@@ -148,7 +158,7 @@ function fingerprintKey(fingerprint) {
 // firing, and collapsing that into a single "Incident Created" state hid
 // that signal.
 function deriveAlertState(group, now = Date.now()) {
-  if (group.hasResolvedSignal) return 'confirmed_resolved';
+  if (group.lastOccurrenceResolved) return 'confirmed_resolved';
   const lastSeenMs = group.lastSeen ? new Date(group.lastSeen).getTime() : NaN;
   const minutesSinceLastSeen = Number.isFinite(lastSeenMs) ? (now - lastSeenMs) / 60000 : Infinity;
   return minutesSinceLastSeen > QUIET_THRESHOLD_MINUTES ? 'went_quiet' : 'actively_repeating';
