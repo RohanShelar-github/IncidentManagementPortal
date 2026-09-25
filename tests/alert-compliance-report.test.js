@@ -592,12 +592,11 @@ test('loadAlertComplianceReport and acFilterByState both reset acCurrentPage bac
 
 // ── Requirement: STATE badge distinguishes a real incident follow-up ──────
 
-test('acStateLabel: confirmed_resolved/manually_resolved with an incidentRef show "Action Taken & Resolved"; confirmed_resolved without one shows the plainer "Resolved"; manually_resolved without one keeps its own label', () => {
+test('acStateLabel: confirmed_resolved/manually_resolved with an incidentRef show "Action Taken & Resolved"; either state without one shows the plainer "Resolved" regardless of which resolved state it is', () => {
   assert.match(frontend, /function acStateLabel\(r\) \{/);
   const body = frontend.slice(frontend.indexOf('function acStateLabel'), frontend.indexOf('function acStateLabel') + 500);
   assert.match(body, /if \(r\.state === 'confirmed_resolved' \|\| r\.state === 'manually_resolved'\) \{/);
-  assert.match(body, /if \(r\.incidentRef\) return 'Action Taken & Resolved';/);
-  assert.match(body, /if \(r\.state === 'confirmed_resolved'\) return 'Resolved';/);
+  assert.match(body, /return r\.incidentRef \? 'Action Taken & Resolved' : 'Resolved';/);
   assert.match(body, /return ALERT_COMPLIANCE_STATE_LABELS\[r\.state\] \|\| r\.state;/);
 });
 

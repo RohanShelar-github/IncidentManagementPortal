@@ -11104,18 +11104,15 @@ const ALERT_COMPLIANCE_CATEGORY_LABELS = {
   jira: 'Customer Raised Tickets'
 };
 
-// The STATE badge text for confirmed_resolved/manually_resolved gets more
-// specific once an incident actually exists for the alert — "resolved" on
-// its own doesn't say whether that resolution led to real follow-up action,
-// so an alert with a linked incident is called out as "Action Taken &
-// Resolved" regardless of which of the two resolved states it's in. Without
-// an incident, confirmed_resolved (an automatic resolved-signal email, no
-// human involved) is shown as the plainer "Resolved"; manually_resolved
-// keeps its own label since a human already recorded why in a comment.
+// The STATE badge text for confirmed_resolved/manually_resolved only cares
+// whether an incident actually exists for the alert, not which of the two
+// resolved states it's in — "resolved" on its own doesn't say whether that
+// resolution led to real follow-up action, so an alert with a linked
+// incident is called out as "Action Taken & Resolved", and one without is
+// just "Resolved" either way.
 function acStateLabel(r) {
   if (r.state === 'confirmed_resolved' || r.state === 'manually_resolved') {
-    if (r.incidentRef) return 'Action Taken & Resolved';
-    if (r.state === 'confirmed_resolved') return 'Resolved';
+    return r.incidentRef ? 'Action Taken & Resolved' : 'Resolved';
   }
   return ALERT_COMPLIANCE_STATE_LABELS[r.state] || r.state;
 }
