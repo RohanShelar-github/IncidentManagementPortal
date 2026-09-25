@@ -67,7 +67,7 @@ const getAlertComplianceReport = async (req, res) => {
     // instead of one row averaging first/last-seen across the whole window.
     const groups = groupMessagesIntoAlerts(annotated);
     const now = Date.now();
-    const report = groups.map((group) => {
+    let report = groups.map((group) => {
       const linkedIncidentRef = group.messageIds.map((id) => incidentByMessageId.get(id)).find(Boolean) || null;
       const state = deriveAlertState(group, now);
       const customerMatches = matchingCustomersByName(customerRows, group.sampleSubject);
@@ -102,6 +102,20 @@ const getAlertComplianceReport = async (req, res) => {
       };
     }).sort((a, b) => new Date(b.lastSeen) - new Date(a.lastSeen));
 
+    // Alert groups are computed fresh from the mailbox on every request —
+    // there is no persisted row to literally delete — so a deletion is
+    // recorded as a suppression list, and any group whose fingerprintKey is
+    // in it is filtered out of the report entirely before anything else
+    // reads it, as if it were never there.
+    if (report.length) {
+      const [deletedRows] = await pool.query(
+        'SELECT fingerprint_key FROM operations_alert_deletions WHERE fingerprint_key IN (?)',
+        [report.map((r) => r.fingerprintKey)]
+      );
+      const deletedKeys = new Set(deletedRows.map((row) => row.fingerprint_key));
+      if (deletedKeys.size) report = report.filter((r) => !deletedKeys.has(r.fingerprintKey));
+    }
+
     // Attach a comment count, and whether a group has been manually marked
     // resolved (see resolveAlertManually below), per alert group so the
     // report table can show both without a separate round trip per row.
@@ -124,6 +138,17 @@ const getAlertComplianceReport = async (req, res) => {
       // that were otherwise stuck at "went_quiet" — it never overrides an
       // automatic resolved signal, since that outcome is more authoritative.
       report.forEach((r) => { if (r.state === 'went_quiet' && resolvedKeys.has(r.fingerprintKey)) r.state = 'manually_resolved'; });
+
+      // Customer Raised Tickets (Jira) don't have a reliable "resolved"
+      // email signal the way monitoring alerts do, so they use a simple,
+      // manually-set status instead of the derived activity state above —
+      // defaulting to "open" until someone changes it via updateTicketStatus.
+      const [ticketStatusRows] = await pool.query(
+        'SELECT fingerprint_key, status FROM operations_alert_ticket_status WHERE fingerprint_key IN (?)',
+        [keys]
+      );
+      const statusByKey = new Map(ticketStatusRows.map((row) => [row.fingerprint_key, row.status]));
+      report.forEach((r) => { if (r.category === 'jira') r.state = statusByKey.get(r.fingerprintKey) || 'open'; });
     }
 
     const summary = {
@@ -239,6 +264,61 @@ const resolveAlertManually = async (req, res) => {
   }
 };
 
+// Sets the manually-tracked status for a Customer Raised Ticket (category
+// 'jira') group. Tickets don't use the auto-derived alert activity state
+// (see getAlertComplianceReport) — this is their only status signal, always
+// starting at "open" until changed here.
+const TICKET_STATUSES = new Set(['open', 'in_progress', 'resolved']);
+
+const updateTicketStatus = async (req, res) => {
+  try {
+    const key = String(req.body.fingerprintKey || '').trim().toLowerCase();
+    const fingerprint = String(req.body.fingerprint || '').trim();
+    const status = String(req.body.status || '').trim().toLowerCase();
+    if (!FINGERPRINT_KEY_PATTERN.test(key)) {
+      return res.status(400).json({ success: false, message: 'A valid fingerprintKey is required' });
+    }
+    if (!TICKET_STATUSES.has(status)) {
+      return res.status(400).json({ success: false, message: 'Status must be one of open, in_progress, resolved' });
+    }
+
+    await pool.query(
+      `INSERT INTO operations_alert_ticket_status (fingerprint_key, alert_fingerprint, status, updated_by)
+       VALUES (?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE status = VALUES(status), updated_by = VALUES(updated_by), updated_at = CURRENT_TIMESTAMP`,
+      [key, fingerprint.slice(0, 1000) || null, status, req.user.id]
+    );
+    res.json({ success: true, message: 'Ticket status updated', data: { status } });
+  } catch (error) {
+    console.error('Update ticket status error:', error.message);
+    res.status(500).json({ success: false, message: 'Unable to update the ticket status' });
+  }
+};
+
+// Admin-only: removes a false/irrelevant alert group from the report. See
+// the comment above the deletion filter in getAlertComplianceReport for why
+// this is a suppression list rather than a literal row delete.
+const deleteAlert = async (req, res) => {
+  try {
+    const key = String(req.body.fingerprintKey || '').trim().toLowerCase();
+    const fingerprint = String(req.body.fingerprint || '').trim();
+    if (!FINGERPRINT_KEY_PATTERN.test(key)) {
+      return res.status(400).json({ success: false, message: 'A valid fingerprintKey is required' });
+    }
+
+    await pool.query(
+      `INSERT INTO operations_alert_deletions (fingerprint_key, alert_fingerprint, deleted_by)
+       VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE deleted_by = VALUES(deleted_by), deleted_at = CURRENT_TIMESTAMP`,
+      [key, fingerprint.slice(0, 1000) || null, req.user.id]
+    );
+    res.json({ success: true, message: 'Alert removed from the report' });
+  } catch (error) {
+    console.error('Delete alert error:', error.message);
+    res.status(500).json({ success: false, message: 'Unable to delete this alert' });
+  }
+};
+
 // Full content (HTML body + attachments) of one individual alert notification
 // email, for the report's detail view. Reuses emailService.getInboxMessage —
 // the same Graph fetch the Mailbox page uses — but is exposed on this
@@ -261,4 +341,4 @@ const getAlertMessage = async (req, res) => {
   }
 };
 
-module.exports = { getAlertComplianceReport, listAlertComments, addAlertComment, resolveAlertManually, getAlertMessage };
+module.exports = { getAlertComplianceReport, listAlertComments, addAlertComment, resolveAlertManually, updateTicketStatus, deleteAlert, getAlertMessage };

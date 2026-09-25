@@ -3874,13 +3874,14 @@ const PERM_LABELS = {
   manage_data: 'Manage Data',
   manage_customer_csm: 'Manage Customer CSM',
   view_alert_compliance_report: 'View Alert Compliance Report',
+  delete_alert_compliance_alerts: 'Delete Alert Compliance Alerts',
 };
 
 let roles = [
   {
     key: 'admin', name: 'Admin', icon: '🛡', color: 'purple', system: true,
     desc: 'Full access to all portal features including user and role management.',
-    perms: ['view_dashboard', ...DASHBOARD_CARD_PERMISSIONS, 'view_incidents', 'create_incidents', 'edit_incidents', 'close_incidents', 'delete_incidents', 'view_reports', 'export_reports', 'view_customer360', 'view_mailbox', 'send_mailbox', 'delete_mailbox', 'view_drafts', 'delete_drafts', 'manage_users', 'manage_roles', 'assign_roles', 'manage_data', 'manage_customer_csm', 'view_alert_compliance_report']
+    perms: ['view_dashboard', ...DASHBOARD_CARD_PERMISSIONS, 'view_incidents', 'create_incidents', 'edit_incidents', 'close_incidents', 'delete_incidents', 'view_reports', 'export_reports', 'view_customer360', 'view_mailbox', 'send_mailbox', 'delete_mailbox', 'view_drafts', 'delete_drafts', 'manage_users', 'manage_roles', 'assign_roles', 'manage_data', 'manage_customer_csm', 'view_alert_compliance_report', 'delete_alert_compliance_alerts']
   },
   {
     key: 'cso', name: 'CSO', icon: '🌐', color: 'green', system: false,
@@ -11080,14 +11081,22 @@ const ALERT_COMPLIANCE_STATE_LABELS = {
   actively_repeating: 'Actively Repeating',
   confirmed_resolved: 'Confirmed Resolved',
   incident_created: 'Incident Created',
-  manually_resolved: 'Manually Resolved'
+  manually_resolved: 'Manually Resolved',
+  // Customer Raised Tickets (category 'jira') use this simple manually-set
+  // status instead of the auto-derived activity states above.
+  open: 'Open',
+  in_progress: 'In Progress',
+  resolved: 'Resolved'
 };
 const ALERT_COMPLIANCE_STATE_CLASS = {
   went_quiet: 'badge-critical',
   actively_repeating: 'badge-high',
   confirmed_resolved: 'badge-closed',
   incident_created: 'badge-progress',
-  manually_resolved: 'badge-closed'
+  manually_resolved: 'badge-closed',
+  open: 'badge-critical',
+  in_progress: 'badge-high',
+  resolved: 'badge-closed'
 };
 const ALERT_COMPLIANCE_CATEGORY_LABELS = {
   coralogix: 'Coralogix',
@@ -11303,9 +11312,24 @@ function acOpenAlertDetail(fingerprintKey) {
 
   // Manual resolution only makes sense for alerts stuck at "went_quiet" —
   // anything already resolved (automatically or manually) or already
-  // tracked as an incident has no "resolve" action.
+  // tracked as an incident has no "resolve" action. Customer Raised
+  // Tickets never reach "went_quiet" (they use their own status below), so
+  // this naturally stays hidden for them too.
   const resolveBtn = document.getElementById('adResolveBtn');
   if (resolveBtn) resolveBtn.style.display = row.state === 'went_quiet' ? '' : 'none';
+
+  // Customer Raised Tickets (category 'jira') get a simple manually-set
+  // Open / In Progress / Resolved status instead of the alert activity
+  // state — shown/edited here, not via the "Mark as Resolved" flow above.
+  const ticketSection = document.getElementById('adTicketStatusSection');
+  if (ticketSection) {
+    ticketSection.style.display = row.category === 'jira' ? '' : 'none';
+    const ticketSelect = document.getElementById('adTicketStatusSelect');
+    if (ticketSelect && row.category === 'jira') ticketSelect.value = row.state || 'open';
+  }
+
+  const deleteBtn = document.getElementById('adDeleteBtn');
+  if (deleteBtn) deleteBtn.style.display = hasPermission('delete_alert_compliance_alerts') ? '' : 'none';
 
   openModal('alertDetailModal');
   acLoadComments(fingerprintKey);
@@ -11458,6 +11482,68 @@ function acResolveAlert() {
     })
     .catch(function (err) {
       showToast(err.message || 'Unable to mark this alert as resolved', 'error');
+    });
+}
+
+// Updates a Customer Raised Ticket's manually-set status (open / in_progress
+// / resolved). Unlike acResolveAlert, no comment is required — the ticket
+// workflow is a simple status change, not a root-cause record.
+function acUpdateTicketStatus() {
+  const select = document.getElementById('adTicketStatusSelect');
+  const status = select ? select.value : '';
+  if (!acActiveCommentFingerprintKey || !status) return;
+  const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) { showToast('Not authenticated. Please login first.', 'error'); return; }
+  fetch(window.APP_CONFIG.API_BASE_URL + '/operations-alerts/ticket-status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ fingerprintKey: acActiveCommentFingerprintKey, fingerprint: acActiveCommentFingerprint, status: status })
+  })
+    .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+    .then(function (result) {
+      if (!result.ok || !result.data.success) throw new Error(result.data.message || 'Unable to update the ticket status');
+      const row = alertComplianceReportData.find(function (r) { return r.fingerprintKey === acActiveCommentFingerprintKey; });
+      if (row) row.state = status;
+      const badges = document.getElementById('adBadges');
+      if (badges && row) {
+        const stateLabel = ALERT_COMPLIANCE_STATE_LABELS[row.state] || row.state;
+        const stateClass = ALERT_COMPLIANCE_STATE_CLASS[row.state] || 'badge-progress';
+        badges.innerHTML = '<span class="badge ' + stateClass + '">' + escapeMetricHtml(stateLabel) + '</span>'
+          + '<span class="badge badge-medium">' + escapeMetricHtml(acCategoryLabel(row.category)) + '</span>'
+          + (row.incidentRef ? '<a href="javascript:void(0)" onclick="acOpenIncident(\'' + escapeMetricHtml(row.incidentRef) + '\')" class="badge badge-closed" style="cursor:pointer;text-decoration:none">Incident Created · ' + escapeMetricHtml(row.incidentRef) + '</a>' : '');
+      }
+      renderAlertComplianceTable();
+      showToast('Ticket status updated', 'success');
+    })
+    .catch(function (err) {
+      showToast(err.message || 'Unable to update the ticket status', 'error');
+    });
+}
+
+// Admin-only: removes a false/irrelevant alert group from the report.
+// Alert groups are computed fresh from the mailbox every time, so this
+// records a server-side suppression rather than deleting a real row — see
+// operationsAlertReportController.deleteAlert.
+function acDeleteAlert() {
+  if (!acActiveCommentFingerprintKey) return;
+  if (!window.confirm('Remove this alert from the Alert Compliance report? This only hides it going forward — it does not affect the underlying mailbox or any incident.')) return;
+  const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) { showToast('Not authenticated. Please login first.', 'error'); return; }
+  fetch(window.APP_CONFIG.API_BASE_URL + '/operations-alerts/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ fingerprintKey: acActiveCommentFingerprintKey, fingerprint: acActiveCommentFingerprint })
+  })
+    .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+    .then(function (result) {
+      if (!result.ok || !result.data.success) throw new Error(result.data.message || 'Unable to delete this alert');
+      alertComplianceReportData = alertComplianceReportData.filter(function (r) { return r.fingerprintKey !== acActiveCommentFingerprintKey; });
+      closeModal('alertDetailModal');
+      renderAlertComplianceTable();
+      showToast('Alert removed from the report', 'success');
+    })
+    .catch(function (err) {
+      showToast(err.message || 'Unable to delete this alert', 'error');
     });
 }
 // ── /ALERT COMPLIANCE REPORT ────────────────────────────────────────────

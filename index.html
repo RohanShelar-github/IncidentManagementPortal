@@ -1338,6 +1338,9 @@
 <option value="confirmed_resolved">Confirmed Resolved</option>
 <option value="incident_created">Incident Created</option>
 <option value="manually_resolved">Manually Resolved</option>
+<option value="open">Open (Ticket)</option>
+<option value="in_progress">In Progress (Ticket)</option>
+<option value="resolved">Resolved (Ticket)</option>
 </select>
 </div>
 <div class="filter-group">
@@ -1367,6 +1370,17 @@
 </div>
 <div class="modal-body">
 <div id="adBadges" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"></div>
+<div id="adTicketStatusSection" style="display:none;margin-bottom:16px;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
+<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Ticket Status</div>
+<div style="display:flex;gap:8px;align-items:center">
+<select id="adTicketStatusSelect">
+<option value="open">Open</option>
+<option value="in_progress">In Progress</option>
+<option value="resolved">Resolved</option>
+</select>
+<button class="btn btn-primary" onclick="acUpdateTicketStatus()" style="padding:6px 14px;font-size:12px">Update Status</button>
+</div>
+</div>
 <div class="detail-fields-grid" id="adMetaGrid" style="margin-bottom:20px"></div>
 <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Occurrence History (<span id="adOccurrenceCount">0</span>) — click one to view its full email</div>
 <div id="adOccurrenceList" style="display:flex;flex-direction:column;gap:3px;max-height:140px;overflow-y:auto;margin-bottom:14px;font-size:12px"></div>
@@ -1382,6 +1396,7 @@
 <button class="btn btn-secondary" onclick="closeModal('alertDetailModal')">Close</button>
 <button class="btn btn-primary" onclick="acSubmitComment()">Add Comment</button>
 <button class="btn btn-primary" id="adResolveBtn" onclick="acResolveAlert()" style="display:none;background:var(--danger);border-color:var(--danger)" title="Requires the comment above to describe the action taken or root cause">Mark as Resolved</button>
+<button class="btn btn-secondary" id="adDeleteBtn" onclick="acDeleteAlert()" style="display:none;color:var(--danger);border-color:var(--danger)" title="Admin only — removes this alert from the report">Delete Alert</button>
 </div>
 </div>
 </div>
@@ -1751,6 +1766,9 @@
             </label>
 <label class="perm-check" onclick="togglePerm(this)">
 <input type="checkbox" value="view_alert_compliance_report"/> View Alert Compliance Report
+            </label>
+<label class="perm-check" onclick="togglePerm(this)">
+<input type="checkbox" value="delete_alert_compliance_alerts"/> Delete Alert Compliance Alerts
             </label>
 </div>
 </div>

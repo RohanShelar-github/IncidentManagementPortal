@@ -19,6 +19,7 @@ const grouping = require(path.join(root, 'backend', 'services', 'operationsAlert
 const reportController = fs.readFileSync(path.join(root, 'backend', 'controllers', 'operationsAlertReportController.js'), 'utf8');
 const migrationComments = fs.readFileSync(path.join(root, 'backend', 'sql', '038_alert_compliance_comments.sql'), 'utf8');
 const migrationResolution = fs.readFileSync(path.join(root, 'backend', 'sql', '039_alert_manual_resolution.sql'), 'utf8');
+const migrationTicketStatus = fs.readFileSync(path.join(root, 'backend', 'sql', '040_alert_ticket_status_and_delete.sql'), 'utf8');
 
 test('normalizeAlertSubject collapses fired/resolved variants to the same fingerprint text', () => {
   assert.equal(
@@ -165,7 +166,7 @@ test('comment endpoints validate the fingerprintKey shape and are exported/wired
   assert.match(reportController, /const FINGERPRINT_KEY_PATTERN = \/\^\[a-f0-9\]\{64\}\$\//);
   assert.match(reportController, /const listAlertComments = async \(req, res\) => \{/);
   assert.match(reportController, /const addAlertComment = async \(req, res\) => \{/);
-  assert.match(reportController, /module\.exports = \{ getAlertComplianceReport, listAlertComments, addAlertComment, resolveAlertManually, getAlertMessage \};/);
+  assert.match(reportController, /module\.exports = \{ getAlertComplianceReport, listAlertComments, addAlertComment, resolveAlertManually, updateTicketStatus, deleteAlert, getAlertMessage \};/);
   assert.match(reportRoutes, /router\.get\('\/comments', requirePermission\('view_alert_compliance_report'\), listAlertComments\)/);
   assert.match(reportRoutes, /router\.post\('\/comments', requirePermission\('view_alert_compliance_report'\), addAlertComment\)/);
 });
@@ -248,7 +249,7 @@ test('resolveAlertManually requires a valid fingerprintKey and a non-empty, leng
   assert.match(reportController, /const resolveAlertManually = async \(req, res\) => \{/);
   assert.match(reportController, /if \(!note\) return res\.status\(400\)/);
   assert.match(reportController, /note\.length > 2000/);
-  assert.match(reportController, /module\.exports = \{ getAlertComplianceReport, listAlertComments, addAlertComment, resolveAlertManually, getAlertMessage \};/);
+  assert.match(reportController, /module\.exports = \{ getAlertComplianceReport, listAlertComments, addAlertComment, resolveAlertManually, updateTicketStatus, deleteAlert, getAlertMessage \};/);
   assert.match(reportRoutes, /router\.post\('\/resolve', requirePermission\('view_alert_compliance_report'\), resolveAlertManually\)/);
 });
 
@@ -356,10 +357,88 @@ test('the frontend table filter treats "incident_created" as "has an incidentRef
 
 test('the detail modal explicitly labels an incident link "Incident Created ·  <ref>" rather than a bare ref, since the STATE badge no longer conveys it', () => {
   const occurrences = (frontend.match(/class="badge badge-closed" style="cursor:pointer;text-decoration:none">Incident Created · ' \+ escapeMetricHtml\(row\.incidentRef\)/g) || []).length;
-  assert.equal(occurrences, 2, 'both acOpenAlertDetail and acResolveAlert must render the explicit incident-created label');
+  assert.equal(occurrences, 3, 'acOpenAlertDetail, acResolveAlert, and acUpdateTicketStatus must all render the explicit incident-created label');
 });
 
 test('an occurrence with an incident shows "Incident Created · <ref>" in place of the Firing/Resolved signal label entirely, not alongside it', () => {
   assert.match(frontend, /'<span>Incident Created · <a href="javascript:void\(0\)" onclick="event\.stopPropagation\(\);acOpenIncident/);
   assert.match(frontend, /const statusCell = o\.incidentRef\s*\n\s*\? '<span>Incident Created/);
+});
+
+// ── Requirement: Customer Raised Tickets get a manual Open/In Progress/  ──
+// ── Resolved status; Admin-only delete for false alerts/tickets          ──
+
+test('the migration adds the ticket-status and deletion tables plus an admin-only delete permission', () => {
+  assert.match(migrationTicketStatus, /CREATE TABLE IF NOT EXISTS operations_alert_ticket_status/);
+  assert.match(migrationTicketStatus, /status ENUM\('open','in_progress','resolved'\) NOT NULL DEFAULT 'open'/);
+  assert.match(migrationTicketStatus, /CREATE TABLE IF NOT EXISTS operations_alert_deletions/);
+  assert.match(migrationTicketStatus, /\('delete_alert_compliance_alerts', 'Delete Alert Compliance Alerts'\)/);
+  assert.match(migrationTicketStatus, /WHERE r\.role_key = 'admin'/);
+  assert.doesNotMatch(migrationTicketStatus, /role_key IN \('admin', 'pmo'\)/, 'delete must be admin-only, unlike view_alert_compliance_report which also grants pmo');
+});
+
+test('delete_alert_compliance_alerts is a real, validated permission', () => {
+  assert.match(roleController, /'view_alert_compliance_report', 'delete_alert_compliance_alerts'/);
+});
+
+test('jira category rows get their status from operations_alert_ticket_status (default "open"), overriding the derived activity state entirely', () => {
+  assert.match(reportController, /SELECT fingerprint_key, status FROM operations_alert_ticket_status WHERE fingerprint_key IN \(\?\)/);
+  assert.match(reportController, /if \(r\.category === 'jira'\) r\.state = statusByKey\.get\(r\.fingerprintKey\) \|\| 'open';/);
+});
+
+test('deleted alert groups are filtered out of the report entirely before any other query runs against them', () => {
+  const deleteFilterIndex = reportController.indexOf('operations_alert_deletions');
+  const commentCountIndex = reportController.indexOf('operations_alert_comments WHERE fingerprint_key');
+  assert.ok(deleteFilterIndex > -1 && commentCountIndex > -1 && deleteFilterIndex < commentCountIndex);
+  assert.match(reportController, /report = report\.filter\(\(r\) => !deletedKeys\.has\(r\.fingerprintKey\)\);/);
+});
+
+test('updateTicketStatus validates fingerprintKey and restricts status to open/in_progress/resolved, and is routed under view_alert_compliance_report (any viewer can triage)', () => {
+  assert.match(reportController, /const TICKET_STATUSES = new Set\(\['open', 'in_progress', 'resolved'\]\);/);
+  assert.match(reportController, /if \(!TICKET_STATUSES\.has\(status\)\) \{/);
+  assert.match(reportRoutes, /router\.post\('\/ticket-status', requirePermission\('view_alert_compliance_report'\), updateTicketStatus\)/);
+});
+
+test('deleteAlert is routed under the new admin-only delete_alert_compliance_alerts permission, not the general view permission', () => {
+  assert.match(reportController, /const deleteAlert = async \(req, res\) => \{/);
+  assert.match(reportRoutes, /router\.post\('\/delete', requirePermission\('delete_alert_compliance_alerts'\), deleteAlert\)/);
+});
+
+test('the frontend recognizes the ticket status values as distinct, labeled states', () => {
+  assert.match(frontend, /open: 'Open',/);
+  assert.match(frontend, /in_progress: 'In Progress',/);
+  assert.match(frontend, /resolved: 'Resolved'\s*\n\};/);
+  assert.match(html, /<option value="open">Open \(Ticket\)<\/option>/);
+  assert.match(html, /<option value="in_progress">In Progress \(Ticket\)<\/option>/);
+  assert.match(html, /<option value="resolved">Resolved \(Ticket\)<\/option>/);
+});
+
+test('the ticket-status section and select exist, hidden by default, shown only for jira rows', () => {
+  assert.match(html, /id="adTicketStatusSection" style="display:none/);
+  assert.match(html, /id="adTicketStatusSelect"/);
+  assert.match(frontend, /ticketSection\.style\.display = row\.category === 'jira' \? '' : 'none';/);
+  assert.match(frontend, /if \(ticketSelect && row\.category === 'jira'\) ticketSelect\.value = row\.state \|\| 'open';/);
+});
+
+test('acUpdateTicketStatus posts to /ticket-status without requiring a comment (unlike acResolveAlert)', () => {
+  assert.match(frontend, /function acUpdateTicketStatus\(\) \{/);
+  assert.match(frontend, /API_BASE_URL \+ '\/operations-alerts\/ticket-status'/);
+  assert.doesNotMatch(frontend.slice(frontend.indexOf('function acUpdateTicketStatus'), frontend.indexOf('function acDeleteAlert')), /Enter a comment first/);
+});
+
+test('the Delete Alert Compliance Alerts permission checkbox exists in Role Management', () => {
+  assert.match(html, /value="delete_alert_compliance_alerts"\/> Delete Alert Compliance Alerts/);
+  assert.match(frontend, /delete_alert_compliance_alerts: 'Delete Alert Compliance Alerts',/);
+});
+
+test('the Delete Alert button is hidden by default and only shown per hasPermission, with a confirmation before deleting', () => {
+  assert.match(html, /id="adDeleteBtn"[^>]*style="display:none/);
+  assert.match(frontend, /deleteBtn\.style\.display = hasPermission\('delete_alert_compliance_alerts'\) \? '' : 'none';/);
+  assert.match(frontend, /function acDeleteAlert\(\) \{/);
+  assert.match(frontend, /if \(!window\.confirm\(/);
+});
+
+test('acDeleteAlert removes the row locally and closes the modal on success, matching the suppression-list semantics', () => {
+  assert.match(frontend, /alertComplianceReportData = alertComplianceReportData\.filter\(function \(r\) \{ return r\.fingerprintKey !== acActiveCommentFingerprintKey; \}\);/);
+  assert.match(frontend, /closeModal\('alertDetailModal'\);/);
 });
