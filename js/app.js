@@ -11276,12 +11276,15 @@ function acOpenAlertDetail(fingerprintKey) {
     } else {
       occList.innerHTML = occurrences.map(function (o) {
         const onclickAttr = o.id ? ' onclick="acViewAlertEmail(\'' + escapeMetricHtml(o.id) + '\', this)"' : '';
-        const incidentBadge = o.incidentRef
-          ? ' · Incident Created · <a href="javascript:void(0)" onclick="event.stopPropagation();acOpenIncident(\'' + escapeMetricHtml(o.incidentRef) + '\')" style="color:var(--accent);font-weight:600">' + escapeMetricHtml(o.incidentRef) + '</a>'
-          : '';
+        // Once this specific occurrence has an incident, that's the more
+        // useful fact to show than the generic Firing/Resolved signal label
+        // (which also visually overlapped it in a narrow row).
+        const statusCell = o.incidentRef
+          ? '<span>Incident Created · <a href="javascript:void(0)" onclick="event.stopPropagation();acOpenIncident(\'' + escapeMetricHtml(o.incidentRef) + '\')" style="color:var(--accent);font-weight:600">' + escapeMetricHtml(o.incidentRef) + '</a></span>'
+          : '<span style="color:' + (o.resolved ? 'var(--success)' : 'var(--text-muted)') + '">' + (o.resolved ? 'Resolved signal' : 'Firing') + '</span>';
         return '<div class="ac-occurrence-row"' + onclickAttr + ' style="display:flex;justify-content:space-between;gap:10px;padding:5px 8px;background:var(--surface2);border-radius:6px;cursor:' + (o.id ? 'pointer' : 'default') + '">'
           + '<span>' + acFormatTimestamp(o.receivedAt) + '</span>'
-          + '<span style="color:' + (o.resolved ? 'var(--success)' : 'var(--text-muted)') + '">' + (o.resolved ? 'Resolved signal' : 'Firing') + incidentBadge + '</span>'
+          + statusCell
           + '</div>';
       }).join('');
     }
