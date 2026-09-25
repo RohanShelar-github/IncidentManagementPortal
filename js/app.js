@@ -11103,6 +11103,22 @@ const ALERT_COMPLIANCE_CATEGORY_LABELS = {
   azure: 'Azure',
   jira: 'Customer Raised Tickets'
 };
+
+// The STATE badge text for confirmed_resolved/manually_resolved gets more
+// specific once an incident actually exists for the alert — "resolved" on
+// its own doesn't say whether that resolution led to real follow-up action,
+// so an alert with a linked incident is called out as "Action Taken &
+// Resolved" regardless of which of the two resolved states it's in. Without
+// an incident, confirmed_resolved (an automatic resolved-signal email, no
+// human involved) is shown as the plainer "Resolved"; manually_resolved
+// keeps its own label since a human already recorded why in a comment.
+function acStateLabel(r) {
+  if (r.state === 'confirmed_resolved' || r.state === 'manually_resolved') {
+    if (r.incidentRef) return 'Action Taken & Resolved';
+    if (r.state === 'confirmed_resolved') return 'Resolved';
+  }
+  return ALERT_COMPLIANCE_STATE_LABELS[r.state] || r.state;
+}
 function acCategoryLabel(category) {
   return ALERT_COMPLIANCE_CATEGORY_LABELS[category] || category;
 }
@@ -11245,7 +11261,7 @@ function renderAlertComplianceTable() {
   const pageStart = (acCurrentPage - 1) * acPerPage;
   const pageRows = rows.slice(pageStart, pageStart + acPerPage);
   tbody.innerHTML = pageRows.map(function (r) {
-    const stateLabel = ALERT_COMPLIANCE_STATE_LABELS[r.state] || r.state;
+    const stateLabel = acStateLabel(r);
     const stateClass = ALERT_COMPLIANCE_STATE_CLASS[r.state] || 'badge-progress';
     // The incident link must stop the click from bubbling up to the row's
     // own onclick — otherwise navigating to the incident would also pop
@@ -11465,7 +11481,7 @@ function acOpenAlertDetail(fingerprintKey, commentsOnly) {
   const title = document.getElementById('adTitle');
   if (title) title.textContent = commentsOnly ? 'Comments — ' + row.subject : row.subject;
 
-  const stateLabel = ALERT_COMPLIANCE_STATE_LABELS[row.state] || row.state;
+  const stateLabel = acStateLabel(row);
   const stateClass = ALERT_COMPLIANCE_STATE_CLASS[row.state] || 'badge-progress';
   const badges = document.getElementById('adBadges');
   if (badges) {
@@ -11684,7 +11700,7 @@ function acResolveAlert() {
       }
       const badges = document.getElementById('adBadges');
       if (badges && row) {
-        const stateLabel = ALERT_COMPLIANCE_STATE_LABELS[row.state] || row.state;
+        const stateLabel = acStateLabel(row);
         const stateClass = ALERT_COMPLIANCE_STATE_CLASS[row.state] || 'badge-progress';
         badges.innerHTML = '<span class="badge ' + stateClass + '">' + escapeMetricHtml(stateLabel) + '</span>'
           + '<span class="badge badge-medium">' + escapeMetricHtml(acCategoryLabel(row.category)) + '</span>'

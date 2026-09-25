@@ -589,3 +589,24 @@ test('loadAlertComplianceReport and acFilterByState both reset acCurrentPage bac
   assert.match(frontend, /acSelectedAlerts\.clear\(\);\s*\n\s*acCurrentPage = 1;\s*\n\s*if \(tbody\) tbody\.innerHTML = '<tr><td colspan="' \+ colCount \+ '" style="text-align:center;color:var\(--text-muted\);padding:20px">Loading alert activity/);
   assert.match(frontend, /function acFilterByState\(state\) \{[\s\S]{0,150}acCurrentPage = 1;\s*\n\s*renderAlertComplianceTable\(\);\s*\n\}/);
 });
+
+// ── Requirement: STATE badge distinguishes a real incident follow-up ──────
+
+test('acStateLabel: confirmed_resolved/manually_resolved with an incidentRef show "Action Taken & Resolved"; confirmed_resolved without one shows the plainer "Resolved"; manually_resolved without one keeps its own label', () => {
+  assert.match(frontend, /function acStateLabel\(r\) \{/);
+  const body = frontend.slice(frontend.indexOf('function acStateLabel'), frontend.indexOf('function acStateLabel') + 500);
+  assert.match(body, /if \(r\.state === 'confirmed_resolved' \|\| r\.state === 'manually_resolved'\) \{/);
+  assert.match(body, /if \(r\.incidentRef\) return 'Action Taken & Resolved';/);
+  assert.match(body, /if \(r\.state === 'confirmed_resolved'\) return 'Resolved';/);
+  assert.match(body, /return ALERT_COMPLIANCE_STATE_LABELS\[r\.state\] \|\| r\.state;/);
+});
+
+test('the table, the detail modal, and acResolveAlert\'s local badge update all use acStateLabel instead of the raw ALERT_COMPLIANCE_STATE_LABELS lookup, so the incident-aware label is consistent everywhere the STATE badge is rendered', () => {
+  assert.match(frontend, /tbody\.innerHTML = pageRows\.map\(function \(r\) \{\s*\n\s*const stateLabel = acStateLabel\(r\);/);
+  assert.match(frontend, /const stateLabel = acStateLabel\(row\);\s*\n\s*const stateClass = ALERT_COMPLIANCE_STATE_CLASS\[row\.state\] \|\| 'badge-progress';\s*\n\s*const badges = document\.getElementById\('adBadges'\);\s*\n\s*if \(badges\) \{/);
+  assert.match(frontend, /const badges = document\.getElementById\('adBadges'\);\s*\n\s*if \(badges && row\) \{\s*\n\s*const stateLabel = acStateLabel\(row\);/);
+  // acUpdateTicketStatus deals with open/in_progress/resolved ticket
+  // statuses, never confirmed_resolved/manually_resolved, so it's
+  // deliberately left on the plain label lookup, not acStateLabel.
+  assert.match(frontend, /function acUpdateTicketStatus\(\) \{[\s\S]*?const stateLabel = ALERT_COMPLIANCE_STATE_LABELS\[row\.state\] \|\| row\.state;/);
+});
