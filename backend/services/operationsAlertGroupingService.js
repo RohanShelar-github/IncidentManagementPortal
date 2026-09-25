@@ -45,25 +45,63 @@ function isResolvedVariant(subject) {
 }
 
 function alertFingerprint(message) {
+  // Customer-raised tickets (category 'jira') all share an almost-identical
+  // subject template ("A new support issue <KEY> was reported by the
+  // customer"), so subject-text grouping alone would incorrectly merge
+  // unrelated tickets into one row. Group these by their extracted Jira
+  // issue key instead, which uniquely identifies the ticket — and
+  // deliberately without the sender: the same ticket's thread is replied to
+  // by several different addresses (the customer, support agents, Jira's
+  // own automation), so including sender would incorrectly split one
+  // ticket's conversation into several groups.
+  if (message && message.category === 'jira' && message.jiraIssueKey) {
+    return 'jira::' + String(message.jiraIssueKey).trim().toUpperCase();
+  }
   const sender = String(message && message.from || '').trim().toLowerCase();
   const normalizedSubject = normalizeAlertSubject(message && message.subject).toLowerCase();
   return sender + '::' + normalizedSubject;
 }
 
+// IST (UTC+5:30) calendar-day key for a timestamp, used to split "the same
+// alert on two different days" into separate report rows instead of one
+// row averaged across the whole window. IST has no DST, so a fixed offset
+// is safe here without needing a timezone library.
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+function alertDayKey(receivedAt) {
+  const ms = receivedAt ? new Date(receivedAt).getTime() : NaN;
+  if (!Number.isFinite(ms)) return 'unknown';
+  return new Date(ms + IST_OFFSET_MS).toISOString().slice(0, 10);
+}
+
 // Groups a flat list of already-fetched mailbox messages (each expected to
 // carry at least { id, from, subject, receivedAt, category }) into one entry
-// per unique alert. Pure function — no Graph or database access here.
+// per unique alert PER CALENDAR DAY (IST) — the same alert firing on two
+// different days produces two separate groups, each scoped to that day's
+// own occurrences, so "Repeats"/"First Seen"/"Last Seen" never blur several
+// days together into one misleading row. Pure function — no Graph or
+// database access here.
+//
+// Known, accepted tradeoff of day-based splitting: an alert that fires
+// continuously across midnight is split into a "yesterday" group and a
+// "today" group, even though it never actually went quiet in between — the
+// "yesterday" group can show as went_quiet once enough time has passed,
+// while the alert is really still firing under today's group. This matches
+// the explicit "unique alerts per day" requirement.
 function groupMessagesIntoAlerts(messages) {
   const groups = new Map();
   (messages || []).forEach((message) => {
     if (!message || !message.subject) return;
     const fingerprint = alertFingerprint(message);
+    const day = alertDayKey(message.receivedAt);
+    const dayFingerprint = fingerprint + '::' + day;
     const resolved = isResolvedVariant(message.subject);
     const receivedAt = message.receivedAt || null;
-    let group = groups.get(fingerprint);
+    let group = groups.get(dayFingerprint);
     if (!group) {
       group = {
-        fingerprint,
+        fingerprint: dayFingerprint,
+        alertFingerprint: fingerprint,
+        day,
         category: message.category || 'other',
         sender: String(message.from || '').trim(),
         sampleSubject: normalizeAlertSubject(message.subject),
@@ -74,7 +112,7 @@ function groupMessagesIntoAlerts(messages) {
         messageIds: [],
         occurrences: []
       };
-      groups.set(fingerprint, group);
+      groups.set(dayFingerprint, group);
     }
     group.occurrenceCount += 1;
     group.messageIds.push(message.id);
@@ -111,6 +149,7 @@ module.exports = {
   normalizeAlertSubject,
   isResolvedVariant,
   alertFingerprint,
+  alertDayKey,
   fingerprintKey,
   groupMessagesIntoAlerts,
   deriveAlertState

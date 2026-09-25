@@ -1302,6 +1302,11 @@
 <div class="stat-value" id="acStatIncident">0</div>
 <div class="stat-delta">tracked as an incident</div>
 </div>
+<div class="stat-card green" id="acTileManualResolved" style="cursor:pointer" onclick="acFilterByState('manually_resolved')" title="Went-quiet alerts manually marked resolved by an admin/PMO, with a recorded root cause">
+<div class="stat-label">Manually Resolved</div>
+<div class="stat-value" id="acStatManualResolved">0</div>
+<div class="stat-delta">resolved with a recorded comment</div>
+</div>
 </div>
 <!-- Filters -->
 <div class="filter-bar" style="margin-bottom:20px">
@@ -1321,6 +1326,7 @@
 <option value="">All Categories</option>
 <option value="coralogix">Coralogix</option>
 <option value="azure">Azure</option>
+<option value="jira">Customer Raised Tickets</option>
 </select>
 </div>
 <div class="filter-group">
@@ -1331,6 +1337,7 @@
 <option value="actively_repeating">Actively Repeating</option>
 <option value="confirmed_resolved">Confirmed Resolved</option>
 <option value="incident_created">Incident Created</option>
+<option value="manually_resolved">Manually Resolved</option>
 </select>
 </div>
 <div class="filter-group">
@@ -1374,6 +1381,7 @@
 <div class="modal-footer">
 <button class="btn btn-secondary" onclick="closeModal('alertDetailModal')">Close</button>
 <button class="btn btn-primary" onclick="acSubmitComment()">Add Comment</button>
+<button class="btn btn-primary" id="adResolveBtn" onclick="acResolveAlert()" style="display:none;background:var(--danger);border-color:var(--danger)" title="Requires the comment above to describe the action taken or root cause">Mark as Resolved</button>
 </div>
 </div>
 </div>

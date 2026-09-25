@@ -18,6 +18,7 @@ const migration = fs.readFileSync(path.join(root, 'backend', 'sql', '037_alert_c
 const grouping = require(path.join(root, 'backend', 'services', 'operationsAlertGroupingService.js'));
 const reportController = fs.readFileSync(path.join(root, 'backend', 'controllers', 'operationsAlertReportController.js'), 'utf8');
 const migrationComments = fs.readFileSync(path.join(root, 'backend', 'sql', '038_alert_compliance_comments.sql'), 'utf8');
+const migrationResolution = fs.readFileSync(path.join(root, 'backend', 'sql', '039_alert_manual_resolution.sql'), 'utf8');
 
 test('normalizeAlertSubject collapses fired/resolved variants to the same fingerprint text', () => {
   assert.equal(
@@ -72,6 +73,27 @@ test('groupMessagesIntoAlerts pairs a firing/resolved pair from different provid
   assert.ok(historianGroup);
   assert.equal(historianGroup.occurrenceCount, 2);
   assert.equal(historianGroup.hasResolvedSignal, true);
+});
+
+test('groupMessagesIntoAlerts splits the same alert into separate groups per IST calendar day', () => {
+  const messages = [
+    { id: 'd1', from: 'alerts@coralogix.com', subject: 'Coralogix Alert on magic / Daily Repeat Test', receivedAt: '2026-09-20T04:00:00Z', category: 'coralogix' }, // 2026-09-20 09:30 IST
+    { id: 'd2', from: 'alerts@coralogix.com', subject: 'Coralogix Alert on magic / Daily Repeat Test', receivedAt: '2026-09-20T05:00:00Z', category: 'coralogix' }, // same IST day
+    { id: 'd3', from: 'alerts@coralogix.com', subject: 'Coralogix Alert on magic / Daily Repeat Test', receivedAt: '2026-09-22T04:00:00Z', category: 'coralogix' }  // 2 IST days later
+  ];
+  const groups = grouping.groupMessagesIntoAlerts(messages);
+  assert.equal(groups.length, 2, 'same alert on two different days must produce two groups, not one');
+  const byDay = new Map(groups.map((g) => [g.day, g]));
+  assert.equal(byDay.get('2026-09-20').occurrenceCount, 2);
+  assert.equal(byDay.get('2026-09-22').occurrenceCount, 1);
+  assert.equal(byDay.get('2026-09-20').alertFingerprint, byDay.get('2026-09-22').alertFingerprint, 'the underlying alert identity is the same even though the day-groups differ');
+  assert.notEqual(byDay.get('2026-09-20').fingerprint, byDay.get('2026-09-22').fingerprint, 'the day-scoped fingerprint used for comments/resolution must differ per day');
+});
+
+test('alertDayKey resolves the calendar day in IST (UTC+5:30), not UTC', () => {
+  // 2026-09-19T19:00:00Z is already 2026-09-20 00:30 in IST.
+  assert.equal(grouping.alertDayKey('2026-09-19T19:00:00Z'), '2026-09-20');
+  assert.equal(grouping.alertDayKey('2026-09-19T18:00:00Z'), '2026-09-19');
 });
 
 test('deriveAlertState prioritizes incident creation, then a resolved signal, then recency', () => {
@@ -144,7 +166,7 @@ test('comment endpoints validate the fingerprintKey shape and are exported/wired
   assert.match(reportController, /const FINGERPRINT_KEY_PATTERN = \/\^\[a-f0-9\]\{64\}\$\//);
   assert.match(reportController, /const listAlertComments = async \(req, res\) => \{/);
   assert.match(reportController, /const addAlertComment = async \(req, res\) => \{/);
-  assert.match(reportController, /module\.exports = \{ getAlertComplianceReport, listAlertComments, addAlertComment, getAlertMessage \};/);
+  assert.match(reportController, /module\.exports = \{ getAlertComplianceReport, listAlertComments, addAlertComment, resolveAlertManually, getAlertMessage \};/);
   assert.match(reportRoutes, /router\.get\('\/comments', requirePermission\('view_alert_compliance_report'\), listAlertComments\)/);
   assert.match(reportRoutes, /router\.post\('\/comments', requirePermission\('view_alert_compliance_report'\), addAlertComment\)/);
 });
@@ -197,4 +219,119 @@ test('groupMessagesIntoAlerts records a timestamped, resolved-flagged occurrence
   assert.equal(group.occurrences.length, 3);
   assert.equal(group.occurrences.filter((o) => o.resolved).length, 1);
   assert.ok(group.occurrences.every((o) => typeof o.receivedAt === 'string'));
+});
+
+// ── Requirement: unique alerts per day, manual resolution, incident ID per occurrence ──
+
+test('the manual-resolution migration adds is_resolution to the existing comments table (no new table needed)', () => {
+  assert.match(migrationResolution, /ALTER TABLE operations_alert_comments/);
+  assert.match(migrationResolution, /ADD COLUMN is_resolution TINYINT\(1\) NOT NULL DEFAULT 0/);
+});
+
+test('the report row carries the day field and the per-occurrence incidentRef, additively', () => {
+  assert.match(reportController, /day: group\.day,/);
+  assert.match(reportController, /incidentRef: incidentByMessageId\.get\(o\.id\) \|\| null/);
+});
+
+test('a manual resolution only overrides state for went_quiet groups, never overriding a real incident or an automatic resolved signal', () => {
+  assert.match(reportController, /if \(r\.state === 'went_quiet' && resolvedKeys\.has\(r\.fingerprintKey\)\) r\.state = 'manually_resolved';/);
+});
+
+test('the summary includes a manuallyResolved count, computed after the state override so it reflects the final displayed state', () => {
+  const overrideIndex = reportController.indexOf("r.state = 'manually_resolved'");
+  const summaryIndex = reportController.indexOf('manuallyResolved: report.filter');
+  assert.ok(overrideIndex > -1 && summaryIndex > -1 && overrideIndex < summaryIndex);
+});
+
+test('resolveAlertManually requires a valid fingerprintKey and a non-empty, length-bounded note, and is exported/routed', () => {
+  assert.match(reportController, /const resolveAlertManually = async \(req, res\) => \{/);
+  assert.match(reportController, /if \(!note\) return res\.status\(400\)/);
+  assert.match(reportController, /note\.length > 2000/);
+  assert.match(reportController, /module\.exports = \{ getAlertComplianceReport, listAlertComments, addAlertComment, resolveAlertManually, getAlertMessage \};/);
+  assert.match(reportRoutes, /router\.post\('\/resolve', requirePermission\('view_alert_compliance_report'\), resolveAlertManually\)/);
+});
+
+test('resolving inserts a comment tagged is_resolution=1, so it appears in the same audit trail as regular comments', () => {
+  assert.match(reportController, /INSERT INTO operations_alert_comments \(fingerprint_key, alert_fingerprint, comment_text, is_resolution, created_by\) VALUES \(\?, \?, \?, 1, \?\)/);
+});
+
+test('listAlertComments exposes isResolution per comment', () => {
+  assert.match(reportController, /c\.is_resolution, c\.created_at, u\.full_name AS author_name/);
+  assert.match(reportController, /isResolution: Boolean\(row\.is_resolution\)/);
+});
+
+test('the frontend recognizes manually_resolved as a distinct, labeled state', () => {
+  assert.match(frontend, /manually_resolved: 'Manually Resolved'/);
+  assert.match(frontend, /manually_resolved: 'badge-closed'/);
+  assert.match(html, /value="manually_resolved">Manually Resolved</);
+  assert.match(html, /id="acTileManualResolved"/);
+  assert.match(html, /id="acStatManualResolved"/);
+});
+
+test('the Mark as Resolved button exists, is hidden by default, and only appears for went_quiet alerts', () => {
+  assert.match(html, /id="adResolveBtn"[^>]*style="display:none/);
+  assert.match(frontend, /resolveBtn\.style\.display = row\.state === 'went_quiet' \? '' : 'none';/);
+});
+
+test('acResolveAlert requires the shared comment textarea to be non-empty and posts to the dedicated /resolve endpoint', () => {
+  assert.match(frontend, /function acResolveAlert\(\) \{/);
+  assert.match(frontend, /A comment describing the action taken or root cause is required to resolve this alert/);
+  assert.match(frontend, /API_BASE_URL \+ '\/operations-alerts\/resolve'/);
+});
+
+test('acResolveAlert updates local state, hides the resolve button, and adjusts the summary tiles without a full page reload', () => {
+  assert.match(frontend, /row\.state = 'manually_resolved';/);
+  assert.match(frontend, /resolveBtn\.style\.display = 'none';/);
+  assert.match(frontend, /alertComplianceReportSummary\.wentQuiet = Math\.max\(0, \(alertComplianceReportSummary\.wentQuiet \|\| 0\) - 1\);/);
+  assert.match(frontend, /alertComplianceReportSummary\.manuallyResolved = \(alertComplianceReportSummary\.manuallyResolved \|\| 0\) \+ 1;/);
+});
+
+test('resolution comments are visually tagged RESOLVED in the comment/audit trail', () => {
+  assert.match(frontend, /c\.isResolution \? ' <span class="badge badge-closed"[^']*RESOLVED/);
+});
+
+test('occurrence rows show the Incident ID when that specific occurrence led to an incident, opening it without triggering the row\'s own email-view click', () => {
+  assert.match(frontend, /event\.stopPropagation\(\);acOpenIncident\(\\''/);
+});
+
+// ── Requirement: Customer Raised Tickets (Jira) participate in the report ──
+
+test('Jira (Customer Raised Tickets) is included alongside Coralogix/Azure in the fetched categories', () => {
+  assert.match(reportController, /const ALERT_CATEGORIES = new Set\(\['coralogix', 'azure', 'jira'\]\);/);
+  assert.match(reportController, /const \{ category, jiraIssueKey \} = classifyOperationsMessage\(message\);/);
+  assert.match(reportController, /collected\.push\(\{ \.\.\.message, category, jiraIssueKey \}\);/);
+});
+
+test('Jira tickets are fingerprinted by their issue key, not subject text, since every ticket shares an almost-identical subject template', () => {
+  const messages = [
+    { id: 'j1', from: 'jira@example.com', subject: 'A new support issue AS-41 was reported by the customer', category: 'jira', jiraIssueKey: 'AS-41', receivedAt: '2026-09-20T04:00:00Z' },
+    { id: 'j2', from: 'jira@example.com', subject: 'A new support issue AS-42 was reported by the customer', category: 'jira', jiraIssueKey: 'AS-42', receivedAt: '2026-09-20T04:05:00Z' },
+    { id: 'j3', from: 'jira@example.com', subject: 'RE: A new support issue AS-41 was reported by the customer', category: 'jira', jiraIssueKey: 'AS-41', receivedAt: '2026-09-20T05:00:00Z' }
+  ];
+  const groups = grouping.groupMessagesIntoAlerts(messages);
+  assert.equal(groups.length, 2, 'two distinct tickets (AS-41, AS-42) must produce two groups, not one merged by near-identical subject text');
+  const as41 = groups.find((g) => g.fingerprint.includes('AS-41'));
+  assert.equal(as41.occurrenceCount, 2, 'both messages referencing AS-41 belong to the same group');
+});
+
+test('Jira grouping ignores sender, since the same ticket thread is replied to by several different addresses (customer, agent, automation)', () => {
+  const messages = [
+    { id: 'j1', from: 'automation@magicsoftware2.atlassian.net', subject: 'A new support issue CD-170 was reported by the customer', category: 'jira', jiraIssueKey: 'CD-170', receivedAt: '2026-09-23T04:00:00Z' },
+    { id: 'j2', from: 'rohan_shelar@magicsoftware.com', subject: 'Re: A new support issue CD-170 was reported by the customer', category: 'jira', jiraIssueKey: 'CD-170', receivedAt: '2026-09-23T05:00:00Z' },
+    { id: 'j3', from: 'babai_chatterjee@magicsoftware.com', subject: 'Re: A new support issue CD-170 was reported by the customer', category: 'jira', jiraIssueKey: 'CD-170', receivedAt: '2026-09-23T06:00:00Z' }
+  ];
+  const groups = grouping.groupMessagesIntoAlerts(messages);
+  assert.equal(groups.length, 1, 'three different senders replying to the same ticket must still collapse into one group');
+  assert.equal(groups[0].occurrenceCount, 3);
+  assert.doesNotMatch(groups[0].fingerprint, /@/, 'the jira fingerprint must not embed any sender address');
+});
+
+test('the frontend category filter and display labels recognize Customer Raised Tickets (jira)', () => {
+  assert.match(html, /<option value="jira">Customer Raised Tickets<\/option>/);
+  assert.match(frontend, /jira: 'Customer Raised Tickets'/);
+  assert.match(frontend, /function acCategoryLabel\(category\) \{/);
+});
+
+test('every Azure alert is attributed to NGC regardless of subject text, since NGC is the only customer hosted on Azure', () => {
+  assert.match(reportController, /const customer = group\.category === 'azure'\s*\n\s*\? 'NGC'\s*\n\s*: \(customerMatches\[0\] \? customerMatches\[0\]\.customer_name : null\);/);
 });

@@ -11079,14 +11079,24 @@ const ALERT_COMPLIANCE_STATE_LABELS = {
   went_quiet: 'Went Quiet — Unconfirmed',
   actively_repeating: 'Actively Repeating',
   confirmed_resolved: 'Confirmed Resolved',
-  incident_created: 'Incident Created'
+  incident_created: 'Incident Created',
+  manually_resolved: 'Manually Resolved'
 };
 const ALERT_COMPLIANCE_STATE_CLASS = {
   went_quiet: 'badge-critical',
   actively_repeating: 'badge-high',
   confirmed_resolved: 'badge-closed',
-  incident_created: 'badge-progress'
+  incident_created: 'badge-progress',
+  manually_resolved: 'badge-closed'
 };
+const ALERT_COMPLIANCE_CATEGORY_LABELS = {
+  coralogix: 'Coralogix',
+  azure: 'Azure',
+  jira: 'Customer Raised Tickets'
+};
+function acCategoryLabel(category) {
+  return ALERT_COMPLIANCE_CATEGORY_LABELS[category] || category;
+}
 let alertComplianceReportData = [];
 let alertComplianceReportSummary = null;
 
@@ -11129,12 +11139,13 @@ function populateAlertComplianceCustomerFilter() {
 }
 
 function renderAlertComplianceSummary() {
-  const s = alertComplianceReportSummary || { wentQuiet: 0, activelyRepeating: 0, confirmedResolved: 0, incidentCreated: 0 };
+  const s = alertComplianceReportSummary || { wentQuiet: 0, activelyRepeating: 0, confirmedResolved: 0, incidentCreated: 0, manuallyResolved: 0 };
   var set = function (id, val) { var el = document.getElementById(id); if (el) el.textContent = val; };
   set('acStatQuiet', s.wentQuiet || 0);
   set('acStatRepeating', s.activelyRepeating || 0);
   set('acStatResolved', s.confirmedResolved || 0);
   set('acStatIncident', s.incidentCreated || 0);
+  set('acStatManualResolved', s.manuallyResolved || 0);
 }
 
 function acFilterByState(state) {
@@ -11191,7 +11202,7 @@ function renderAlertComplianceTable() {
     const subjectCell = '<a href="javascript:void(0)" onclick="acOpenAlertDetail(\'' + escapeMetricHtml(r.fingerprintKey) + '\')" style="color:var(--accent);font-weight:600">' + escapeMetricHtml(r.subject) + '</a>';
     return '<tr>'
       + '<td style="max-width:320px">' + subjectCell + '</td>'
-      + '<td>' + escapeMetricHtml(r.category) + '</td>'
+      + '<td>' + escapeMetricHtml(acCategoryLabel(r.category)) + '</td>'
       + '<td>' + escapeMetricHtml(r.customer || '—') + '</td>'
       + '<td>' + acFormatTimestamp(r.firstSeen) + '</td>'
       + '<td>' + acFormatTimestamp(r.lastSeen) + '</td>'
@@ -11231,7 +11242,7 @@ function acOpenAlertDetail(fingerprintKey) {
   const badges = document.getElementById('adBadges');
   if (badges) {
     badges.innerHTML = '<span class="badge ' + stateClass + '">' + escapeMetricHtml(stateLabel) + '</span>'
-      + '<span class="badge badge-medium">' + escapeMetricHtml(row.category) + '</span>'
+      + '<span class="badge badge-medium">' + escapeMetricHtml(acCategoryLabel(row.category)) + '</span>'
       + (row.incidentRef ? '<a href="javascript:void(0)" onclick="acOpenIncident(\'' + escapeMetricHtml(row.incidentRef) + '\')" class="badge badge-closed" style="cursor:pointer;text-decoration:none">' + escapeMetricHtml(row.incidentRef) + '</a>' : '');
   }
 
@@ -11260,9 +11271,12 @@ function acOpenAlertDetail(fingerprintKey) {
     } else {
       occList.innerHTML = occurrences.map(function (o) {
         const onclickAttr = o.id ? ' onclick="acViewAlertEmail(\'' + escapeMetricHtml(o.id) + '\', this)"' : '';
+        const incidentBadge = o.incidentRef
+          ? ' · <a href="javascript:void(0)" onclick="event.stopPropagation();acOpenIncident(\'' + escapeMetricHtml(o.incidentRef) + '\')" style="color:var(--accent);font-weight:600">' + escapeMetricHtml(o.incidentRef) + '</a>'
+          : '';
         return '<div class="ac-occurrence-row"' + onclickAttr + ' style="display:flex;justify-content:space-between;gap:10px;padding:5px 8px;background:var(--surface2);border-radius:6px;cursor:' + (o.id ? 'pointer' : 'default') + '">'
           + '<span>' + acFormatTimestamp(o.receivedAt) + '</span>'
-          + '<span style="color:' + (o.resolved ? 'var(--success)' : 'var(--text-muted)') + '">' + (o.resolved ? 'Resolved signal' : 'Firing') + '</span>'
+          + '<span style="color:' + (o.resolved ? 'var(--success)' : 'var(--text-muted)') + '">' + (o.resolved ? 'Resolved signal' : 'Firing') + incidentBadge + '</span>'
           + '</div>';
       }).join('');
     }
@@ -11275,6 +11289,13 @@ function acOpenAlertDetail(fingerprintKey) {
   if (input) input.value = '';
   const list = document.getElementById('acCommentsList');
   if (list) list.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:16px;font-size:12px">Loading comments…</div>';
+
+  // Manual resolution only makes sense for alerts stuck at "went_quiet" —
+  // anything already resolved (automatically or manually) or already
+  // tracked as an incident has no "resolve" action.
+  const resolveBtn = document.getElementById('adResolveBtn');
+  if (resolveBtn) resolveBtn.style.display = row.state === 'went_quiet' ? '' : 'none';
+
   openModal('alertDetailModal');
   acLoadComments(fingerprintKey);
 }
@@ -11341,10 +11362,11 @@ function acRenderComments(comments) {
   }
   list.innerHTML = comments.map(function (c) {
     const initials = String(c.author || '?').trim().split(/\s+/).map(function (p) { return p[0] || ''; }).join('').substring(0, 2).toUpperCase();
+    const resolutionTag = c.isResolution ? ' <span class="badge badge-closed" style="font-size:9px;vertical-align:middle">RESOLVED</span>' : '';
     return '<div class="comment-item">'
       + '<div class="comment-avatar">' + escapeMetricHtml(initials || '?') + '</div>'
       + '<div style="flex:1;min-width:0">'
-      + '<span class="comment-author">' + escapeMetricHtml(c.author) + '</span>'
+      + '<span class="comment-author">' + escapeMetricHtml(c.author) + '</span>' + resolutionTag
       + '<span class="comment-time">' + acFormatTimestamp(c.createdAt) + '</span>'
       + '<div class="comment-text">' + escapeMetricHtml(c.comment) + '</div>'
       + '</div></div>';
@@ -11375,6 +11397,56 @@ function acSubmitComment() {
     })
     .catch(function (err) {
       showToast(err.message || 'Unable to add comment', 'error');
+    });
+}
+
+// Manually marks a "Went Quiet — Unconfirmed" alert as resolved. Reuses the
+// same comment textarea as acSubmitComment — the mandatory note doubles as
+// the resolution's root-cause record, stored via the dedicated /resolve
+// endpoint so it's tagged (is_resolution) and shows in the comment/audit
+// trail with a "RESOLVED" marker.
+function acResolveAlert() {
+  const input = document.getElementById('acCommentInput');
+  const text = input ? input.value.trim() : '';
+  if (!text) { showToast('A comment describing the action taken or root cause is required to resolve this alert', 'error'); return; }
+  if (!acActiveCommentFingerprintKey) return;
+  const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) { showToast('Not authenticated. Please login first.', 'error'); return; }
+  fetch(window.APP_CONFIG.API_BASE_URL + '/operations-alerts/resolve', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ fingerprintKey: acActiveCommentFingerprintKey, fingerprint: acActiveCommentFingerprint, note: text })
+  })
+    .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+    .then(function (result) {
+      if (!result.ok || !result.data.success) throw new Error(result.data.message || 'Unable to mark this alert as resolved');
+      if (input) input.value = '';
+      const row = alertComplianceReportData.find(function (r) { return r.fingerprintKey === acActiveCommentFingerprintKey; });
+      if (row) {
+        row.state = 'manually_resolved';
+        row.commentCount = (row.commentCount || 0) + 1;
+        if (alertComplianceReportSummary) {
+          alertComplianceReportSummary.wentQuiet = Math.max(0, (alertComplianceReportSummary.wentQuiet || 0) - 1);
+          alertComplianceReportSummary.manuallyResolved = (alertComplianceReportSummary.manuallyResolved || 0) + 1;
+        }
+      }
+      const badges = document.getElementById('adBadges');
+      if (badges && row) {
+        const stateLabel = ALERT_COMPLIANCE_STATE_LABELS[row.state] || row.state;
+        const stateClass = ALERT_COMPLIANCE_STATE_CLASS[row.state] || 'badge-progress';
+        badges.innerHTML = '<span class="badge ' + stateClass + '">' + escapeMetricHtml(stateLabel) + '</span>'
+          + '<span class="badge badge-medium">' + escapeMetricHtml(acCategoryLabel(row.category)) + '</span>'
+          + (row.incidentRef ? '<a href="javascript:void(0)" onclick="acOpenIncident(\'' + escapeMetricHtml(row.incidentRef) + '\')" class="badge badge-closed" style="cursor:pointer;text-decoration:none">' + escapeMetricHtml(row.incidentRef) + '</a>' : '');
+      }
+      const resolveBtn = document.getElementById('adResolveBtn');
+      if (resolveBtn) resolveBtn.style.display = 'none';
+      acLoadComments(acActiveCommentFingerprintKey);
+      renderAlertComplianceSummary();
+      renderAlertComplianceTable();
+      showToast('Alert marked as resolved', 'success');
+    })
+    .catch(function (err) {
+      showToast(err.message || 'Unable to mark this alert as resolved', 'error');
     });
 }
 // ── /ALERT COMPLIANCE REPORT ────────────────────────────────────────────
