@@ -8,7 +8,8 @@ const {
   updateCustomerCsm,
   deactivateCustomer,
   createArea,
-  deactivateArea
+  deactivateArea,
+  createIncidentTag
 } = require('../controllers/masterDataController');
 
 router.use(authenticateToken);
@@ -19,5 +20,6 @@ router.patch('/customers/:id/csm', requirePermission('manage_customer_csm'), upd
 router.delete('/customers/:id', deactivateCustomer);
 router.post('/areas', createArea);
 router.delete('/areas/:id', deactivateArea);
+router.post('/tags', createIncidentTag);
 
 module.exports = router;

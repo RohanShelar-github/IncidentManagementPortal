@@ -321,6 +321,17 @@
 </div>
 </div>
 </div>
+<!-- Tag -->
+<div style="flex:1;min-width:120px">
+<div style="font-size:9px;font-weight:700;color:#2dd4a0;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:7px;font-family:var(--font-mono)">◈ Tag</div>
+<div class="ms-wrap" id="df_tag_wrap">
+<div class="ms-box" id="df_tag" onclick="toggleMsDropdown('df_tag')">
+<span class="ms-placeholder" id="df_tag_ph">All Tags</span>
+</div>
+<div class="ms-dropdown" id="df_tag_dd">
+</div>
+</div>
+</div>
 <!-- Area -->
 <div style="flex:1;min-width:120px">
 <div style="font-size:9px;font-weight:700;color:#7c5cf7;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:7px;font-family:var(--font-mono)">◈ Area</div>
@@ -730,6 +741,15 @@
 </div>
 </div>
 <div class="filter-group">
+<div class="filter-label">Tag</div>
+<div class="ms-wrap" id="classificationTagFilter_wrap">
+<div class="ms-box" id="classificationTagFilter" onclick="toggleMsDropdown('classificationTagFilter')">
+<span class="ms-placeholder" id="classificationTagFilter_ph">All Tags</span>
+</div>
+<div class="ms-dropdown" id="classificationTagFilter_dd"></div>
+</div>
+</div>
+<div class="filter-group">
 <div class="filter-label">Area</div>
 <div class="ms-wrap" id="areaFilter_wrap">
 <div class="ms-box" id="areaFilter" onclick="toggleMsDropdown('areaFilter')">
@@ -1104,7 +1124,7 @@
 </span></div>
 </div>
 </div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:8px">
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:8px">
 <!-- CUSTOMERS -->
 <div class="chart-card">
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
@@ -1134,6 +1154,21 @@
 <button class="btn btn-primary btn-sm" onclick="addArea()" style="white-space:nowrap">+ Add</button>
 </div>
 <div id="dmAreaList" style="display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto"></div>
+</div>
+<!-- TAGS -->
+<div class="chart-card">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+<div>
+<div style="font-size:15px;font-weight:700;color:var(--text-primary)">🏷 Tags</div>
+<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Classification tags auto-applied to incidents (e.g. Customer / Internal)</div>
+</div>
+<div id="dmTagCount" style="font-size:11px;color:var(--text-muted)"></div>
+</div>
+<div style="display:flex;gap:8px;margin-bottom:14px">
+<input id="dmNewTag" onkeydown="if(event.key==='Enter') addIncidentTag()" placeholder="New tag name…" style="flex:1;background:var(--surface-alt,var(--bg));border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;outline:none;font-family:inherit" type="text"/>
+<button class="btn btn-primary btn-sm" onclick="addIncidentTag()" style="white-space:nowrap">+ Add</button>
+</div>
+<div id="dmTagList" style="display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto"></div>
 </div>
 </div>
 </div>
@@ -1539,7 +1574,7 @@
 </div>
 </div>
 <div class="form-group" style="position:relative">
-<label class="form-label">Tags</label>
+<label class="form-label">User Tagging</label>
 <div onclick="document.getElementById('f_tag_input').focus()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;min-height:40px;cursor:text">
 <div id="f_tag_chips" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px"></div>
 <input id="f_tag_input" oninput="showCreateTagSuggestions(this.value)" onkeydown="handleCreateTagKey(event)" placeholder="Type a tag or @username…" style="border:none;outline:none;background:transparent;color:var(--text);font-size:12px;font-family:inherit;min-width:120px;width:100%" type="text"/>
@@ -1898,9 +1933,12 @@
 </div><div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
 <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px">R&amp;D Ticket</div>
 <div id="dp_rd_tickets" style="font-size:14px;font-weight:700;color:#4f8ef7;font-family:var(--font-mono)">—</div>
+</div><div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px">Tag</div>
+<div id="dp_tag" style="font-size:14px;font-weight:600;color:var(--text)">—</div>
 </div>
 <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;grid-column:1/-1">
-<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">Tags</div>
+<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">User Tagging</div>
 <div id="dp_tags_view" style="display:flex;flex-wrap:wrap;gap:6px;min-height:24px"></div>
 <div id="dp_tags_edit" style="display:none;margin-top:8px">
 <div id="dp_tags_chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
@@ -2064,6 +2102,10 @@
 <div style="margin-bottom:16px">
 <label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Area</label>
 <select id="dp_f_area" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s;cursor:pointer"><option value="">Select Area</option></select>
+</div>
+<div style="margin-bottom:16px">
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Tag</label>
+<select id="dp_f_tag_id" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer"><option value="">Select tag</option></select>
 </div>
 <!-- ── REPORT FIELDS (shown only for Closed incidents) ── -->
 <div id="dp_report_fields" style="display:none;margin-top:4px">

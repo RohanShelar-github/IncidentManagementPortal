@@ -32,6 +32,14 @@ function areaDto(row) {
   };
 }
 
+function tagDto(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    created_at: row.created_at
+  };
+}
+
 function makeCode(value) {
   return String(value || '')
     .trim()
@@ -49,11 +57,15 @@ const getMasterData = async (req, res) => {
     const [areaRows] = await pool.query(
       'SELECT * FROM area WHERE is_active = 1 ORDER BY area_name'
     );
+    const [tagRows] = await pool.query(
+      'SELECT * FROM incident_tags ORDER BY name'
+    );
     res.json({
       success: true,
       data: {
         customers: customerRows.map(customerDto),
-        areas: areaRows.map(areaDto)
+        areas: areaRows.map(areaDto),
+        tags: tagRows.map(tagDto)
       }
     });
   } catch (error) {
@@ -155,4 +167,22 @@ const deactivateArea = async (req, res) => {
   }
 };
 
-module.exports = { getMasterData, createCustomer, updateCustomerCsm, deactivateCustomer, createArea, deactivateArea };
+const createIncidentTag = async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ success: false, message: 'Admin access required' });
+  try {
+    const name = String(req.body.name || '').trim().slice(0, 50);
+    if (!name) return res.status(400).json({ success: false, message: 'Tag name is required' });
+    const [result] = await pool.query(
+      'INSERT INTO incident_tags (name, created_by) VALUES (?, ?)',
+      [name, req.user.id]
+    );
+    const [rows] = await pool.query('SELECT * FROM incident_tags WHERE id = ? LIMIT 1', [result.insertId]);
+    res.status(201).json({ success: true, data: tagDto(rows[0]) });
+  } catch (error) {
+    if (error?.code === 'ER_DUP_ENTRY') return res.status(409).json({ success: false, message: 'A tag with this name already exists.' });
+    console.error('Create incident tag error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
+  }
+};
+
+module.exports = { getMasterData, createCustomer, updateCustomerCsm, deactivateCustomer, createArea, deactivateArea, createIncidentTag };

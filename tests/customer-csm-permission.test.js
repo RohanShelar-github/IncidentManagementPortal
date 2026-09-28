@@ -25,7 +25,7 @@ test('the CSM update route requires the dedicated permission, not a hardcoded ad
 test('updateCustomerCsm persists the inbound CSM name for the given customer', () => {
   assert.match(masterDataController, /const updateCustomerCsm = async \(req, res\) => \{/);
   assert.match(masterDataController, /UPDATE customers SET inbound_csm_name = \?, updated_by = \? WHERE id = \?/);
-  assert.match(masterDataController, /module\.exports = \{ getMasterData, createCustomer, updateCustomerCsm, deactivateCustomer, createArea, deactivateArea \};/);
+  assert.match(masterDataController, /module\.exports = \{ getMasterData, createCustomer, updateCustomerCsm, deactivateCustomer, createArea, deactivateArea, createIncidentTag \};/);
 });
 
 test('the permission and an admin-only grant are seeded for fresh installs', () => {

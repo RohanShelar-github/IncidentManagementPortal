@@ -92,6 +92,7 @@ let customers = [];
 let areas = [];
 let customerRecords = [];
 let areaRecords = [];
+let tagRecords = [];
 
 // ── TIMEZONE SYSTEM ───────────────────────────────────────────
 var TIMEZONES = [
@@ -439,6 +440,7 @@ function loadMasterData(callback) {
     areas = [];
     customerRecords = [];
     areaRecords = [];
+    tagRecords = [];
     if (callback) callback(null);
     return;
   }
@@ -456,10 +458,12 @@ function loadMasterData(callback) {
       if (data && data.success && data.data) {
         customerRecords = Array.isArray(data.data.customers) ? data.data.customers : [];
         areaRecords = Array.isArray(data.data.areas) ? data.data.areas : [];
+        tagRecords = Array.isArray(data.data.tags) ? data.data.tags : [];
         customers = customerRecords.map(function (c) { return c.customer_name; }).filter(Boolean).sort();
         areas = areaRecords.map(function (a) { return a.area_name; }).filter(Boolean).sort();
         populateCustomerDropdowns();
         populateAreaDropdowns();
+        populateTagDropdowns();
         renderDataManagement();
         updateDmCounts();
         populateEngineerDropdowns();
@@ -1536,6 +1540,7 @@ function openDetailPanelEdit(id) {
 // ─── DASHBOARD HELPERS ────────────────────────────────────────────────────
 function getDashboardFilteredIncidents() {
   var custs = getMsValues('df_customer');
+  var tags = getMsValues('df_tag');
   var sevs = getMsValues('df_severity');
   var areas = getMsValues('df_area');
   var years = getMsValues('df_year');
@@ -1547,6 +1552,7 @@ function getDashboardFilteredIncidents() {
 
   var result = incidents.slice();
   if (custs.length) result = result.filter(function (i) { return custs.indexOf(i.customer) >= 0; });
+  if (tags.length) result = result.filter(function (i) { return tags.indexOf(i.tag || '') >= 0; });
   if (sevs.length) result = result.filter(function (i) { return sevs.indexOf(i.severity) >= 0; });
   if (areas.length) result = result.filter(function (i) { return areas.indexOf(i.area || '') >= 0; });
   if (years.length) result = result.filter(function (i) { return years.indexOf(getIncidentYear(i)) >= 0; });
@@ -1602,13 +1608,25 @@ function renderDataManagement() {
         + '</div>';
     }).join('');
   }
+  var tagList = document.getElementById('dmTagList');
+  if (tagList) {
+    tagList.innerHTML = tagRecords.map(function (t) {
+      var inUse = incidents.some(function (i) { return i.tagId === t.id; });
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">'
+        + '<span style="font-size:13px;color:var(--text)">' + escapeMetricHtml(t.name) + '</span>'
+        + '<span style="font-size:11px;color:var(--text-muted)">' + (inUse ? 'In use' : 'Unused') + '</span>'
+        + '</div>';
+    }).join('');
+  }
 }
 
 function updateDmCounts() {
   var cc = document.getElementById('dmCustCount');
   var ac = document.getElementById('dmAreaCount');
+  var tc = document.getElementById('dmTagCount');
   if (cc) cc.textContent = customers.length + ' customer' + (customers.length !== 1 ? 's' : '');
   if (ac) ac.textContent = areas.length + ' area' + (areas.length !== 1 ? 's' : '');
+  if (tc) tc.textContent = tagRecords.length + ' tag' + (tagRecords.length !== 1 ? 's' : '');
 }
 
 // ─── CUSTOMER 360 ──────────────────────────────────────────────────────────
@@ -2101,6 +2119,21 @@ function removeArea(name) {
     showToast('Area "' + name + '" deactivated', 'success');
   });
 }
+
+function addIncidentTag() {
+  if (!requireAdminMasterData()) return;
+  var inp = document.getElementById('dmNewTag');
+  if (!inp) return;
+  var name = inp.value.trim();
+  if (!name) { showToast('Enter a tag name', 'error'); return; }
+  if (tagRecords.some(function (t) { return t.name === name; })) { showToast('Tag already exists', 'error'); return; }
+  masterDataRequest('/master-data/tags', 'POST', { name: name }, function () {
+    inp.value = '';
+    addAudit('??', 'Added Tag', name);
+    showToast('Tag "' + name + '" added', 'success');
+  });
+}
+
 function applyDashFilters() {
   updateStats();
   renderRecentTable();
@@ -2113,7 +2146,7 @@ function applyDashFilters() {
   initCharts();
 
   // Count active filters (multi-select + date)
-  var msIds = ['df_customer', 'df_area', 'df_severity', 'df_year', 'df_month'];
+  var msIds = ['df_customer', 'df_tag', 'df_area', 'df_severity', 'df_year', 'df_month'];
   var msCount = msIds.reduce(function (n, id) { return n + getMsValues(id).length; }, 0);
   var dateCount = ['df_from', 'df_to'].filter(function (id) { var el = document.getElementById(id); return el && el.value; }).length;
   var activeCount = msCount + dateCount;
@@ -2128,7 +2161,7 @@ function applyDashFilters() {
 }
 
 function clearDashFilters() {
-  ['df_customer', 'df_area', 'df_severity', 'df_year', 'df_month'].forEach(function (id) { clearMsFilter(id); });
+  ['df_customer', 'df_tag', 'df_area', 'df_severity', 'df_year', 'df_month'].forEach(function (id) { clearMsFilter(id); });
   ['df_from', 'df_to'].forEach(function (id) { var el = document.getElementById(id); if (el) el.value = ''; });
   var badge = document.getElementById('df_active_badge');
   if (badge) badge.style.display = 'none';
@@ -4336,6 +4369,7 @@ function applyFilters() {
   var sevs = getMsValues('severityFilter');
   var stats = getMsValues('statusFilter');
   var custs = getMsValues('customerFilter');
+  var tags = getMsValues('classificationTagFilter');
   var areas = getMsValues('areaFilter');
   var assignees = getMsValues('assigneeFilter');
   var fromEl = document.getElementById('dateFrom');
@@ -4348,6 +4382,7 @@ function applyFilters() {
     if (sevs.length && sevs.indexOf(i.severity) < 0) return false;
     if (stats.length && stats.indexOf(i.status) < 0) return false;
     if (custs.length && custs.indexOf(i.customer) < 0) return false;
+    if (tags.length && tags.indexOf(i.tag || '') < 0) return false;
     if (areas.length && areas.indexOf(i.area || 'Unspecified') < 0) return false;
     if (assignees.length && assignees.indexOf(i.engineer) < 0) return false;
     if (from && i.date < from) return false;
@@ -4364,7 +4399,7 @@ function applyFilters() {
 function updateIncidentClearButton() {
   var button = document.getElementById('incidentClearFiltersBtn');
   if (!button) return;
-  var hasSelection = ['severityFilter', 'statusFilter', 'customerFilter', 'areaFilter', 'assigneeFilter'].some(function (id) { return getMsValues(id).length > 0; });
+  var hasSelection = ['severityFilter', 'statusFilter', 'customerFilter', 'classificationTagFilter', 'areaFilter', 'assigneeFilter'].some(function (id) { return getMsValues(id).length > 0; });
   var hasSearch = String(document.getElementById('searchFilter')?.value || '').trim().length > 0;
   var hasDate = Boolean(document.getElementById('dateFrom')?.value || document.getElementById('dateTo')?.value);
   button.style.display = hasSelection || hasSearch || hasDate ? '' : 'none';
@@ -4380,7 +4415,7 @@ function clearDrillDown() {
 function clearFilters() {
   var searchEl = document.getElementById('searchFilter');
   if (searchEl) searchEl.value = '';
-  ['severityFilter', 'statusFilter', 'customerFilter', 'areaFilter', 'assigneeFilter'].forEach(function (id) {
+  ['severityFilter', 'statusFilter', 'customerFilter', 'classificationTagFilter', 'areaFilter', 'assigneeFilter'].forEach(function (id) {
     clearMsFilter(id);
   });
   ['dateFrom', 'dateTo'].forEach(function (id) {
@@ -6684,6 +6719,28 @@ function populateAreaDropdowns() {
       + areas.map(function (a) { return '<option value="' + a + '">' + a + '</option>'; }).join('');
     if (cur && areas.indexOf(cur) >= 0) sel.value = cur;
   });
+}
+
+// classificationTagFilter/df_tag are multi-select ms-dropdowns keyed by tag
+// NAME (matching the incident-list filter convention); dp_f_tag_id is a
+// plain select keyed by tag ID, since that's what updateIncident's tag_id
+// expects — the two use different value types on purpose. Deliberately
+// named classificationTagFilter, NOT tagFilter — that id/concept (a filter
+// over the old free-text tags array) was explicitly removed previously (see
+// tests/incident-tag-filter-removal.test.js) and its dead #tagFilter
+// lookup in updateTagFilter() must stay inert, not get resurrected by a
+// same-named element for this unrelated feature.
+function populateTagDropdowns() {
+  var tagNames = tagRecords.map(function (t) { return t.name; });
+  populateMsDropdown('classificationTagFilter', tagNames, 'All Tags');
+  populateMsDropdown('df_tag', tagNames, 'All Tags');
+  var sel = document.getElementById('dp_f_tag_id');
+  if (sel) {
+    var cur = sel.value;
+    sel.innerHTML = '<option value="">Select tag</option>'
+      + tagRecords.map(function (t) { return '<option value="' + t.id + '">' + escapeMetricHtml(t.name) + '</option>'; }).join('');
+    if (cur && tagRecords.some(function (t) { return String(t.id) === String(cur); })) sel.value = cur;
+  }
 }
 
 function populateEngineerDropdowns() {
@@ -9097,6 +9154,8 @@ function openDetailPanel(id, editMode = false) {
   if (dpRdTicketsEl) dpRdTicketsEl.textContent = inc.rd_tickets || inc.rdTickets || '—';
   const dpRdTicketsReportEl = document.getElementById('dp_rd_tickets_report');
   if (dpRdTicketsReportEl) dpRdTicketsReportEl.textContent = inc.rd_tickets || inc.rdTickets || '—';
+  const dpTagEl = document.getElementById('dp_tag');
+  if (dpTagEl) dpTagEl.textContent = inc.tag || '—';
 
   // Tags — view mode
   var dpTagsView = document.getElementById('dp_tags_view');
@@ -9104,7 +9163,7 @@ function openDetailPanel(id, editMode = false) {
     var tags = inc.tags || [];
     dpTagsView.innerHTML = tags.length
       ? tags.map(function (t) { return renderTagChip(t, false, inc.id); }).join('')
-      : '<span style="font-size:12px;color:var(--text-muted)">No tags</span>';
+      : '<span style="font-size:12px;color:var(--text-muted)">No user tags</span>';
   }
   // Tags — edit mode chips
   var dpTagsChips = document.getElementById('dp_tags_chips');
@@ -9112,7 +9171,7 @@ function openDetailPanel(id, editMode = false) {
     var tags2 = inc.tags || [];
     dpTagsChips.innerHTML = tags2.length
       ? tags2.map(function (t) { return renderTagChip(t, true, inc.id); }).join('')
-      : '<span style="font-size:12px;color:var(--text-muted)">No tags yet</span>';
+      : '<span style="font-size:12px;color:var(--text-muted)">No user tags yet</span>';
   }
   var _si = function (id, val) { var e = document.getElementById(id); if (e) e.innerHTML = val; };
   _si('dp_sev_text', '<span class="badge badge-' + inc.severity.toLowerCase() + '">' + inc.severity + '</span>');
@@ -9248,6 +9307,7 @@ function populateEditForm(inc) {
   document.getElementById('dp_f_customer').value = inc.customer;
   document.getElementById('dp_f_project').value = inc.project;
   var dpPl = document.getElementById('dp_f_product_line'); if (dpPl) dpPl.value = inc.product_line || '';
+  var dpTagSel = document.getElementById('dp_f_tag_id'); if (dpTagSel) dpTagSel.value = inc.tagId || '';
   document.getElementById('dp_f_severity').value = inc.severity;
   document.getElementById('dp_f_status').value = inc.status;
   document.getElementById('dp_f_engineer').value = inc.engineer;
@@ -9453,7 +9513,8 @@ function saveDetailEdit() {
       mttr_h: inc.mttrH,
       mttr_m: inc.mttrM,
       mttr_minutes: inc.mttrH * 60 + inc.mttrM,
-      tags: Array.isArray(inc.tags) ? inc.tags.slice() : []
+      tags: Array.isArray(inc.tags) ? inc.tags.slice() : [],
+      tag_id: document.getElementById('dp_f_tag_id')?.value || null
     };
 
     fetch(window.APP_CONFIG.API_BASE_URL + `/incidents/${inc.id}`, {

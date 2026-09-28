@@ -142,17 +142,29 @@ const resolveArea = async (nameOrId) => {
   return rows.length ? { id: rows[0].id, name: rows[0].area_name } : { id: null, name: String(nameOrId) };
 };
 
+// The single-select classification Tag (Customer vs Internal, see migration
+// 042) is auto-applied purely from the customer at creation time — these
+// three customers are the only ones treated as Internal; every other
+// customer (including no customer at all) gets the Customer tag.
+const INTERNAL_TAG_CUSTOMERS = new Set(['MIS Cloud', 'Matrix', 'Demo']);
+const resolveAutoTagId = async (customerName) => {
+  const tagName = INTERNAL_TAG_CUSTOMERS.has(String(customerName || '').trim()) ? 'Internal' : 'Customer';
+  const [rows] = await pool.query('SELECT id FROM incident_tags WHERE name = ? LIMIT 1', [tagName]);
+  return rows.length ? rows[0].id : null;
+};
+
 const incidentSelect = `
   SELECT i.*, assignee.full_name AS engineer_name, creator.full_name AS created_by_name,
          ${CANONICAL_INCIDENT_FIELDS
     ? "DATE_FORMAT(i.opened_at_utc, '%Y-%m-%d %H:%i:%s') AS opened_at_utc_text, DATE_FORMAT(i.closed_at_utc, '%Y-%m-%d %H:%i:%s') AS closed_at_utc_text,"
     : "NULL AS opened_at_utc_text, NULL AS closed_at_utc_text,"}
-         customer_master.customer_name, area_master.area_name
+         customer_master.customer_name, area_master.area_name, classification_tag.name AS classification_tag_name
     FROM incidents i
     LEFT JOIN users assignee ON assignee.id = i.assigned_to
     LEFT JOIN users creator ON creator.id = i.created_by
     LEFT JOIN customers customer_master ON customer_master.id = i.customer_id
     LEFT JOIN area area_master ON area_master.id = i.area_id
+    LEFT JOIN incident_tags classification_tag ON classification_tag.id = i.tag_id
 `;
 
 function parseTags(tags) {
@@ -253,6 +265,8 @@ function mapIncident(row) {
     rd_tickets: row.rd_tickets || '',
     rdTickets: row.rd_tickets || '',
     tags: parseTags(row.tags),
+    tagId: row.tag_id || null,
+    tag: row.classification_tag_name || null,
     comments: parseComments(row.comments),
     created_at: row.created_at,
     updated_at: row.updated_at
@@ -292,6 +306,7 @@ const createIncident = async (req, res) => {
     const assignedTo = await resolveUserId(b.engineer);
     const resolvedCustomer = await resolveCustomer(b.customer_id || b.customer);
     const resolvedArea = await resolveArea(b.area_id || b.area);
+    const autoTagId = await resolveAutoTagId(resolvedCustomer.name || b.customer);
     const start = b.startDT || b.date_created || b.date || new Date().toISOString().substring(0, 16);
     const canonical = buildCanonicalValues({ ...b, date_time_opened: b.date_time_opened || start }, null);
     const downtime = minutesToHM(canonical.downtime_mins);
@@ -300,7 +315,7 @@ const createIncident = async (req, res) => {
     const columns = [
       'incident_ref', 'legacy_case_number', 'title', 'description', 'severity', 'status', 'assigned_to', 'case_owner', 'created_by',
       'customer_id', 'customer', 'project', 'project_area', 'area_id', 'area', 'product_line',
-      'sla_hours', 'tags', 'start_dt', 'date_time_opened', 'end_dt', 'date_time_closed', 'closed_date', 'timezone',
+      'sla_hours', 'tags', 'tag_id', 'start_dt', 'date_time_opened', 'end_dt', 'date_time_closed', 'closed_date', 'timezone',
       'sf_case_no', 'incident_report_status', 'downtime_hours', 'downtime_minutes', 'downtime_mins', 'downtime_str',
       'mttd_str', 'mttd_minutes', 'mttr_str', 'account_name', 'internal_status', 'rd_tickets'
     ];
@@ -310,7 +325,7 @@ const createIncident = async (req, res) => {
       req.user.id, resolvedCustomer.id, resolvedCustomer.name || b.customer || null, b.project || null,
       b.project_area || null, resolvedArea.id, resolvedArea.name || b.area || null, b.product_line || null,
       b.sla_hours || null,
-      JSON.stringify(Array.isArray(b.tags) ? b.tags : []), start, b.date_time_opened || start || null,
+      JSON.stringify(Array.isArray(b.tags) ? b.tags : []), autoTagId, start, b.date_time_opened || start || null,
       b.endDT || b.date_time_closed || null, b.date_time_closed || null, b.closed_date || null, toLegacyTimezone(b.timezone || canonical.source_timezone),
       b.sf_case || b.sfCase || b.legacy_case_number || null, b.incident_report_status || null,
       downtime.hours, downtime.minutes, downtime.total, downtime.text || null,
@@ -684,6 +699,15 @@ const updateIncident = async (req, res) => {
     if (b.internal_status !== undefined) add('internal_status', b.internal_status || null);
     if ((b.rd_tickets !== undefined || b.rdTickets !== undefined) && String(b.rd_tickets || b.rdTickets || '').trim() !== '') add('rd_tickets', String(b.rd_tickets || b.rdTickets).trim());
     if (b.tags !== undefined) add('tags', JSON.stringify(Array.isArray(b.tags) ? b.tags : []));
+    if (b.tag_id !== undefined) {
+      if (b.tag_id === null || b.tag_id === '') {
+        add('tag_id', null);
+      } else {
+        const [tagRows] = await pool.query('SELECT id FROM incident_tags WHERE id = ? LIMIT 1', [Number(b.tag_id)]);
+        if (!tagRows.length) return res.status(400).json({ success: false, message: 'Invalid tag' });
+        add('tag_id', tagRows[0].id);
+      }
+    }
 
     if (CANONICAL_INCIDENT_FIELDS) {
       if (canonical.opened_at_utc !== undefined) add('opened_at_utc', canonical.opened_at_utc);
