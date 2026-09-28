@@ -185,4 +185,28 @@ const createIncidentTag = async (req, res) => {
   }
 };
 
-module.exports = { getMasterData, createCustomer, updateCustomerCsm, deactivateCustomer, createArea, deactivateArea, createIncidentTag };
+// Customer and Internal are the two system tags the whole auto-classification
+// feature depends on (see incidentController.resolveAutoTagId) — deleting
+// either would silently break auto-tagging for every future incident, so
+// they can never be removed here, only additional tags created afterward.
+const CORE_INCIDENT_TAGS = new Set(['Customer', 'Internal']);
+
+const deleteIncidentTag = async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ success: false, message: 'Admin access required' });
+  try {
+    const [rows] = await pool.query('SELECT id, name FROM incident_tags WHERE id = ? LIMIT 1', [req.params.id]);
+    if (!rows.length) return res.status(404).json({ success: false, message: 'Tag not found' });
+    if (CORE_INCIDENT_TAGS.has(rows[0].name)) {
+      return res.status(409).json({ success: false, message: `"${rows[0].name}" is a system tag required for auto-classification and cannot be deleted.` });
+    }
+    const [refs] = await pool.query('SELECT COUNT(*) AS count FROM incidents WHERE tag_id = ?', [req.params.id]);
+    if (refs[0].count > 0) return res.status(409).json({ success: false, message: 'Tag is applied to incidents and was not deleted' });
+    await pool.query('DELETE FROM incident_tags WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete incident tag error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
+  }
+};
+
+module.exports = { getMasterData, createCustomer, updateCustomerCsm, deactivateCustomer, createArea, deactivateArea, createIncidentTag, deleteIncidentTag };

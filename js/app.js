@@ -1612,9 +1612,18 @@ function renderDataManagement() {
   if (tagList) {
     tagList.innerHTML = tagRecords.map(function (t) {
       var inUse = incidents.some(function (i) { return i.tagId === t.id; });
+      // Customer/Internal are system tags the auto-classification feature
+      // depends on (see resolveAutoTagId) — never offer to delete them here,
+      // mirroring the backend's own CORE_INCIDENT_TAGS guard.
+      var isCore = t.name === 'Customer' || t.name === 'Internal';
+      var status = isCore
+        ? '<span style="font-size:11px;color:var(--text-muted)">System tag</span>'
+        : (inUse
+          ? '<span style="font-size:11px;color:var(--text-muted)">In use</span>'
+          : '<button onclick="removeIncidentTag(' + t.id + ')" style="background:transparent;color:#f75c7c;border:none;font-size:15px;padding:3px 7px;cursor:pointer" title="Remove tag" aria-label="Remove tag">&#128465;</button>');
       return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">'
         + '<span style="font-size:13px;color:var(--text)">' + escapeMetricHtml(t.name) + '</span>'
-        + '<span style="font-size:11px;color:var(--text-muted)">' + (inUse ? 'In use' : 'Unused') + '</span>'
+        + status
         + '</div>';
     }).join('');
   }
@@ -2131,6 +2140,16 @@ function addIncidentTag() {
     inp.value = '';
     addAudit('??', 'Added Tag', name);
     showToast('Tag "' + name + '" added', 'success');
+  });
+}
+
+function removeIncidentTag(id) {
+  if (!requireAdminMasterData()) return;
+  var rec = tagRecords.find(function (t) { return t.id === id; });
+  if (!rec) { showToast('Tag not found', 'error'); return; }
+  masterDataRequest('/master-data/tags/' + id, 'DELETE', null, function () {
+    addAudit('??', 'Deleted Tag', rec.name);
+    showToast('Tag "' + rec.name + '" deleted', 'success');
   });
 }
 

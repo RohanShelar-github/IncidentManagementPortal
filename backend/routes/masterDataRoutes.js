@@ -9,7 +9,8 @@ const {
   deactivateCustomer,
   createArea,
   deactivateArea,
-  createIncidentTag
+  createIncidentTag,
+  deleteIncidentTag
 } = require('../controllers/masterDataController');
 
 router.use(authenticateToken);
@@ -21,5 +22,6 @@ router.delete('/customers/:id', deactivateCustomer);
 router.post('/areas', createArea);
 router.delete('/areas/:id', deactivateArea);
 router.post('/tags', createIncidentTag);
+router.delete('/tags/:id', deleteIncidentTag);
 
 module.exports = router;

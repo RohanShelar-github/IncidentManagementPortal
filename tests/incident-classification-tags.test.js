@@ -48,8 +48,18 @@ test('createIncidentTag is admin-only, requires a non-empty name, and handles du
   assert.match(masterDataController, /const createIncidentTag = async \(req, res\) => \{\s*\n\s*if \(!isAdmin\(req\)\) return res\.status\(403\)/);
   assert.match(masterDataController, /if \(!name\) return res\.status\(400\)\.json\(\{ success: false, message: 'Tag name is required' \}\);/);
   assert.match(masterDataController, /if \(error\?\.code === 'ER_DUP_ENTRY'\) return res\.status\(409\)/);
-  assert.match(masterDataController, /module\.exports = \{ getMasterData, createCustomer, updateCustomerCsm, deactivateCustomer, createArea, deactivateArea, createIncidentTag \};/);
+  assert.match(masterDataController, /module\.exports = \{ getMasterData, createCustomer, updateCustomerCsm, deactivateCustomer, createArea, deactivateArea, createIncidentTag, deleteIncidentTag \};/);
   assert.match(masterDataRoutes, /router\.post\('\/tags', createIncidentTag\);/);
+});
+
+test('deleteIncidentTag is admin-only, blocks deleting the two system tags (Customer/Internal) required for auto-classification, blocks deleting a tag still applied to incidents, and otherwise hard-deletes it', () => {
+  assert.match(masterDataController, /const CORE_INCIDENT_TAGS = new Set\(\['Customer', 'Internal'\]\);/);
+  assert.match(masterDataController, /const deleteIncidentTag = async \(req, res\) => \{\s*\n\s*if \(!isAdmin\(req\)\) return res\.status\(403\)/);
+  assert.match(masterDataController, /if \(CORE_INCIDENT_TAGS\.has\(rows\[0\]\.name\)\) \{\s*\n\s*return res\.status\(409\)\.json\(\{ success: false, message: `"\$\{rows\[0\]\.name\}" is a system tag required for auto-classification and cannot be deleted\.` \}\);/);
+  assert.match(masterDataController, /SELECT COUNT\(\*\) AS count FROM incidents WHERE tag_id = \?/);
+  assert.match(masterDataController, /if \(refs\[0\]\.count > 0\) return res\.status\(409\)\.json\(\{ success: false, message: 'Tag is applied to incidents and was not deleted' \}\);/);
+  assert.match(masterDataController, /await pool\.query\('DELETE FROM incident_tags WHERE id = \?', \[req\.params\.id\]\);/);
+  assert.match(masterDataRoutes, /router\.delete\('\/tags\/:id', deleteIncidentTag\);/);
 });
 
 // ── Backend: auto-tagging incidents by customer ───────────────────────────
@@ -112,6 +122,19 @@ test('loadMasterData parses tags into tagRecords and calls populateTagDropdowns;
   assert.match(frontend, /populateTagDropdowns\(\);/);
   assert.match(frontend, /var tagList = document\.getElementById\('dmTagList'\);/);
   assert.match(frontend, /var inUse = incidents\.some\(function \(i\) \{ return i\.tagId === t\.id; \}\);/);
+});
+
+test('dmTagList shows a delete icon only for non-core, unused tags — Customer/Internal show "System tag" and in-use tags show "In use", both without a delete option', () => {
+  assert.match(frontend, /var isCore = t\.name === 'Customer' \|\| t\.name === 'Internal';/);
+  assert.match(frontend, /'<span style="font-size:11px;color:var\(--text-muted\)">System tag<\/span>'/);
+  assert.match(frontend, /'<span style="font-size:11px;color:var\(--text-muted\)">In use<\/span>'/);
+  assert.match(frontend, /'<button onclick="removeIncidentTag\(' \+ t\.id \+ '\)" style="background:transparent;color:#f75c7c;border:none;font-size:15px;padding:3px 7px;cursor:pointer" title="Remove tag" aria-label="Remove tag">&#128465;<\/button>'/);
+});
+
+test('removeIncidentTag only embeds the tag id in its onclick (never the raw tag name, which could contain a quote and break the generated JS), looking the name up internally from tagRecords for the confirmation/audit text', () => {
+  assert.match(frontend, /function removeIncidentTag\(id\) \{\s*\n\s*if \(!requireAdminMasterData\(\)\) return;\s*\n\s*var rec = tagRecords\.find\(function \(t\) \{ return t\.id === id; \}\);/);
+  assert.match(frontend, /masterDataRequest\('\/master-data\/tags\/' \+ id, 'DELETE', null, function \(\) \{/);
+  assert.doesNotMatch(frontend, /removeIncidentTag\(' \+ t\.id \+ ', \\''/, 'must not take a second inline argument built from the raw tag name');
 });
 
 // ── Frontend: Tag filter on Dashboard and Incidents, differentiating ─────
