@@ -61,14 +61,17 @@ test('INTERNAL_TAG_CUSTOMERS is exactly MIS Cloud, Matrix, Demo, and resolveAuto
   assert.match(incidentController, /SELECT id FROM incident_tags WHERE name = \? LIMIT 1/);
 });
 
-test('createIncident computes the tag automatically from the resolved customer and stores it in the new tag_id column', () => {
-  assert.match(incidentController, /const autoTagId = await resolveAutoTagId\(resolvedCustomer\.name \|\| b\.customer\);/);
+test('createIncident honors an explicit tag_id from the (optional) create-form field, validating it against incident_tags; leaving it blank falls back to resolveAutoTagId from the resolved customer', () => {
+  assert.match(incidentController, /if \(b\.tag_id !== undefined && b\.tag_id !== null && b\.tag_id !== ''\) \{\s*\n\s*const \[tagRows\] = await pool\.query\('SELECT id FROM incident_tags WHERE id = \? LIMIT 1', \[Number\(b\.tag_id\)\]\);\s*\n\s*if \(!tagRows\.length\) return res\.status\(400\)\.json\(\{ success: false, message: 'Invalid tag' \}\);\s*\n\s*tagId = tagRows\[0\]\.id;\s*\n\s*\} else \{\s*\n\s*tagId = await resolveAutoTagId\(resolvedCustomer\.name \|\| b\.customer\);/);
   assert.match(incidentController, /'sla_hours', 'tags', 'tag_id', 'start_dt',/);
-  assert.match(incidentController, /JSON\.stringify\(Array\.isArray\(b\.tags\) \? b\.tags : \[\]\), autoTagId, start, b\.date_time_opened \|\| start \|\| null,/);
+  assert.match(incidentController, /JSON\.stringify\(Array\.isArray\(b\.tags\) \? b\.tags : \[\]\), tagId, start, b\.date_time_opened \|\| start \|\| null,/);
 });
 
-test('updateIncident lets tag_id be changed manually, validating it against a real incident_tags row (or clearing it with null/empty)', () => {
-  assert.match(incidentController, /if \(b\.tag_id !== undefined\) \{\s*\n\s*if \(b\.tag_id === null \|\| b\.tag_id === ''\) \{\s*\n\s*add\('tag_id', null\);/);
+test('updateIncident lets tag_id be changed manually, validating it against a real incident_tags row — blank/null now means "Auto", recomputing from whichever customer applies after the update, not clearing the tag (there is no legitimate untagged state)', () => {
+  assert.match(incidentController, /let effectiveCustomerName = current\.customer;/);
+  assert.match(incidentController, /effectiveCustomerName = resolvedCustomer\.name \|\| b\.customer \|\| null;/);
+  assert.match(incidentController, /if \(b\.tag_id !== undefined\) \{\s*\n\s*if \(b\.tag_id === null \|\| b\.tag_id === ''\) \{/);
+  assert.match(incidentController, /add\('tag_id', await resolveAutoTagId\(effectiveCustomerName\)\);/);
   assert.match(incidentController, /const \[tagRows\] = await pool\.query\('SELECT id FROM incident_tags WHERE id = \? LIMIT 1', \[Number\(b\.tag_id\)\]\);/);
   assert.match(incidentController, /if \(!tagRows\.length\) return res\.status\(400\)\.json\(\{ success: false, message: 'Invalid tag' \}\);/);
 });
@@ -126,11 +129,13 @@ test('the new Tag filter deliberately avoids the id/concept "tagFilter" — that
   assert.doesNotMatch(frontend.slice(start, end), /'tagFilter'|\bi\.tags\b/);
 });
 
-test('populateTagDropdowns populates classificationTagFilter/df_tag by tag NAME (ms-dropdowns) and dp_f_tag_id by tag ID (plain select)', () => {
+test('populateTagDropdowns populates classificationTagFilter/df_tag by tag NAME (ms-dropdowns), and both f_tag_id (create form) and dp_f_tag_id (detail edit) by tag ID with an "Auto (based on customer)" default option', () => {
   assert.match(frontend, /function populateTagDropdowns\(\) \{/);
   assert.match(frontend, /populateMsDropdown\('classificationTagFilter', tagNames, 'All Tags'\);/);
   assert.match(frontend, /populateMsDropdown\('df_tag', tagNames, 'All Tags'\);/);
-  assert.match(frontend, /tagRecords\.map\(function \(t\) \{ return '<option value="' \+ t\.id \+ '">' \+ escapeMetricHtml\(t\.name\) \+ '<\/option>'; \}\)\.join\(''\);/);
+  assert.match(frontend, /var tagOptionsHtml = tagRecords\.map\(function \(t\) \{ return '<option value="' \+ t\.id \+ '">' \+ escapeMetricHtml\(t\.name\) \+ '<\/option>'; \}\)\.join\(''\);/);
+  assert.match(frontend, /\['dp_f_tag_id', 'f_tag_id'\]\.forEach\(function \(id\) \{/);
+  assert.match(frontend, /sel\.innerHTML = '<option value="">Auto \(based on customer\)<\/option>' \+ tagOptionsHtml;/);
 });
 
 test('applyFilters (Incidents page) filters by classificationTagFilter against i.tag, and classificationTagFilter participates in the clear-filters button/logic', () => {
@@ -147,14 +152,19 @@ test('getDashboardFilteredIncidents filters by df_tag against i.tag, and df_tag 
   assert.match(frontend, /\['df_customer', 'df_tag', 'df_area', 'df_severity', 'df_year', 'df_month'\]\.forEach\(function \(id\) \{ clearMsFilter\(id\); \}\);/);
 });
 
-// ── Frontend: Tag only shown/editable when VIEWING an incident, never in ──
-// ── the Create New Incident form                                         ──
+// ── Frontend: Tag is shown/editable when viewing an incident, AND is an ──
+// ── optional field on the Create New Incident form (defaults to Auto)   ──
 
-test('the Tag field only exists in the incident detail view/edit panel (view-mode dp_tag cell + edit-mode dp_f_tag_id select), never in the Create New Incident form', () => {
+test('the incident detail view/edit panel has the Tag field (view-mode dp_tag cell + edit-mode dp_f_tag_id select)', () => {
   assert.match(html, /<div id="dp_tag" style="font-size:14px;font-weight:600;color:var\(--text\)">—<\/div>/);
-  assert.match(html, /<select id="dp_f_tag_id" style="width:100%[^"]*"><option value="">Select tag<\/option><\/select>/);
-  // The create-form modal only has f_* ids; there must be no f_tag_id there.
-  assert.doesNotMatch(html, /id="f_tag_id"/);
+  assert.match(html, /<select id="dp_f_tag_id" style="width:100%[^"]*"><option value="">Auto \(based on customer\)<\/option><\/select>/);
+});
+
+test('the Create New Incident form has an optional Tag field (f_tag_id) defaulting to "Auto (based on customer)", with a hint explaining that default', () => {
+  assert.match(html, /<label class="form-label">Tag<\/label>\s*\n<select id="f_tag_id"><option value="">Auto \(based on customer\)<\/option><\/select>/);
+  assert.match(html, /Leave as Auto to apply Customer\/Internal automatically/);
+  // It must not be marked required, unlike Customer/Project/Severity/etc.
+  assert.doesNotMatch(html, /<label class="form-label required">Tag<\/label>/);
 });
 
 test('openDetailPanel populates dp_tag from inc.tag when viewing, and populateEditForm populates dp_f_tag_id from inc.tagId when editing', () => {
@@ -164,6 +174,16 @@ test('openDetailPanel populates dp_tag from inc.tag when viewing, and populateEd
 
 test('saveDetailEdit sends the selected dp_f_tag_id back to the server as tag_id', () => {
   assert.match(frontend, /tag_id: document\.getElementById\('dp_f_tag_id'\)\?\.value \|\| null/);
+});
+
+test('editIncident (the shared Create/Edit modal) pre-fills f_tag_id from the incident\'s current tagId, and opening the modal fresh for a NEW incident resets f_tag_id back to blank (Auto)', () => {
+  assert.match(frontend, /var ftag = document\.getElementById\('f_tag_id'\); if \(ftag\) ftag\.value = inc\.tagId \|\| '';/);
+  assert.match(frontend, /\['f_title', 'f_customer', 'f_project', 'f_product_line', 'f_severity', 'f_status', 'f_engineer', 'f_sf_case', 'f_rd_tickets', 'f_area', 'f_tag_id'\]\.forEach\(f => \{/);
+});
+
+test('saveIncident sends f_tag_id as tag_id on both the create (POST) and edit (PUT) payloads', () => {
+  assert.match(frontend, /sf_case: sfCase,\s*\n\s*rd_tickets: rdTickets,\s*\n\s*description: desc,\s*\n\s*sla_hours: null,\s*\n\s*area,\s*\n\s*tags: createModalTags\.slice\(\),\s*\n\s*tag_id: document\.getElementById\('f_tag_id'\)\?\.value \|\| null\s*\n\s*\};/, 'edit (PUT) payload must include tag_id');
+  assert.match(frontend, /description: desc,\s*\n\s*area,\s*\n\s*tags: createModalTags\.slice\(\),\s*\n\s*tag_id: document\.getElementById\('f_tag_id'\)\?\.value \|\| null,\s*\n\s*operations_email_audit_id: pendingOperationsEmailAuditId,/, 'create (POST) payload must include tag_id');
 });
 
 // ── Requirement: the tag must never appear in the individual or bulk report ──

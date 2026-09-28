@@ -306,7 +306,18 @@ const createIncident = async (req, res) => {
     const assignedTo = await resolveUserId(b.engineer);
     const resolvedCustomer = await resolveCustomer(b.customer_id || b.customer);
     const resolvedArea = await resolveArea(b.area_id || b.area);
-    const autoTagId = await resolveAutoTagId(resolvedCustomer.name || b.customer);
+    // The Tag field on the create form is optional ("Auto (based on
+    // customer)") — an explicit choice there is honored as-is; leaving it
+    // blank falls back to the same auto-classification a brand-new incident
+    // would get without any tag field at all.
+    let tagId;
+    if (b.tag_id !== undefined && b.tag_id !== null && b.tag_id !== '') {
+      const [tagRows] = await pool.query('SELECT id FROM incident_tags WHERE id = ? LIMIT 1', [Number(b.tag_id)]);
+      if (!tagRows.length) return res.status(400).json({ success: false, message: 'Invalid tag' });
+      tagId = tagRows[0].id;
+    } else {
+      tagId = await resolveAutoTagId(resolvedCustomer.name || b.customer);
+    }
     const start = b.startDT || b.date_created || b.date || new Date().toISOString().substring(0, 16);
     const canonical = buildCanonicalValues({ ...b, date_time_opened: b.date_time_opened || start }, null);
     const downtime = minutesToHM(canonical.downtime_mins);
@@ -325,7 +336,7 @@ const createIncident = async (req, res) => {
       req.user.id, resolvedCustomer.id, resolvedCustomer.name || b.customer || null, b.project || null,
       b.project_area || null, resolvedArea.id, resolvedArea.name || b.area || null, b.product_line || null,
       b.sla_hours || null,
-      JSON.stringify(Array.isArray(b.tags) ? b.tags : []), autoTagId, start, b.date_time_opened || start || null,
+      JSON.stringify(Array.isArray(b.tags) ? b.tags : []), tagId, start, b.date_time_opened || start || null,
       b.endDT || b.date_time_closed || null, b.date_time_closed || null, b.closed_date || null, toLegacyTimezone(b.timezone || canonical.source_timezone),
       b.sf_case || b.sfCase || b.legacy_case_number || null, b.incident_report_status || null,
       downtime.hours, downtime.minutes, downtime.total, downtime.text || null,
@@ -616,10 +627,12 @@ const updateIncident = async (req, res) => {
     const canonical = buildCanonicalValues(canonicalBody, current);
 
     if (b.title !== undefined) add('title', b.title);
+    let effectiveCustomerName = current.customer;
     if (b.customer !== undefined || b.customer_id !== undefined) {
       const resolvedCustomer = await resolveCustomer(b.customer_id || b.customer);
       add('customer_id', resolvedCustomer.id);
       add('customer', resolvedCustomer.name || b.customer || null);
+      effectiveCustomerName = resolvedCustomer.name || b.customer || null;
     }
     if (b.project !== undefined && String(b.project || '').trim() !== '') add('project', String(b.project).trim());
     if (b.project_area !== undefined) add('project_area', b.project_area || null);
@@ -701,7 +714,10 @@ const updateIncident = async (req, res) => {
     if (b.tags !== undefined) add('tags', JSON.stringify(Array.isArray(b.tags) ? b.tags : []));
     if (b.tag_id !== undefined) {
       if (b.tag_id === null || b.tag_id === '') {
-        add('tag_id', null);
+        // Blank means "Auto" — recompute from whichever customer applies
+        // after this update, same rule as a brand-new incident. There is no
+        // legitimate "no tag" state once auto-assignment exists.
+        add('tag_id', await resolveAutoTagId(effectiveCustomerName));
       } else {
         const [tagRows] = await pool.query('SELECT id FROM incident_tags WHERE id = ? LIMIT 1', [Number(b.tag_id)]);
         if (!tagRows.length) return res.status(400).json({ success: false, message: 'Invalid tag' });

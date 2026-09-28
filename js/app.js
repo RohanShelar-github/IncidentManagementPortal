@@ -5030,7 +5030,7 @@ function openModal(id) {
     createModalTags = []; renderCreateTagChips();
     var _sib = document.getElementById('saveIncidentBtn'); if (_sib) _sib.textContent = 'Create Incident';
     var _sdb = document.getElementById('saveDraftBtn'); if (_sdb) _sdb.style.display = '';
-    ['f_title', 'f_customer', 'f_project', 'f_product_line', 'f_severity', 'f_status', 'f_engineer', 'f_sf_case', 'f_rd_tickets', 'f_area'].forEach(f => {
+    ['f_title', 'f_customer', 'f_project', 'f_product_line', 'f_severity', 'f_status', 'f_engineer', 'f_sf_case', 'f_rd_tickets', 'f_area', 'f_tag_id'].forEach(f => {
       const el = document.getElementById(f);
       if (el) el.value = f === 'f_status' ? 'New' : '';
     });
@@ -5081,6 +5081,7 @@ function editIncident(id) {
   document.getElementById('f_customer').value = inc.customer;
   document.getElementById('f_project').value = inc.project;
   var fpl = document.getElementById('f_product_line'); if (fpl) fpl.value = inc.product_line || '';
+  var ftag = document.getElementById('f_tag_id'); if (ftag) ftag.value = inc.tagId || '';
   var frd = document.getElementById('f_rd_tickets'); if (frd) frd.value = inc.rd_tickets || inc.rdTickets || '';
   var fsf = document.getElementById('f_sf_case'); if (fsf) fsf.value = inc.sfCase || inc.sf_case || '';
   document.getElementById('f_severity').value = inc.severity;
@@ -5626,7 +5627,8 @@ function saveIncident() {
         description: desc,
         sla_hours: null,
         area,
-        tags: createModalTags.slice()
+        tags: createModalTags.slice(),
+        tag_id: document.getElementById('f_tag_id')?.value || null
       };
 
       fetch(window.APP_CONFIG.API_BASE_URL + `/incidents/${incidentId}`, {
@@ -5692,6 +5694,7 @@ function saveIncident() {
         description: desc,
         area,
         tags: createModalTags.slice(),
+        tag_id: document.getElementById('f_tag_id')?.value || null,
         operations_email_audit_id: pendingOperationsEmailAuditId,
         draft_id: pendingIncidentDraftId,
         notification_email: pendingIncidentEmail
@@ -6734,13 +6737,14 @@ function populateTagDropdowns() {
   var tagNames = tagRecords.map(function (t) { return t.name; });
   populateMsDropdown('classificationTagFilter', tagNames, 'All Tags');
   populateMsDropdown('df_tag', tagNames, 'All Tags');
-  var sel = document.getElementById('dp_f_tag_id');
-  if (sel) {
+  var tagOptionsHtml = tagRecords.map(function (t) { return '<option value="' + t.id + '">' + escapeMetricHtml(t.name) + '</option>'; }).join('');
+  ['dp_f_tag_id', 'f_tag_id'].forEach(function (id) {
+    var sel = document.getElementById(id);
+    if (!sel) return;
     var cur = sel.value;
-    sel.innerHTML = '<option value="">Select tag</option>'
-      + tagRecords.map(function (t) { return '<option value="' + t.id + '">' + escapeMetricHtml(t.name) + '</option>'; }).join('');
+    sel.innerHTML = '<option value="">Auto (based on customer)</option>' + tagOptionsHtml;
     if (cur && tagRecords.some(function (t) { return String(t.id) === String(cur); })) sel.value = cur;
-  }
+  });
 }
 
 function populateEngineerDropdowns() {
