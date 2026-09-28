@@ -11,8 +11,8 @@ test('mailbox incident links mark only the matching Graph message and preserve o
     { id: 'graph-message-1', subject: 'Linked alert' },
     { id: 'graph-message-2', subject: 'Unrelated alert' }
   ];
-  const linked = applyMailboxIncidentLinks(messages, [{ graph_message_id: 'graph-message-1', incident_ref: 'INC-999' }]);
-  assert.deepEqual(linked[0], { id: 'graph-message-1', subject: 'Linked alert', incidentCreated: true, incidentRef: 'INC-999' });
+  const linked = applyMailboxIncidentLinks(messages, [{ graph_message_id: 'graph-message-1', incident_ref: 'INC-999', incident_status: 'closed' }]);
+  assert.deepEqual(linked[0], { id: 'graph-message-1', subject: 'Linked alert', incidentCreated: true, incidentRef: 'INC-999', incidentStatus: 'closed' });
   assert.deepEqual(linked[1], messages[1]);
 });
 

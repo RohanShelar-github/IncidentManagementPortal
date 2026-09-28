@@ -18,7 +18,7 @@ function applyMailboxIncidentLinks(messages, links) {
   return (messages || []).map((message) => {
     const link = byMessageId.get(String(message?.id || '')) || null;
     if (!link) return message;
-    if (link.incident_ref) return { ...message, incidentCreated: true, incidentRef: link.incident_ref };
+    if (link.incident_ref) return { ...message, incidentCreated: true, incidentRef: link.incident_ref, incidentStatus: link.incident_status || null };
     return {
       ...message,
       incidentDraft: true,
@@ -37,7 +37,7 @@ async function attachMailboxIncidentLinks(messages) {
   if (!messageIds.length) return messages || [];
   const placeholders = messageIds.map(() => '?').join(', ');
   const [incidentLinks] = await pool.query(
-    `SELECT a.graph_message_id, i.incident_ref
+    `SELECT a.graph_message_id, i.incident_ref, i.status AS incident_status
        FROM operations_email_incident_audit a
        JOIN incidents i ON i.id = a.incident_id
       WHERE a.status = 'created' AND a.incident_id IS NOT NULL

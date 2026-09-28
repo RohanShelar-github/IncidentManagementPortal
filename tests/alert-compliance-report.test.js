@@ -267,7 +267,7 @@ test('the manual-resolution migration adds is_resolution to the existing comment
 
 test('the report row carries the day field and the per-occurrence incidentRef, additively', () => {
   assert.match(reportController, /day: group\.day,/);
-  assert.match(reportController, /incidentRef: incidentByMessageId\.get\(o\.id\) \|\| null/);
+  assert.match(reportController, /incidentRef: \(incidentByMessageId\.get\(o\.id\) \|\| \{\}\)\.ref \|\| null/);
 });
 
 test('a manual resolution only overrides state for went_quiet groups, never overriding a real incident or an automatic resolved signal', () => {
@@ -395,8 +395,8 @@ test('every Azure alert is attributed to NGC regardless of subject text, since N
 // ── Requirement: table STATE column shows only the real activity state; ──
 // ── "Incident Created" is surfaced separately, inside the alert detail   ──
 
-test('the controller calls deriveAlertState without hasIncident — state is never driven by incident presence', () => {
-  assert.match(reportController, /const state = deriveAlertState\(group, now\);/);
+test('the controller calls deriveAlertState without hasIncident — the alert\'s own activity/resolution signal is never conflated with incident presence inside that function (the closed-incident override lives separately, in getAlertComplianceReport, keyed off the actual incident status)', () => {
+  assert.match(reportController, /let state = deriveAlertState\(group, now\);/);
   assert.doesNotMatch(reportController, /deriveAlertState\(group, hasIncident, now\)/);
 });
 
@@ -719,4 +719,21 @@ test('the table row uses acTableStateLabel, while the detail modal open and acRe
   // acTableStateLabel is only for the table.
   const stateLabelCalls = frontend.match(/const stateLabel = acStateLabel\(row\);/g) || [];
   assert.equal(stateLabelCalls.length, 2, 'expected exactly two remaining acStateLabel(row) call sites (detail modal open + acResolveAlert badge refresh)');
+});
+
+// ── Requirement: closing/resolving the linked incident auto-resolves the ──
+// ── alert itself, without needing a manual "Mark as Resolved" click      ──
+
+test('attachMailboxIncidentLinks/applyMailboxIncidentLinks now also carries the linked incident\'s own status (incidentStatus), via a new i.status column in the same join — additive, no existing field removed', () => {
+  const mailboxController = fs.readFileSync(path.join(root, 'backend', 'controllers', 'mailboxController.js'), 'utf8');
+  assert.match(mailboxController, /SELECT a\.graph_message_id, i\.incident_ref, i\.status AS incident_status/);
+  assert.match(mailboxController, /if \(link\.incident_ref\) return \{ \.\.\.message, incidentCreated: true, incidentRef: link\.incident_ref, incidentStatus: link\.incident_status \|\| null \};/);
+});
+
+test('getAlertComplianceReport looks up the linked incident\'s status per group and auto-promotes the state to confirmed_resolved once that incident is resolved/closed — no manual resolve click needed', () => {
+  assert.match(reportController, /const CLOSED_INCIDENT_STATUSES = new Set\(\['resolved', 'closed'\]\);/);
+  assert.match(reportController, /const linkedIncident = group\.messageIds\.map\(\(id\) => incidentByMessageId\.get\(id\)\)\.find\(Boolean\) \|\| null;/);
+  assert.match(reportController, /const linkedIncidentRef = linkedIncident \? linkedIncident\.ref : null;/);
+  assert.match(reportController, /if \(linkedIncident && CLOSED_INCIDENT_STATUSES\.has\(linkedIncident\.status\)\) \{\s*\n\s*state = 'confirmed_resolved';\s*\n\s*\}/);
+  assert.match(reportController, /annotated\.filter\(\(m\) => m\.incidentCreated\)\.map\(\(m\) => \[m\.id, \{ ref: m\.incidentRef, status: m\.incidentStatus \|\| null \}\]\)/);
 });

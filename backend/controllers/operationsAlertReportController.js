@@ -25,6 +25,9 @@ const { groupMessagesIntoAlerts, deriveAlertState, fingerprintKey } = require('.
 // tickets are grouped by their issue key rather than subject text.
 const ALERT_CATEGORIES = new Set(['coralogix', 'azure', 'jira']);
 const MAX_PAGES = 20; // hard safety ceiling on Graph calls per report request
+// incidents.status values that count as "done" for auto-resolving the
+// alert this incident was created from (see getAlertComplianceReport).
+const CLOSED_INCIDENT_STATUSES = new Set(['resolved', 'closed']);
 
 async function fetchRecentAlertMessages(sinceMs) {
   const collected = [];
@@ -56,7 +59,7 @@ const getAlertComplianceReport = async (req, res) => {
     const rawMessages = await fetchRecentAlertMessages(sinceMs);
     const annotated = await attachMailboxIncidentLinks(rawMessages);
     const incidentByMessageId = new Map(
-      annotated.filter((m) => m.incidentCreated).map((m) => [m.id, m.incidentRef])
+      annotated.filter((m) => m.incidentCreated).map((m) => [m.id, { ref: m.incidentRef, status: m.incidentStatus || null }])
     );
 
     const [customerRows] = await pool.query('SELECT customer_name FROM customers WHERE is_active = 1');
@@ -68,8 +71,17 @@ const getAlertComplianceReport = async (req, res) => {
     const groups = groupMessagesIntoAlerts(annotated);
     const now = Date.now();
     let report = groups.map((group) => {
-      const linkedIncidentRef = group.messageIds.map((id) => incidentByMessageId.get(id)).find(Boolean) || null;
-      const state = deriveAlertState(group, now);
+      const linkedIncident = group.messageIds.map((id) => incidentByMessageId.get(id)).find(Boolean) || null;
+      const linkedIncidentRef = linkedIncident ? linkedIncident.ref : null;
+      let state = deriveAlertState(group, now);
+      // A linked incident being closed/resolved inside the app is a
+      // stronger, authoritative signal than the alert's own activity
+      // heuristic — once the real issue is fixed, a stray notification
+      // email arriving afterward shouldn't keep showing the alert as still
+      // needing manual resolution.
+      if (linkedIncident && CLOSED_INCIDENT_STATUSES.has(linkedIncident.status)) {
+        state = 'confirmed_resolved';
+      }
       const customerMatches = matchingCustomersByName(customerRows, group.sampleSubject);
       // Azure alert subjects rarely name a customer explicitly (e.g. "Azure:
       // Activated Severity: 0 SHO No Historian Read"), so subject matching
@@ -98,7 +110,7 @@ const getAlertComplianceReport = async (req, res) => {
         occurrences: group.occurrences
           .slice()
           .sort((a, b) => new Date(b.receivedAt) - new Date(a.receivedAt))
-          .map((o) => ({ id: o.id, receivedAt: o.receivedAt, subject: o.subject, resolved: o.resolved, incidentRef: incidentByMessageId.get(o.id) || null }))
+          .map((o) => ({ id: o.id, receivedAt: o.receivedAt, subject: o.subject, resolved: o.resolved, incidentRef: (incidentByMessageId.get(o.id) || {}).ref || null }))
       };
     }).sort((a, b) => new Date(b.lastSeen) - new Date(a.lastSeen));
 
