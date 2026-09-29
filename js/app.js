@@ -797,10 +797,13 @@ function getIncResolutionMinutes(inc) {
   return mttr > 0 ? mttr : getIncDowntimeMinutes(inc);
 }
 
+// Medium and Normal severities deliberately have no SLA target at all —
+// only Critical (4h) and High (12h) are tracked. Callers must treat a null
+// return as "no SLA applies", not fall back to some other duration.
 function getIncidentSlaHours(inc) {
   var incidentTarget = Number(inc && (inc.sla_hours ?? inc.slaHours));
   if (Number.isFinite(incidentTarget) && incidentTarget > 0) return incidentTarget;
-  return { Critical: 4, High: 4, Medium: 12, Normal: 24 }[inc && inc.severity] || 24;
+  return { Critical: 4, High: 12 }[inc && inc.severity] || null;
 }
 
 function isCriticalSeverity(inc) {
@@ -1163,7 +1166,9 @@ function openMetricDrillDown(metric, customerName, reportingCategory, extra) {
           : isLiveMetric ? Math.max(0, (Date.now() - getIncidentOpenedTimestamp(inc)) / 60000)
             : (metric === 'downtime' || metric === 'historianDowntime') ? getIncDowntimeMinutes(inc)
               : getIncResolutionMinutes(inc);
-      var targetMinutes = metric === 'mttd' ? MTTD_SLA_MINUTES : getIncidentSlaHours(inc) * 60;
+      var incSlaHours = getIncidentSlaHours(inc);
+      var hasSlaTarget = metric === 'mttd' || incSlaHours !== null;
+      var targetMinutes = metric === 'mttd' ? MTTD_SLA_MINUTES : (incSlaHours || 0) * 60;
       var created = formatStoredIncidentDateTime(inc.date_time_opened || inc.startDT || inc.date_created || inc.date);
       var resolved = isLiveMetric ? '—' : formatStoredIncidentDateTime(inc.date_time_closed || inc.endDT || inc.downtimeEnd);
       var severity = String(inc.severity || 'Normal');
@@ -1183,7 +1188,7 @@ function openMetricDrillDown(metric, customerName, reportingCategory, extra) {
         + '<td><span class="badge badge-' + escapeMetricHtml(status.toLowerCase().replace(/ /g, '-').replace(/&/g, '')) + '">' + escapeMetricHtml(status) + '</span></td>'
         + '<td class="metric-date-cell">' + escapeMetricHtml(created) + '</td>'
         + '<td class="metric-date-cell">' + escapeMetricHtml(resolved) + '</td>'
-        + '<td>' + formatMetricDuration(visibleSlaTargetMinutes) + '</td>'
+        + '<td>' + (hasSlaTarget ? formatMetricDuration(visibleSlaTargetMinutes) : 'No SLA') + '</td>'
         + '<td>' + formatMetricDuration(actualMinutes) + '</td>'
         + '<td class="metric-breach-cell">' + (actualMinutes > targetMinutes ? '+' + formatMetricDuration(actualMinutes - targetMinutes) : '—') + '</td>'
         + '</tr>';
@@ -1727,7 +1732,9 @@ function buildC360Metrics(incidentList) {
   var totalDT = incidentList.reduce(function (sum, i) { return sum + getIncDowntimeMinutes(i); }, 0);
   var breached = incidentList.filter(function (i) {
     if (i.status === 'Closed' || i.status === 'Resolved') return false;
-    return (Date.now() - new Date(i.startDT || (i.date + 'T09:00')).getTime()) > getIncidentSlaHours(i) * 3600000;
+    var slaH = getIncidentSlaHours(i);
+    if (slaH === null) return false;
+    return (Date.now() - new Date(i.startDT || (i.date + 'T09:00')).getTime()) > slaH * 3600000;
   }).length;
   var withMttr = incidentList.filter(function (i) { return getIncMttrMinutes(i) > 0; });
   return {
@@ -4449,11 +4456,13 @@ function clearFilters() {
 }
 
 // ── SLA HELPERS ────────────────────────────────────────────────
-const SLA_HOURS = { Critical: 4, High: 4, Medium: 12, Normal: 24 };
+// Medium and Normal have no SLA target — deliberately absent from this map.
+const SLA_HOURS = { Critical: 4, High: 12 };
 
 function getSLAInfo(inc) {
   if (['Resolved', 'Closed'].includes(inc.status)) return { cls: 'sla-na', label: '—', title: 'Resolved' };
   const slaH = getIncidentSlaHours(inc);
+  if (slaH === null) return { cls: 'sla-na', label: '—', title: 'No SLA applies to this severity' };
   const created = getIncidentOpenedTimestamp(inc);
   const now = new Date();
   const elapsedH = (now - created) / 3600000;
@@ -6211,7 +6220,9 @@ function renderSlaCountdown() {
   if (!el) return;
   var now = Date.now();
   var open = getDashboardFilteredIncidents().filter(function (i) {
-    return i.status !== 'Closed' && i.status !== 'Resolved';
+    // Only severities with a real SLA target (Critical/High) belong in a
+    // countdown — Medium/Normal have nothing to count down to.
+    return i.status !== 'Closed' && i.status !== 'Resolved' && getIncidentSlaHours(i) !== null;
   });
   var badge = document.getElementById('slaCountBadge');
   if (badge) { badge.textContent = open.length; badge.style.display = open.length ? '' : 'none'; }
@@ -7162,14 +7173,17 @@ function _drawSLABreach(gridC, textC, textC2, data) {
   var ctx = r.ctx, W = r.W, H = r.H;
   ctx.clearRect(0, 0, W, H);
 
-  var sevs = ['Critical', 'High', 'Medium', 'Normal'];
-  var SLA_H = { Critical: 4, High: 4, Medium: 12, Normal: 24 };
-  var colors = { Critical: '#f75c7c', High: '#f7b94f', Medium: '#4f8ef7', Normal: '#2dd4a0' };
+  // Medium and Normal have no SLA target at all, so they have nothing to be
+  // "on time" or "breached" against — this chart only covers Critical/High.
+  var sevs = ['Critical', 'High'];
+  var SLA_H = { Critical: 4, High: 12 };
+  var colors = { Critical: '#f75c7c', High: '#f7b94f' };
 
-  var onTime = { Critical: 0, High: 0, Medium: 0, Normal: 0 };
-  var breached = { Critical: 0, High: 0, Medium: 0, Normal: 0 };
+  var onTime = { Critical: 0, High: 0 };
+  var breached = { Critical: 0, High: 0 };
 
   data.forEach(function (i) {
+    if (sevs.indexOf(i.severity) < 0) return;
     if (computeSlaBreachBucket(i) === 'breached') breached[i.severity]++;
     else onTime[i.severity]++;
   });
@@ -8598,7 +8612,7 @@ function _buildXLSX(data, filename, downloadNow) {
   // Pre-compute derived fields for each row
   data = data.map(function (inc) {
     const xlTZ = inc.timezone || 'IST';
-    const slaH = { Critical: 4, High: 4, Medium: 12, Normal: 24 }[inc.severity] || 6;
+    const slaH = { Critical: 4, High: 12, Medium: 12, Normal: 24 }[inc.severity] || 6;
     const dtMinutes = getIncDowntimeMinutes(inc);
     const dtStr = dtMinutes > 0 ? minutesToHM(dtMinutes) : '—';
     const mttdStr2 = inc.mttdStr || (inc.mttdH > 0 ? inc.mttdH + 'h' + (inc.mttdM > 0 ? ' ' + inc.mttdM + 'm' : '') : inc.mttdM > 0 ? inc.mttdM + 'm' : '—');
@@ -8833,7 +8847,7 @@ function viewIncidentReport(id) {
   document.getElementById('ir_date').textContent = new Date(inc.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
   document.getElementById('ir_severity').innerHTML = `<span class="badge badge-${inc.severity.toLowerCase()}">${inc.severity}</span>`;
   document.getElementById('ir_status').innerHTML = `<span class="badge">${inc.status}</span>`;
-  const slaHours = { Critical: 4, High: 4, Medium: 12, Normal: 24 }[inc.severity] || 6;
+  const slaHours = { Critical: 4, High: 12, Medium: 12, Normal: 24 }[inc.severity] || 6;
   const baseDate = new Date(inc.date + 'T09:00:00');
   const actualHours = (inc.downtimeH || 0) + (inc.downtimeM || 0) / 60 || slaHours;
   const endDate = new Date(baseDate.getTime() + actualHours * 3600000);
@@ -8931,7 +8945,7 @@ function exportIncidentPDF() {
 
   // Timeline — use inc.timezone (set during create/edit) for all time display
   const pdfTZ = inc.timezone || 'IST';
-  const slaHours = { Critical: 4, High: 4, Medium: 12, Normal: 24 }[severity] || 6;
+  const slaHours = { Critical: 4, High: 12, Medium: 12, Normal: 24 }[severity] || 6;
   const istOff = getTZOffset('IST');
   const rawStart = inc.startDT || (inc.date + 'T09:00');
   const baseDate = incidentTimestampDate(inc, 'start') || wallClockToDate(rawStart, pdfTZ);
@@ -9141,7 +9155,7 @@ function clearReportFilters() {
 
 // ─── INCIDENT DETAIL PANEL ────────────────────────────────────
 
-// SLA_MAP removed — use SLA_HOURS = {Critical:4,High:4,Medium:12,Normal:24}
+// SLA_MAP removed — use SLA_HOURS = {Critical:4,High:12} (Medium/Normal have no SLA)
 
 function openDetailPanel(id, editMode = false) {
   if (!hasPermission('view_incidents')) { showToast('Access denied: you cannot view incidents', 'error'); return; }
@@ -11116,7 +11130,7 @@ function updateReportTimestamps(incId, tzKey) {
   }
 
   // ── Start & End times ────────────────────────────────────
-  var slaHours = { Critical: 4, High: 4, Medium: 12, Normal: 24 }[inc.severity] || 6;
+  var slaHours = { Critical: 4, High: 12, Medium: 12, Normal: 24 }[inc.severity] || 6;
   // Build the "raw" start time — stored as IST datetime-local string
   var rawStart = inc.startDT || (inc.date + 'T09:00');
   // Parse as IST: treat string as local IST, convert to UTC for Date object
