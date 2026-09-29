@@ -800,7 +800,7 @@ function getIncResolutionMinutes(inc) {
 function getIncidentSlaHours(inc) {
   var incidentTarget = Number(inc && (inc.sla_hours ?? inc.slaHours));
   if (Number.isFinite(incidentTarget) && incidentTarget > 0) return incidentTarget;
-  return { Critical: 1, High: 4, Medium: 12, Normal: 24 }[inc && inc.severity] || 24;
+  return { Critical: 4, High: 4, Medium: 12, Normal: 24 }[inc && inc.severity] || 24;
 }
 
 function isCriticalSeverity(inc) {
@@ -4449,7 +4449,7 @@ function clearFilters() {
 }
 
 // ── SLA HELPERS ────────────────────────────────────────────────
-const SLA_HOURS = { Critical: 1, High: 4, Medium: 12, Normal: 24 };
+const SLA_HOURS = { Critical: 4, High: 4, Medium: 12, Normal: 24 };
 
 function getSLAInfo(inc) {
   if (['Resolved', 'Closed'].includes(inc.status)) return { cls: 'sla-na', label: '—', title: 'Resolved' };
@@ -7163,7 +7163,7 @@ function _drawSLABreach(gridC, textC, textC2, data) {
   ctx.clearRect(0, 0, W, H);
 
   var sevs = ['Critical', 'High', 'Medium', 'Normal'];
-  var SLA_H = { Critical: 1, High: 4, Medium: 12, Normal: 24 };
+  var SLA_H = { Critical: 4, High: 4, Medium: 12, Normal: 24 };
   var colors = { Critical: '#f75c7c', High: '#f7b94f', Medium: '#4f8ef7', Normal: '#2dd4a0' };
 
   var onTime = { Critical: 0, High: 0, Medium: 0, Normal: 0 };
@@ -8598,7 +8598,7 @@ function _buildXLSX(data, filename, downloadNow) {
   // Pre-compute derived fields for each row
   data = data.map(function (inc) {
     const xlTZ = inc.timezone || 'IST';
-    const slaH = { Critical: 1, High: 4, Medium: 12, Normal: 24 }[inc.severity] || 6;
+    const slaH = { Critical: 4, High: 4, Medium: 12, Normal: 24 }[inc.severity] || 6;
     const dtMinutes = getIncDowntimeMinutes(inc);
     const dtStr = dtMinutes > 0 ? minutesToHM(dtMinutes) : '—';
     const mttdStr2 = inc.mttdStr || (inc.mttdH > 0 ? inc.mttdH + 'h' + (inc.mttdM > 0 ? ' ' + inc.mttdM + 'm' : '') : inc.mttdM > 0 ? inc.mttdM + 'm' : '—');
@@ -8833,7 +8833,7 @@ function viewIncidentReport(id) {
   document.getElementById('ir_date').textContent = new Date(inc.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
   document.getElementById('ir_severity').innerHTML = `<span class="badge badge-${inc.severity.toLowerCase()}">${inc.severity}</span>`;
   document.getElementById('ir_status').innerHTML = `<span class="badge">${inc.status}</span>`;
-  const slaHours = { Critical: 1, High: 4, Medium: 12, Normal: 24 }[inc.severity] || 6;
+  const slaHours = { Critical: 4, High: 4, Medium: 12, Normal: 24 }[inc.severity] || 6;
   const baseDate = new Date(inc.date + 'T09:00:00');
   const actualHours = (inc.downtimeH || 0) + (inc.downtimeM || 0) / 60 || slaHours;
   const endDate = new Date(baseDate.getTime() + actualHours * 3600000);
@@ -8931,7 +8931,7 @@ function exportIncidentPDF() {
 
   // Timeline — use inc.timezone (set during create/edit) for all time display
   const pdfTZ = inc.timezone || 'IST';
-  const slaHours = { Critical: 1, High: 4, Medium: 12, Normal: 24 }[severity] || 6;
+  const slaHours = { Critical: 4, High: 4, Medium: 12, Normal: 24 }[severity] || 6;
   const istOff = getTZOffset('IST');
   const rawStart = inc.startDT || (inc.date + 'T09:00');
   const baseDate = incidentTimestampDate(inc, 'start') || wallClockToDate(rawStart, pdfTZ);
@@ -9141,7 +9141,7 @@ function clearReportFilters() {
 
 // ─── INCIDENT DETAIL PANEL ────────────────────────────────────
 
-// SLA_MAP removed — use SLA_HOURS = {Critical:1,High:4,Medium:12,Normal:24}
+// SLA_MAP removed — use SLA_HOURS = {Critical:4,High:4,Medium:12,Normal:24}
 
 function openDetailPanel(id, editMode = false) {
   if (!hasPermission('view_incidents')) { showToast('Access denied: you cannot view incidents', 'error'); return; }
@@ -11116,7 +11116,7 @@ function updateReportTimestamps(incId, tzKey) {
   }
 
   // ── Start & End times ────────────────────────────────────
-  var slaHours = { Critical: 1, High: 4, Medium: 12, Normal: 24 }[inc.severity] || 6;
+  var slaHours = { Critical: 4, High: 4, Medium: 12, Normal: 24 }[inc.severity] || 6;
   // Build the "raw" start time — stored as IST datetime-local string
   var rawStart = inc.startDT || (inc.date + 'T09:00');
   // Parse as IST: treat string as local IST, convert to UTC for Date object
