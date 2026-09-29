@@ -320,6 +320,9 @@ const createIncident = async (req, res) => {
     }
     const start = b.startDT || b.date_created || b.date || new Date().toISOString().substring(0, 16);
     const canonical = buildCanonicalValues({ ...b, date_time_opened: b.date_time_opened || start }, null);
+    if (!canonical.mttd_minutes || canonical.mttd_minutes <= 0) {
+      return res.status(400).json({ success: false, message: 'Mean Time to Detect (MTTD) is required and must be greater than 0' });
+    }
     const downtime = minutesToHM(canonical.downtime_mins);
     const mttd = minutesToHM(canonical.mttd_minutes);
     const mttr = minutesToHM(canonical.mttr_minutes);

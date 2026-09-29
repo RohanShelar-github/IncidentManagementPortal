@@ -1545,7 +1545,7 @@
 <input id="f_rd_tickets" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="e.g. FNP-1125" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s" type="text"/>
 </div>
 <div class="form-group">
-<label class="form-label">Mean Time to Detect (MTTD)</label>
+<label class="form-label required">Mean Time to Detect (MTTD)</label>
 <div style="display:flex;gap:8px;align-items:center">
 <input id="f_mttd_h" max="999" min="0" placeholder="0" style="width:70px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 10px;color:var(--text);font-size:14px;font-family:var(--font-mono);outline:none;text-align:center;box-sizing:border-box" type="number"/>
 <span style="font-size:12px;color:var(--text-muted)">h</span>
@@ -2136,6 +2136,20 @@
 <label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">📅 Incident End</label>
 <input id="dp_f_end_dt" onchange="convertIncidentEndFromIST('dp_f_end_dt','dp_end_tz_hint');updateCriticalEditMttr()" oninput="markIncidentEndAsIST('dp_f_end_dt','dp_end_tz_hint');updateCriticalEditMttr()" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box" type="datetime-local"/>
 <div id="dp_end_tz_hint" style="font-size:9px;color:var(--text-muted);margin-top:5px;font-family:var(--font-mono)">Enter end time in IST</div>
+</div>
+</div>
+<!-- MTTD row -->
+<div style="margin-bottom:14px">
+<label style="display:block;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">🎯 Mean Time to Detect (MTTD) <span style="color:var(--danger)">*</span></label>
+<div style="display:flex;gap:10px;align-items:center">
+<div style="display:flex;align-items:center;gap:6px">
+<input id="dp_f_mttd_h" max="999" min="0" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="0" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:16px;font-weight:700;font-family:var(--font-mono);outline:none;text-align:center;box-sizing:border-box" type="number"/>
+<span style="font-size:12px;color:var(--text-muted)">hours</span>
+</div>
+<div style="display:flex;align-items:center;gap:6px">
+<input id="dp_f_mttd_m" max="59" min="0" onblur="this.style.borderColor='var(--border)'" onfocus="this.style.borderColor='var(--accent)'" placeholder="0" style="width:80px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:16px;font-weight:700;font-family:var(--font-mono);outline:none;text-align:center;box-sizing:border-box" type="number"/>
+<span style="font-size:12px;color:var(--text-muted)">mins</span>
+</div>
 </div>
 </div>
 <!-- MTTR row -->

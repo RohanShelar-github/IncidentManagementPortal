@@ -5583,6 +5583,10 @@ function saveIncident() {
     showToast('Please fill in all required fields', 'error');
     return;
   }
+  if (mttdMinutes <= 0) {
+    showToast('Mean Time to Detect (MTTD) is required — enter a value greater than 0', 'error');
+    return;
+  }
   if (status === 'Closed') {
     const editingInc = editingId ? incidents.find(i => i.id === editingId) : null;
     if (!editingInc || editingInc.status !== 'Closed') {
@@ -9354,6 +9358,8 @@ function populateEditForm(inc) {
   setIncidentEndHint('dp_end_tz_hint', selectedTZ || inc.timezone || 'IST', false);
 
   // Always populate report fields regardless of status
+  set('dp_f_mttd_h', inc.mttdH || 0);
+  set('dp_f_mttd_m', inc.mttdM || 0);
   set('dp_f_dtH', inc.downtimeH || 0);
   set('dp_f_dtM', inc.downtimeM || 0);
   ['dp_f_dtH', 'dp_f_dtM'].forEach(function (id) {
@@ -9486,6 +9492,13 @@ function saveDetailEdit() {
   }
 
   // Always save report fields — visible in view for any status
+  const mttdH = parseInt(getVal('dp_f_mttd_h')) || 0;
+  const mttdM = parseInt(getVal('dp_f_mttd_m')) || 0;
+  const mttdMinutesEdit = mttdH * 60 + mttdM;
+  inc.mttdH = mttdH;
+  inc.mttdM = mttdM;
+  inc.mttd_minutes = mttdMinutesEdit > 0 ? mttdMinutesEdit : null;
+  inc.mttdStr = mttdMinutesEdit > 0 ? minutesToHM(mttdMinutesEdit) : '';
   const h = parseInt(getVal('dp_f_dtH')) || 0;
   const m = parseInt(getVal('dp_f_dtM')) || 0;
   inc.downtimeH = h;
@@ -9530,6 +9543,9 @@ function saveDetailEdit() {
       resolved_by: inc.resolvedBy,
       sf_case: inc.sfCase,
       rd_tickets: inc.rd_tickets || inc.rdTickets || undefined,
+      mttd_h: inc.mttdH,
+      mttd_m: inc.mttdM,
+      mttd_minutes: inc.mttd_minutes,
       downtime_h: inc.downtimeH,
       downtime_m: inc.downtimeM,
       downtime_mins: inc.downtimeH * 60 + inc.downtimeM,

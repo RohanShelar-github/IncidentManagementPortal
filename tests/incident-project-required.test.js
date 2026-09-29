@@ -23,7 +23,7 @@ test('Project is visually marked required in both the Create/Edit modal and the 
 });
 
 test('saveIncident (Create/Edit modal) now rejects a blank project, matching the other required fields', () => {
-  assert.match(frontend, /if \(!title \|\| !customer \|\| !project\.trim\(\) \|\| !severity \|\| !engineer\) \{\s*\n\s*showToast\('Please fill in all required fields', 'error'\);\s*\n\s*return;\s*\n\s*\}\s*\n\s*if \(status === 'Closed'\) \{/);
+  assert.match(frontend, /if \(!title \|\| !customer \|\| !project\.trim\(\) \|\| !severity \|\| !engineer\) \{\s*\n\s*showToast\('Please fill in all required fields', 'error'\);\s*\n\s*return;\s*\n\s*\}\s*\n\s*if \(mttdMinutes <= 0\) \{/);
 });
 
 test('saveDetailEdit (detail panel edit) now rejects a blank project too', () => {
