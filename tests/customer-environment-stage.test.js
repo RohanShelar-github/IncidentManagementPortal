@@ -99,3 +99,15 @@ test('updateLiveCustomersCard counts only Production-stage customers, and is cal
   assert.match(frontend, /function updateLiveCustomersCard\(\) \{\s*\n\s*var el = document\.getElementById\('statLiveCustomers'\);\s*\n\s*if \(!el\) return;\s*\n\s*el\.textContent = customerRecords\.filter\(function \(c\) \{ return c\.environment_stage === 'production'; \}\)\.length;/);
   assert.match(frontend, /updateDmCounts\(\);\s*\n\s*updateLiveCustomersCard\(\);\s*\n\s*populateEngineerDropdowns\(\);/);
 });
+
+// ── Frontend: each row in the Live Customers list opens that customer's ──
+// ── Customer 360 view                                                    ──
+
+test('each row in the Live Customers list is clickable, embedding only the customer id in its onclick (never the raw name, which could contain a quote and break the generated JS)', () => {
+  assert.match(frontend, /'<div onclick="openCustomer360FromLiveList\(' \+ c\.id \+ '\)"[^']*style="padding:10px 14px;background:var\(--surface2\);border:1px solid var\(--border\);border-radius:8px;font-size:13px;color:var\(--text\);cursor:pointer"/);
+  assert.doesNotMatch(frontend, /openCustomer360FromLiveList\(' \+ c\.id \+ ', \\''/, 'must not take a second inline argument built from the raw customer name');
+});
+
+test('openCustomer360FromLiveList looks up the customer by id, closes the Live Customers overlay, and hands off to the existing openCustomer360 flow (same permissioning/behavior as every other route into Customer 360, e.g. the C360 picker)', () => {
+  assert.match(frontend, /function openCustomer360FromLiveList\(id\) \{\s*\n\s*var rec = customerRecords\.find\(function \(c\) \{ return c\.id === id; \}\);\s*\n\s*if \(!rec\) return;\s*\n\s*var overlay = document\.getElementById\('liveCustomersOverlay'\);\s*\n\s*if \(overlay\) overlay\.style\.display = 'none';\s*\n\s*openCustomer360\(rec\.customer_name\);\s*\n\}/);
+});

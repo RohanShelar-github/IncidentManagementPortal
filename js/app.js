@@ -1690,10 +1690,24 @@ function showLiveCustomersModal() {
   var liveCustomers = customerRecords.filter(function (c) { return c.environment_stage === 'production'; });
   list.innerHTML = liveCustomers.length
     ? liveCustomers.map(function (c) {
-        return '<div style="padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text)">' + escapeMetricHtml(c.customer_name) + '</div>';
+        // Only the id is embedded in the onclick — the name is looked up
+        // internally, since a raw customer name could contain a quote and
+        // break the generated JS if placed directly in the attribute.
+        return '<div onclick="openCustomer360FromLiveList(' + c.id + ')" style="padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text);cursor:pointer" onmouseenter="this.style.background=\'rgba(79,142,247,0.08)\'" onmouseleave="this.style.background=\'var(--surface2)\'">' + escapeMetricHtml(c.customer_name) + '</div>';
       }).join('')
     : '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px">No customers are currently marked Production</div>';
   overlay.style.display = 'flex';
+}
+
+// Closes the Live Customers list and hands off to the existing Customer 360
+// flow — reuses openCustomer360 exactly as the Customer 360 picker does, so
+// permissioning/behavior stays identical to every other route into it.
+function openCustomer360FromLiveList(id) {
+  var rec = customerRecords.find(function (c) { return c.id === id; });
+  if (!rec) return;
+  var overlay = document.getElementById('liveCustomersOverlay');
+  if (overlay) overlay.style.display = 'none';
+  openCustomer360(rec.customer_name);
 }
 
 // ─── CUSTOMER 360 ──────────────────────────────────────────────────────────
