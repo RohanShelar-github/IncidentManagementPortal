@@ -290,3 +290,62 @@ Backup and cleanup completed.
 Verifying the new backup restores cleanly and matches live row counts... 
 Skipping verification — last run was less than 7 day(s) ago. Pass --force to run anyway.
 Staging backup files for git... 
+warning: in the working copy of 'MySQL Database Backup/backup.log', LF will be replaced by CRLF the next time Git touches it
+[Dev c25feb8] Automated database backup
+ 3 files changed, 1836 insertions(+)
+ create mode 100644 MySQL Database Backup/incident_management_db_2026-09-27_02-00-02.sql
+ create mode 100644 MySQL Database Backup/incident_management_db_2026-09-28_02-00-03.sql
+Pushing to origin main... 
+Everything up-to-date
+Backup committed and pushed successfully. 
+ 
+===== Tue 09/29/2026  2:00:02.32 ===== 
+Starting backup of database: incident_management_db 
+Backup successful: C:\Incident Management Portal\MySQL Database Backup\incident_management_db_2026-09-29_02-00-02.sql 
+Deleting backups older than 2 days... 
+Backup and cleanup completed. 
+ 
+===== Wed 09/30/2026  2:00:02.86 ===== 
+Running database dump... 
+===== Wed 09/30/2026  2:00:03.57 ===== 
+Starting backup of database: incident_management_db 
+Backup successful: C:\Incident Management Portal\MySQL Database Backup\incident_management_db_2026-09-30_02-00-03.sql 
+Deleting backups older than 2 days... 
+Backup and cleanup completed. 
+ 
+Verifying the new backup restores cleanly and matches live row counts... 
+Verifying backup file: C:\Incident Management Portal\MySQL Database Backup\incident_management_db_2026-09-30_02-00-03.sql
+Restoring dump into throwaway database "incident_management_db_backup_verify"...
+mysql: [Warning] Using a password on the command line interface can be insecure.
+┌─────────┬───────────────────────────────────────┬──────┬────────┬───────┐
+│ (index) │ table                                 │ live │ backup │ match │
+├─────────┼───────────────────────────────────────┼──────┼────────┼───────┤
+│ 0       │ 'activity_logs'                       │ 2067 │ 2067   │ 'OK'  │
+│ 1       │ 'area'                                │ 22   │ 22     │ 'OK'  │
+│ 2       │ 'customer_email_recipient_configs'    │ 17   │ 17     │ 'OK'  │
+│ 3       │ 'customer_jira_project_code_audit'    │ 18   │ 18     │ 'OK'  │
+│ 4       │ 'customers'                           │ 29   │ 29     │ 'OK'  │
+│ 5       │ 'email_recipient_directory'           │ 76   │ 76     │ 'OK'  │
+│ 6       │ 'incident_drafts'                     │ 21   │ 21     │ 'OK'  │
+│ 7       │ 'incident_email_messages'             │ 53   │ 53     │ 'OK'  │
+│ 8       │ 'incident_email_threads'              │ 32   │ 32     │ 'OK'  │
+│ 9       │ 'incident_legacy_metadata'            │ 0    │ 0      │ 'OK'  │
+│ 10      │ 'incident_ref_normalization_audit'    │ 70   │ 70     │ 'OK'  │
+│ 11      │ 'incident_tags'                       │ 2    │ 2      │ 'OK'  │
+│ 12      │ 'incidents'                           │ 321  │ 321    │ 'OK'  │
+│ 13      │ 'notifications'                       │ 990  │ 990    │ 'OK'  │
+│ 14      │ 'operations_alert_comments'           │ 34   │ 34     │ 'OK'  │
+│ 15      │ 'operations_alert_deletions'          │ 15   │ 15     │ 'OK'  │
+│ 16      │ 'operations_alert_incident_substatus' │ 0    │ 0      │ 'OK'  │
+│ 17      │ 'operations_alert_ticket_status'      │ 14   │ 14     │ 'OK'  │
+│ 18      │ 'operations_email_incident_audit'     │ 212  │ 212    │ 'OK'  │
+│ 19      │ 'permissions'                         │ 31   │ 31     │ 'OK'  │
+│ 20      │ 'role_permissions'                    │ 151  │ 151    │ 'OK'  │
+│ 21      │ 'roles'                               │ 7    │ 7      │ 'OK'  │
+│ 22      │ 'schema_migrations'                   │ 36   │ 36     │ 'OK'  │
+│ 23      │ 'user_email_signatures'               │ 2    │ 2      │ 'OK'  │
+│ 24      │ 'users'                               │ 22   │ 22     │ 'OK'  │
+└─────────┴───────────────────────────────────────┴──────┴────────┴───────┘
+Verification result email sent to babai_chatterjee@magicsoftware.com,rohan_shelar@magicsoftware.com
+BACKUP VERIFICATION PASSED: every table in the backup matches the live database row-for-row.
+Staging backup files for git... 
