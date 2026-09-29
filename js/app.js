@@ -466,7 +466,6 @@ function loadMasterData(callback) {
         populateTagDropdowns();
         renderDataManagement();
         updateDmCounts();
-        updateLiveCustomersCard();
         populateEngineerDropdowns();
         if (callback) callback(null);
       } else {
@@ -1670,47 +1669,6 @@ function updateDmCounts() {
   if (tc) tc.textContent = tagRecords.length + ' tag' + (tagRecords.length !== 1 ? 's' : '');
 }
 
-// Dashboard only ever shows the Production ("Live") count — the full
-// Production/UAT/Development breakdown lives in Data Management instead.
-function updateLiveCustomersCard() {
-  var el = document.getElementById('statLiveCustomers');
-  if (!el) return;
-  el.textContent = customerRecords.filter(function (c) { return c.environment_stage === 'production'; }).length;
-}
-
-// A dedicated, permission-free list view for the Dashboard's Live Customers
-// card. Deliberately NOT a navigate('datamanagement') — that page requires
-// manage_data (only Admin/PMO/Manager have it), so routing every role's
-// dashboard click there would just throw an access-denied error for anyone
-// else. customerRecords is already loaded for all logged-in roles (it feeds
-// the Customer dropdowns everywhere), so this only ever reads data the
-// current user already has.
-function showLiveCustomersModal() {
-  var overlay = document.getElementById('liveCustomersOverlay');
-  var list = document.getElementById('liveCustomersList');
-  if (!overlay || !list) return;
-  var liveCustomers = customerRecords.filter(function (c) { return c.environment_stage === 'production'; });
-  list.innerHTML = liveCustomers.length
-    ? liveCustomers.map(function (c) {
-        // Only the id is embedded in the onclick — the name is looked up
-        // internally, since a raw customer name could contain a quote and
-        // break the generated JS if placed directly in the attribute.
-        return '<div onclick="openCustomer360FromLiveList(' + c.id + ')" style="padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text);cursor:pointer" onmouseenter="this.style.background=\'rgba(79,142,247,0.08)\'" onmouseleave="this.style.background=\'var(--surface2)\'">' + escapeMetricHtml(c.customer_name) + '</div>';
-      }).join('')
-    : '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px">No customers are currently marked Production</div>';
-  overlay.style.display = 'flex';
-}
-
-// Closes the Live Customers list and hands off to the existing Customer 360
-// flow — reuses openCustomer360 exactly as the Customer 360 picker does, so
-// permissioning/behavior stays identical to every other route into it.
-function openCustomer360FromLiveList(id) {
-  var rec = customerRecords.find(function (c) { return c.id === id; });
-  if (!rec) return;
-  var overlay = document.getElementById('liveCustomersOverlay');
-  if (overlay) overlay.style.display = 'none';
-  openCustomer360(rec.customer_name);
-}
 
 // ─── CUSTOMER 360 ──────────────────────────────────────────────────────────
 function _showC360Picker() {
@@ -1725,6 +1683,39 @@ function _showC360Picker() {
   if (inp) { inp.value = ''; setTimeout(function () { inp.focus(); }, 50); }
 }
 
+// Section order/labels for the stage-grouped picker — this replaced the
+// Dashboard's standalone Live Customers card: instead of a single
+// Production-only count elsewhere, every stage (plus customers with none
+// set) is shown together here, inside Customer 360 itself.
+var C360_STAGE_GROUPS = [
+  { key: 'production', label: 'Production (Live)' },
+  { key: 'uat', label: 'UAT' },
+  { key: 'development', label: 'Development' },
+  { key: 'on_hold', label: 'On Hold' },
+  { key: 'notSet', label: 'Not Set' }
+];
+
+function buildC360PickerCard(name, health) {
+  var d = health || { total: 0, open: 0, critical: 0 };
+  var dot = d.critical > 0 ? '#f75c7c' : d.open > 0 ? '#f7b94f' : '#2dd4a0';
+  var statusLabel = d.critical > 0 ? 'Critical' : d.open > 0 ? 'At Risk' : 'Healthy';
+  var card = document.createElement('div');
+  card.style.cssText = 'padding:12px 14px;border-radius:10px;border:1px solid var(--border);cursor:pointer;background:var(--surface2);transition:all .15s';
+  card.onmouseenter = function () { this.style.borderColor = dot; this.style.background = 'rgba(79,142,247,0.06)'; };
+  card.onmouseleave = function () { this.style.borderColor = 'var(--border)'; this.style.background = 'var(--surface2)'; };
+  card.onclick = function () {
+    document.getElementById('c360PickerOverlay').style.display = 'none';
+    openCustomer360(name);
+  };
+  card.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
+    + '<div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,rgba(79,142,247,0.2),rgba(124,92,247,0.15));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--accent)">' + name.substring(0, 2).toUpperCase() + '</div>'
+    + '<div style="flex:1;font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + name + '</div>'
+    + '<span style="width:7px;height:7px;border-radius:50%;background:' + dot + ';flex-shrink:0"></span></div>'
+    + '<div style="display:flex;gap:8px;font-size:11px"><span style="color:var(--text-muted)">' + d.total + ' incidents</span>'
+    + '<span style="color:' + dot + ';font-weight:600">' + statusLabel + '</span></div>';
+  return card;
+}
+
 function filterC360Picker(q) {
   var list = document.getElementById('c360PickerList');
   if (!list) return;
@@ -1736,33 +1727,41 @@ function filterC360Picker(q) {
     if (i.status !== 'Closed' && i.status !== 'Resolved') custMap[i.customer].open++;
     if (i.severity === 'Critical' && i.status !== 'Closed') custMap[i.customer].critical++;
   });
-  var custs = Object.keys(custMap).filter(function (c) { return !q || c.toLowerCase().includes(q); }).sort();
-  if (!custs.length) {
-    list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;grid-column:1/-1">No customers found</div>';
+  // Union of every customer with an incident and every customer in master
+  // data — so a customer with zero incidents (or one only known from an
+  // incident's free-text customer field, not yet in master data) both
+  // still show up, correctly grouped by stage.
+  var stageByName = {};
+  customerRecords.forEach(function (c) { stageByName[c.customer_name] = c.environment_stage || ''; });
+  var allNames = Object.keys(custMap);
+  customerRecords.forEach(function (c) { if (allNames.indexOf(c.customer_name) < 0) allNames.push(c.customer_name); });
+  var filteredNames = allNames.filter(function (c) { return !q || c.toLowerCase().includes(q); }).sort();
+
+  if (!filteredNames.length) {
+    list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px">No customers found</div>';
     return;
   }
+
+  var groups = { production: [], uat: [], development: [], on_hold: [], notSet: [] };
+  filteredNames.forEach(function (name) {
+    var stage = stageByName[name] || '';
+    (groups[stage] || groups.notSet).push(name);
+  });
+
   list.innerHTML = '';
-  custs.forEach(function (c) {
-    var d = custMap[c];
-    var dot = d.critical > 0 ? '#f75c7c' : d.open > 0 ? '#f7b94f' : '#2dd4a0';
-    var statusLabel = d.critical > 0 ? 'Critical' : d.open > 0 ? 'At Risk' : 'Healthy';
-    var card = document.createElement('div');
-    card.style.cssText = 'padding:12px 14px;border-radius:10px;border:1px solid var(--border);cursor:pointer;background:var(--surface2);transition:all .15s';
-    card.onmouseenter = function () { this.style.borderColor = dot; this.style.background = 'rgba(79,142,247,0.06)'; };
-    card.onmouseleave = function () { this.style.borderColor = 'var(--border)'; this.style.background = 'var(--surface2)'; };
-    card.onclick = (function (name) {
-      return function () {
-        document.getElementById('c360PickerOverlay').style.display = 'none';
-        openCustomer360(name);
-      };
-    })(c);
-    card.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
-      + '<div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,rgba(79,142,247,0.2),rgba(124,92,247,0.15));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--accent)">' + c.substring(0, 2).toUpperCase() + '</div>'
-      + '<div style="flex:1;font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + c + '</div>'
-      + '<span style="width:7px;height:7px;border-radius:50%;background:' + dot + ';flex-shrink:0"></span></div>'
-      + '<div style="display:flex;gap:8px;font-size:11px"><span style="color:var(--text-muted)">' + d.total + ' incidents</span>'
-      + '<span style="color:' + dot + ';font-weight:600">' + statusLabel + '</span></div>';
-    list.appendChild(card);
+  C360_STAGE_GROUPS.forEach(function (group) {
+    var names = groups[group.key];
+    if (!names.length) return;
+    var section = document.createElement('div');
+    var header = document.createElement('div');
+    header.style.cssText = 'font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px';
+    header.textContent = group.label + ' (' + names.length + ')';
+    var grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px';
+    names.forEach(function (name) { grid.appendChild(buildC360PickerCard(name, custMap[name])); });
+    section.appendChild(header);
+    section.appendChild(grid);
+    list.appendChild(section);
   });
 }
 

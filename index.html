@@ -445,11 +445,6 @@
 <div class="stat-value" id="statResRate" style="color:#2dd4a0">—</div>
 <div class="stat-delta" id="statResRateSub">incidents fully resolved</div>
 </div>
-<div class="stat-card green metric-kpi-card" id="dashboardCardLiveCustomers" onclick="showLiveCustomersModal()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View the list of customers currently in Production">
-<div class="stat-label">Live Customers</div>
-<div class="stat-value" id="statLiveCustomers">—</div>
-<div class="stat-delta" id="statLiveCustomersSub">in Production</div>
-</div>
 </div>
 <div class="charts-grid">
 <div class="chart-card">
@@ -2582,18 +2577,7 @@
 <div style="position:relative;margin-bottom:14px">
 <input id="c360PickerSearch" oninput="filterC360Picker(this.value)" placeholder="Search customers…" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 14px;color:var(--text);font-size:13px;outline:none" type="text"/>
 </div>
-<div id="c360PickerList" style="overflow-y:auto;flex:1;display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
-</div>
-</div>
-<!-- LIVE CUSTOMERS (Production) — read-only list, open to every role, since -->
-<!-- Data Management itself is restricted to manage_data (Admin/PMO/Manager) -->
-<div id="liveCustomersOverlay" style="display:none;position:fixed;inset:0;z-index:8000;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);align-items:center;justify-content:center">
-<div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;width:480px;max-width:95vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,0.5)">
-<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-<div style="font-size:18px;font-weight:800;color:var(--text)">Live Customers (Production)</div>
-<div onclick="document.getElementById('liveCustomersOverlay').style.display='none'" style="cursor:pointer;color:var(--text-muted);font-size:20px;line-height:1">✕</div>
-</div>
-<div id="liveCustomersList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px"></div>
+<div id="c360PickerList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:18px"></div>
 </div>
 </div>
 <button id="aiChatLauncher" class="ai-chat-launcher" onclick="handleAiLauncherClick(event)" onpointerdown="startAiLauncherDrag(event)" aria-label="Open Incident Copilot" title="Drag to move · Click to open Incident Copilot">

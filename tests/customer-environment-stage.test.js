@@ -1,11 +1,13 @@
 'use strict';
 
-// Tracks each customer's deployment stage — Production ("Live"), UAT, or
-// Development — as a simple fixed 3-value field on customers (not an
-// admin-extensible lookup table like incident Tags, since these three
+// Tracks each customer's deployment stage — Production ("Live"), UAT,
+// Development, or On Hold — as a simple fixed 4-value field on customers
+// (not an admin-extensible lookup table like incident Tags, since these
 // stages are fixed business categories). Admins can move a customer between
-// stages from Data Management. The Dashboard only ever shows the Production
-// ("Live") count; the full breakdown lives in Data Management.
+// stages from Data Management. There is no Dashboard card for this — the
+// full breakdown, grouped by stage, lives inside the Customer 360 picker
+// (every customer, whether or not they have incidents), where clicking any
+// customer opens their own Customer 360 profile.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -86,37 +88,36 @@ test('addCustomer sends the selected dmNewCustomerStage value along with the new
   assert.match(frontend, /var stageSel = document\.getElementById\('dmNewCustomerStage'\);\s*\n\s*var stage = stageSel \? stageSel\.value : '';\s*\n\s*masterDataRequest\('\/master-data\/customers', 'POST', \{ customer_name: name, environment_stage: stage \|\| undefined \}, function \(\) \{\s*\n\s*inp\.value = '';\s*\n\s*if \(stageSel\) stageSel\.value = '';/);
 });
 
-// ── Frontend: Dashboard shows ONLY the Live/Production count ──────────────
+// ── Frontend: no Dashboard card — the breakdown lives in Customer 360 ─────
 
-test('the Dashboard has exactly one new "Live Customers" KPI card, opening a dedicated read-only modal (not navigating to Data Management, which most roles can\'t access) — no UAT/Development cards on the Dashboard', () => {
-  assert.match(html, /<div class="stat-card green metric-kpi-card" id="dashboardCardLiveCustomers" onclick="showLiveCustomersModal\(\)"[^>]*title="View the list of customers currently in Production">/);
-  assert.match(html, /<div class="stat-label">Live Customers<\/div>\s*\n<div class="stat-value" id="statLiveCustomers">—<\/div>\s*\n<div class="stat-delta" id="statLiveCustomersSub">in Production<\/div>/);
-  assert.doesNotMatch(html, /id="statUatCustomers"|id="statDevelopmentCustomers"|id="dashboardCardUatCustomers"|id="dashboardCardDevelopmentCustomers"/, 'the Dashboard must not show UAT/Development customer counts, only Data Management does');
-  assert.doesNotMatch(html, /id="dashboardCardLiveCustomers"[^>]*onclick="navigate\('datamanagement'\)"/, 'must not route to the permission-gated Data Management page');
+test('there is no Dashboard "Live Customers" KPI card or standalone Live Customers modal — that surface was removed in favor of the Customer 360 grouped picker', () => {
+  assert.doesNotMatch(html, /id="dashboardCardLiveCustomers"/, 'the Dashboard KPI card must be removed');
+  assert.doesNotMatch(html, /id="liveCustomersOverlay"|id="liveCustomersList"/, 'the standalone Live Customers modal must be removed');
+  assert.doesNotMatch(frontend, /function showLiveCustomersModal\(|function updateLiveCustomersCard\(|function openCustomer360FromLiveList\(/, 'the now-orphaned Live Customers functions must be removed');
 });
 
-test('showLiveCustomersModal is a self-contained, permission-free list view (reads already-loaded customerRecords client-side, no manage_data check) — since Data Management itself requires manage_data (Admin/PMO/Manager only) and routing every role there would throw an access-denied error for everyone else', () => {
-  assert.match(html, /<div id="liveCustomersOverlay" style="display:none;position:fixed;inset:0;z-index:8000;/);
-  assert.match(html, /<div id="liveCustomersList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px"><\/div>/);
-  assert.match(frontend, /function showLiveCustomersModal\(\) \{/);
-  assert.match(frontend, /var liveCustomers = customerRecords\.filter\(function \(c\) \{ return c\.environment_stage === 'production'; \}\);/);
-  assert.match(frontend, /overlay\.style\.display = 'flex';/);
-  assert.doesNotMatch(frontend, /function showLiveCustomersModal\(\) \{[\s\S]{0,400}hasPermission/, 'the list view itself must not gate on a permission the current role might lack');
+// ── Frontend: Customer 360 picker groups every customer by stage ──────────
+
+test('the Customer 360 picker list container is a flex column (not a fixed 2-col grid), so it can hold a labeled section per stage', () => {
+  assert.match(html, /<div id="c360PickerList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:18px"><\/div>/);
 });
 
-test('updateLiveCustomersCard counts only Production-stage customers, and is called every time master data reloads', () => {
-  assert.match(frontend, /function updateLiveCustomersCard\(\) \{\s*\n\s*var el = document\.getElementById\('statLiveCustomers'\);\s*\n\s*if \(!el\) return;\s*\n\s*el\.textContent = customerRecords\.filter\(function \(c\) \{ return c\.environment_stage === 'production'; \}\)\.length;/);
-  assert.match(frontend, /updateDmCounts\(\);\s*\n\s*updateLiveCustomersCard\(\);\s*\n\s*populateEngineerDropdowns\(\);/);
+test('filterC360Picker sources the full customer list from customerRecords (not just customers with incidents), merging in incident-derived health stats and defaulting missing ones to zero', () => {
+  assert.match(frontend, /var stageByName = \{\};\s*\n\s*customerRecords\.forEach\(function \(c\) \{ stageByName\[c\.customer_name\] = c\.environment_stage \|\| ''; \}\);/);
+  assert.match(frontend, /var allNames = Object\.keys\(custMap\);\s*\n\s*customerRecords\.forEach\(function \(c\) \{ if \(allNames\.indexOf\(c\.customer_name\) < 0\) allNames\.push\(c\.customer_name\); \}\);/);
 });
 
-// ── Frontend: each row in the Live Customers list opens that customer's ──
-// ── Customer 360 view                                                    ──
-
-test('each row in the Live Customers list is clickable, embedding only the customer id in its onclick (never the raw name, which could contain a quote and break the generated JS)', () => {
-  assert.match(frontend, /'<div onclick="openCustomer360FromLiveList\(' \+ c\.id \+ '\)"[^']*style="padding:10px 14px;background:var\(--surface2\);border:1px solid var\(--border\);border-radius:8px;font-size:13px;color:var\(--text\);cursor:pointer"/);
-  assert.doesNotMatch(frontend, /openCustomer360FromLiveList\(' \+ c\.id \+ ', \\''/, 'must not take a second inline argument built from the raw customer name');
+test('filterC360Picker groups the filtered customers into Production/UAT/Development/On Hold/Not Set sections, in that order, each with a labeled header showing the count', () => {
+  assert.match(frontend, /var C360_STAGE_GROUPS = \[\s*\n\s*\{ key: 'production', label: 'Production \(Live\)' \},\s*\n\s*\{ key: 'uat', label: 'UAT' \},\s*\n\s*\{ key: 'development', label: 'Development' \},\s*\n\s*\{ key: 'on_hold', label: 'On Hold' \},\s*\n\s*\{ key: 'notSet', label: 'Not Set' \}\s*\n\s*\];/);
+  assert.match(frontend, /var groups = \{ production: \[\], uat: \[\], development: \[\], on_hold: \[\], notSet: \[\] \};/);
+  assert.match(frontend, /header\.textContent = group\.label \+ ' \(' \+ names\.length \+ '\)';/);
 });
 
-test('openCustomer360FromLiveList looks up the customer by id, closes the Live Customers overlay, and hands off to the existing openCustomer360 flow (same permissioning/behavior as every other route into Customer 360, e.g. the C360 picker)', () => {
-  assert.match(frontend, /function openCustomer360FromLiveList\(id\) \{\s*\n\s*var rec = customerRecords\.find\(function \(c\) \{ return c\.id === id; \}\);\s*\n\s*if \(!rec\) return;\s*\n\s*var overlay = document\.getElementById\('liveCustomersOverlay'\);\s*\n\s*if \(overlay\) overlay\.style\.display = 'none';\s*\n\s*openCustomer360\(rec\.customer_name\);\s*\n\}/);
+test('a section is only rendered when it has customers, and only non-empty groups get appended to the list', () => {
+  assert.match(frontend, /var names = groups\[group\.key\];\s*\n\s*if \(!names\.length\) return;/);
+});
+
+test('each customer card in the grouped picker still hands off to the existing openCustomer360 flow, closing the picker overlay first, unchanged from before the grouping was added', () => {
+  assert.match(frontend, /function buildC360PickerCard\(name, health\) \{/);
+  assert.match(frontend, /card\.onclick = function \(\) \{\s*\n\s*document\.getElementById\('c360PickerOverlay'\)\.style\.display = 'none';\s*\n\s*openCustomer360\(name\);\s*\n\s*\};/);
 });
