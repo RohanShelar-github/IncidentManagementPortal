@@ -466,6 +466,7 @@ function loadMasterData(callback) {
         populateTagDropdowns();
         renderDataManagement();
         updateDmCounts();
+        updateLiveCustomersCard();
         populateEngineerDropdowns();
         if (callback) callback(null);
       } else {
@@ -1592,17 +1593,41 @@ function getDashboardMonthNames() {
 }
 
 // ─── DATA MANAGEMENT ──────────────────────────────────────────────────────
+var CUSTOMER_ENV_STAGE_LABELS = { production: 'Production', uat: 'UAT', development: 'Development' };
+
 function renderDataManagement() {
   var custList = document.getElementById('dmCustomerList');
   var areaList = document.getElementById('dmAreaList');
   if (custList) {
-    custList.innerHTML = customers.map(function (c) {
-      var inUse = incidents.some(function (i) { return i.customer === c; });
-      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">'
-        + '<span style="font-size:13px;color:var(--text)">' + c + '</span>'
-        + (!inUse ? '<button onclick="removeCustomer(\'' + c + '\')" style="background:transparent;color:#f75c7c;border:none;font-size:15px;padding:3px 7px;cursor:pointer" title="Remove customer" aria-label="Remove customer">&#128465;</button>' : '<span style="font-size:11px;color:var(--text-muted)">In use</span>')
+    var isAdminUser = (currentRole || '').toLowerCase() === 'admin';
+    custList.innerHTML = customerRecords.map(function (c) {
+      var inUse = incidents.some(function (i) { return i.customer === c.customer_name; });
+      var stage = c.environment_stage || '';
+      var stageControl = isAdminUser
+        ? '<select onchange="changeCustomerEnvironmentStage(' + c.id + ', this.value)" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 6px;color:var(--text);font-size:11px;outline:none;cursor:pointer">'
+          + '<option value=""' + (!stage ? ' selected' : '') + '>Not set</option>'
+          + '<option value="production"' + (stage === 'production' ? ' selected' : '') + '>Production</option>'
+          + '<option value="uat"' + (stage === 'uat' ? ' selected' : '') + '>UAT</option>'
+          + '<option value="development"' + (stage === 'development' ? ' selected' : '') + '>Development</option>'
+          + '</select>'
+        : '<span style="font-size:11px;color:var(--text-muted)">' + (CUSTOMER_ENV_STAGE_LABELS[stage] || 'Not set') + '</span>';
+      return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">'
+        + '<span style="font-size:13px;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + c.customer_name + '</span>'
+        + stageControl
+        + (!inUse ? '<button onclick="removeCustomer(\'' + c.customer_name + '\')" style="background:transparent;color:#f75c7c;border:none;font-size:15px;padding:3px 7px;cursor:pointer" title="Remove customer" aria-label="Remove customer">&#128465;</button>' : '<span style="font-size:11px;color:var(--text-muted)">In use</span>')
         + '</div>';
     }).join('');
+  }
+  var stageBreakdownEl = document.getElementById('dmCustStageBreakdown');
+  if (stageBreakdownEl) {
+    var counts = { production: 0, uat: 0, development: 0, notSet: 0 };
+    customerRecords.forEach(function (c) {
+      if (c.environment_stage === 'production') counts.production++;
+      else if (c.environment_stage === 'uat') counts.uat++;
+      else if (c.environment_stage === 'development') counts.development++;
+      else counts.notSet++;
+    });
+    stageBreakdownEl.textContent = counts.production + ' Production, ' + counts.uat + ' UAT, ' + counts.development + ' Development, ' + counts.notSet + ' Not set';
   }
   if (areaList) {
     areaList.innerHTML = areas.map(function (a) {
@@ -1641,6 +1666,14 @@ function updateDmCounts() {
   if (cc) cc.textContent = customers.length + ' customer' + (customers.length !== 1 ? 's' : '');
   if (ac) ac.textContent = areas.length + ' area' + (areas.length !== 1 ? 's' : '');
   if (tc) tc.textContent = tagRecords.length + ' tag' + (tagRecords.length !== 1 ? 's' : '');
+}
+
+// Dashboard only ever shows the Production ("Live") count — the full
+// Production/UAT/Development breakdown lives in Data Management instead.
+function updateLiveCustomersCard() {
+  var el = document.getElementById('statLiveCustomers');
+  if (!el) return;
+  el.textContent = customerRecords.filter(function (c) { return c.environment_stage === 'production'; }).length;
 }
 
 // ─── CUSTOMER 360 ──────────────────────────────────────────────────────────
@@ -2095,10 +2128,23 @@ function addCustomer() {
   var name = inp.value.trim();
   if (!name) { showToast('Enter a customer name', 'error'); return; }
   if (customers.indexOf(name) >= 0) { showToast('Customer already exists', 'error'); return; }
-  masterDataRequest('/master-data/customers', 'POST', { customer_name: name }, function () {
+  var stageSel = document.getElementById('dmNewCustomerStage');
+  var stage = stageSel ? stageSel.value : '';
+  masterDataRequest('/master-data/customers', 'POST', { customer_name: name, environment_stage: stage || undefined }, function () {
     inp.value = '';
+    if (stageSel) stageSel.value = '';
     addAudit('??', 'Added Customer', name);
     showToast('Customer "' + name + '" added', 'success');
+  });
+}
+
+// Admin-only: moves a customer between Development → UAT → Production (or
+// back), independent of any other customer field.
+function changeCustomerEnvironmentStage(id, stage) {
+  if (!requireAdminMasterData()) return;
+  if (!stage) { showToast('Select a stage', 'error'); return; }
+  masterDataRequest('/master-data/customers/' + id + '/environment-stage', 'PATCH', { environment_stage: stage }, function () {
+    showToast('Customer stage updated', 'success');
   });
 }
 

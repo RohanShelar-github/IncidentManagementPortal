@@ -445,6 +445,11 @@
 <div class="stat-value" id="statResRate" style="color:#2dd4a0">—</div>
 <div class="stat-delta" id="statResRateSub">incidents fully resolved</div>
 </div>
+<div class="stat-card green metric-kpi-card" id="dashboardCardLiveCustomers" onclick="navigate('datamanagement')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View the full Production/UAT/Development breakdown in Data Management">
+<div class="stat-label">Live Customers</div>
+<div class="stat-value" id="statLiveCustomers">—</div>
+<div class="stat-delta" id="statLiveCustomersSub">in Production</div>
+</div>
 </div>
 <div class="charts-grid">
 <div class="chart-card">
@@ -1134,10 +1139,17 @@
 </div>
 <div id="dmCustCount" style="font-size:11px;color:var(--text-muted)"></div>
 </div>
-<div style="display:flex;gap:8px;margin-bottom:14px">
+<div style="display:flex;gap:8px;margin-bottom:8px">
 <input id="dmNewCustomer" onkeydown="if(event.key==='Enter') addCustomer()" placeholder="New customer name…" style="flex:1;background:var(--surface-alt,var(--bg));border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;outline:none;font-family:inherit" type="text"/>
+<select id="dmNewCustomerStage" style="background:var(--surface-alt,var(--bg));border:1px solid var(--border);border-radius:8px;padding:9px 10px;color:var(--text);font-size:13px;outline:none;font-family:inherit;cursor:pointer">
+<option value="">Stage: Not set</option>
+<option value="production">Production (Live)</option>
+<option value="uat">UAT</option>
+<option value="development">Development</option>
+</select>
 <button class="btn btn-primary btn-sm" onclick="addCustomer()" style="white-space:nowrap">+ Add</button>
 </div>
+<div id="dmCustStageBreakdown" style="font-size:11px;color:var(--text-muted);margin-bottom:10px"></div>
 <div id="dmCustomerList" style="display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto"></div>
 </div>
 <!-- AREAS -->
