@@ -41,7 +41,7 @@ function tagDto(row) {
   };
 }
 
-const CUSTOMER_ENVIRONMENT_STAGES = new Set(['production', 'uat', 'development']);
+const CUSTOMER_ENVIRONMENT_STAGES = new Set(['production', 'uat', 'development', 'on_hold']);
 
 function makeCode(value) {
   return String(value || '')
@@ -85,7 +85,7 @@ const createCustomer = async (req, res) => {
     const code = String(req.body.customer_code || makeCode(name)).trim();
     const environmentStage = String(req.body.environment_stage || '').trim().toLowerCase();
     if (environmentStage && !CUSTOMER_ENVIRONMENT_STAGES.has(environmentStage)) {
-      return res.status(400).json({ success: false, message: 'Environment stage must be one of production, uat, development' });
+      return res.status(400).json({ success: false, message: 'Environment stage must be one of production, uat, development, on_hold' });
     }
     const [result] = await pool.query(
       `INSERT INTO customers
@@ -134,7 +134,7 @@ const updateCustomerEnvironmentStage = async (req, res) => {
   try {
     const environmentStage = String(req.body.environment_stage || '').trim().toLowerCase();
     if (!CUSTOMER_ENVIRONMENT_STAGES.has(environmentStage)) {
-      return res.status(400).json({ success: false, message: 'Environment stage must be one of production, uat, development' });
+      return res.status(400).json({ success: false, message: 'Environment stage must be one of production, uat, development, on_hold' });
     }
     await pool.query(
       'UPDATE customers SET environment_stage = ?, updated_by = ? WHERE id = ?',

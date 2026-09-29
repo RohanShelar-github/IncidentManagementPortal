@@ -33,34 +33,43 @@ test('the migration does not backfill any existing customer\'s stage — there i
 
 // ── Backend: DTO, create, and the admin-only stage-change endpoint ────────
 
-test('customerDto exposes environment_stage, and createCustomer accepts + validates an optional environment_stage against the 3 allowed values', () => {
+test('customerDto exposes environment_stage, and createCustomer accepts + validates an optional environment_stage against the 4 allowed values (production/uat/development/on_hold)', () => {
   assert.match(masterDataController, /environment_stage: row\.environment_stage \|\| null,/);
-  assert.match(masterDataController, /const CUSTOMER_ENVIRONMENT_STAGES = new Set\(\['production', 'uat', 'development'\]\);/);
+  assert.match(masterDataController, /const CUSTOMER_ENVIRONMENT_STAGES = new Set\(\['production', 'uat', 'development', 'on_hold'\]\);/);
   assert.match(masterDataController, /const environmentStage = String\(req\.body\.environment_stage \|\| ''\)\.trim\(\)\.toLowerCase\(\);\s*\n\s*if \(environmentStage && !CUSTOMER_ENVIRONMENT_STAGES\.has\(environmentStage\)\) \{/);
   assert.match(masterDataController, /customer_branch, region, timezone, environment_stage, inbound_csm_name, outbound_csm_name, created_by, updated_by\)/);
 });
 
-test('updateCustomerEnvironmentStage is admin-only, rejects anything outside the 3 allowed values, and is routed under PATCH /customers/:id/environment-stage', () => {
+test('updateCustomerEnvironmentStage is admin-only, rejects anything outside the 4 allowed values, and is routed under PATCH /customers/:id/environment-stage', () => {
   assert.match(masterDataController, /const updateCustomerEnvironmentStage = async \(req, res\) => \{\s*\n\s*if \(!isAdmin\(req\)\) return res\.status\(403\)/);
-  assert.match(masterDataController, /if \(!CUSTOMER_ENVIRONMENT_STAGES\.has\(environmentStage\)\) \{\s*\n\s*return res\.status\(400\)\.json\(\{ success: false, message: 'Environment stage must be one of production, uat, development' \}\);/);
+  assert.match(masterDataController, /if \(!CUSTOMER_ENVIRONMENT_STAGES\.has\(environmentStage\)\) \{\s*\n\s*return res\.status\(400\)\.json\(\{ success: false, message: 'Environment stage must be one of production, uat, development, on_hold' \}\);/);
   assert.match(masterDataController, /UPDATE customers SET environment_stage = \?, updated_by = \? WHERE id = \?/);
   assert.match(masterDataController, /module\.exports = \{ getMasterData, createCustomer, updateCustomerCsm, updateCustomerEnvironmentStage, deactivateCustomer, createArea, deactivateArea, createIncidentTag, deleteIncidentTag \};/);
   assert.match(masterDataRoutes, /router\.patch\('\/customers\/:id\/environment-stage', updateCustomerEnvironmentStage\);/);
 });
 
+test('the migration adding On Hold uses an idempotent MODIFY COLUMN (not the conditional ADD COLUMN pattern used to create the column originally) and does not touch any existing customer\'s stage', () => {
+  const onHoldMigration = fs.readFileSync(path.join(root, 'backend', 'sql', '044_customer_environment_stage_on_hold.sql'), 'utf8');
+  assert.match(onHoldMigration, /ALTER TABLE customers\s*\n\s*MODIFY COLUMN environment_stage ENUM\('production','uat','development','on_hold'\) NULL;/);
+  assert.doesNotMatch(onHoldMigration, /UPDATE customers/);
+});
+
 // ── Frontend: Data Management shows/edits the full breakdown ──────────────
 
-test('Data Management\'s Customers card has a Stage select in the create-customer form, and a breakdown line separate from the plain "N customers" count', () => {
-  assert.match(html, /<select id="dmNewCustomerStage"[^>]*>\s*\n<option value="">Stage: Not set<\/option>\s*\n<option value="production">Production \(Live\)<\/option>\s*\n<option value="uat">UAT<\/option>\s*\n<option value="development">Development<\/option>\s*\n<\/select>/);
+test('Data Management\'s Customers card has a Stage select in the create-customer form (including On Hold), and a breakdown line separate from the plain "N customers" count', () => {
+  assert.match(html, /<select id="dmNewCustomerStage"[^>]*>\s*\n<option value="">Stage: Not set<\/option>\s*\n<option value="production">Production \(Live\)<\/option>\s*\n<option value="uat">UAT<\/option>\s*\n<option value="development">Development<\/option>\s*\n<option value="on_hold">On Hold<\/option>\s*\n<\/select>/);
   assert.match(html, /<div id="dmCustStageBreakdown" style="font-size:11px;color:var\(--text-muted\);margin-bottom:10px"><\/div>/);
 });
 
-test('renderDataManagement renders each customer row from customerRecords (not the plain name-only customers array) with a per-row stage control, and computes the full Production/UAT/Development/Not-set breakdown', () => {
-  assert.match(frontend, /var CUSTOMER_ENV_STAGE_LABELS = \{ production: 'Production', uat: 'UAT', development: 'Development' \};/);
+test('renderDataManagement renders each customer row from customerRecords (not the plain name-only customers array) with a per-row stage control (including an On Hold option), and computes the full Production/UAT/Development/On Hold/Not-set breakdown', () => {
+  assert.match(frontend, /var CUSTOMER_ENV_STAGE_LABELS = \{ production: 'Production', uat: 'UAT', development: 'Development', on_hold: 'On Hold' \};/);
   assert.match(frontend, /custList\.innerHTML = customerRecords\.map\(function \(c\) \{/);
   assert.match(frontend, /var isAdminUser = \(currentRole \|\| ''\)\.toLowerCase\(\) === 'admin';/);
+  assert.match(frontend, /<option value="on_hold"' \+ \(stage === 'on_hold' \? ' selected' : ''\) \+ '>On Hold<\/option>'/);
   assert.match(frontend, /var stageBreakdownEl = document\.getElementById\('dmCustStageBreakdown'\);/);
-  assert.match(frontend, /counts\.production \+ ' Production, ' \+ counts\.uat \+ ' UAT, ' \+ counts\.development \+ ' Development, ' \+ counts\.notSet \+ ' Not set';/);
+  assert.match(frontend, /var counts = \{ production: 0, uat: 0, development: 0, onHold: 0, notSet: 0 \};/);
+  assert.match(frontend, /else if \(c\.environment_stage === 'on_hold'\) counts\.onHold\+\+;/);
+  assert.match(frontend, /counts\.production \+ ' Production, ' \+ counts\.uat \+ ' UAT, ' \+ counts\.development \+ ' Development, ' \+ counts\.onHold \+ ' On Hold, ' \+ counts\.notSet \+ ' Not set';/);
 });
 
 test('only an admin sees an editable stage <select> per customer row (calling changeCustomerEnvironmentStage on change) — everyone else sees a read-only label', () => {

@@ -1593,7 +1593,7 @@ function getDashboardMonthNames() {
 }
 
 // ─── DATA MANAGEMENT ──────────────────────────────────────────────────────
-var CUSTOMER_ENV_STAGE_LABELS = { production: 'Production', uat: 'UAT', development: 'Development' };
+var CUSTOMER_ENV_STAGE_LABELS = { production: 'Production', uat: 'UAT', development: 'Development', on_hold: 'On Hold' };
 
 function renderDataManagement() {
   var custList = document.getElementById('dmCustomerList');
@@ -1609,6 +1609,7 @@ function renderDataManagement() {
           + '<option value="production"' + (stage === 'production' ? ' selected' : '') + '>Production</option>'
           + '<option value="uat"' + (stage === 'uat' ? ' selected' : '') + '>UAT</option>'
           + '<option value="development"' + (stage === 'development' ? ' selected' : '') + '>Development</option>'
+          + '<option value="on_hold"' + (stage === 'on_hold' ? ' selected' : '') + '>On Hold</option>'
           + '</select>'
         : '<span style="font-size:11px;color:var(--text-muted)">' + (CUSTOMER_ENV_STAGE_LABELS[stage] || 'Not set') + '</span>';
       return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">'
@@ -1620,14 +1621,15 @@ function renderDataManagement() {
   }
   var stageBreakdownEl = document.getElementById('dmCustStageBreakdown');
   if (stageBreakdownEl) {
-    var counts = { production: 0, uat: 0, development: 0, notSet: 0 };
+    var counts = { production: 0, uat: 0, development: 0, onHold: 0, notSet: 0 };
     customerRecords.forEach(function (c) {
       if (c.environment_stage === 'production') counts.production++;
       else if (c.environment_stage === 'uat') counts.uat++;
       else if (c.environment_stage === 'development') counts.development++;
+      else if (c.environment_stage === 'on_hold') counts.onHold++;
       else counts.notSet++;
     });
-    stageBreakdownEl.textContent = counts.production + ' Production, ' + counts.uat + ' UAT, ' + counts.development + ' Development, ' + counts.notSet + ' Not set';
+    stageBreakdownEl.textContent = counts.production + ' Production, ' + counts.uat + ' UAT, ' + counts.development + ' Development, ' + counts.onHold + ' On Hold, ' + counts.notSet + ' Not set';
   }
   if (areaList) {
     areaList.innerHTML = areas.map(function (a) {
