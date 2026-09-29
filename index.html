@@ -1325,20 +1325,20 @@
 </div>
 <!-- Summary tiles -->
 <div class="stats-grid" style="margin-bottom:20px">
-<div class="stat-card" id="acTileQuiet" style="border-color:rgba(247,92,124,0.3);background:linear-gradient(135deg,rgba(247,92,124,0.08),rgba(247,92,124,0.02));cursor:pointer" onclick="acFilterByState('went_quiet')" title="Alerts that stopped repeating with no resolved signal and no incident">
+<div class="stat-card" id="acTileQuiet" style="border-color:rgba(247,92,124,0.3);background:linear-gradient(135deg,rgba(247,92,124,0.08),rgba(247,92,124,0.02));cursor:pointer" onclick="acFilterByState('went_quiet')" title="Alerts that stopped repeating with no resolved signal — may or may not have an incident">
 <div class="stat-label">Went Quiet — Unconfirmed</div>
 <div class="stat-value" id="acStatQuiet">0</div>
-<div class="stat-delta">no incident, no resolved signal</div>
+<div class="stat-delta">no resolved signal yet</div>
 </div>
-<div class="stat-card" id="acTileRepeating" style="border-color:rgba(247,185,79,0.3);background:linear-gradient(135deg,rgba(247,185,79,0.08),rgba(247,185,79,0.02));cursor:pointer" onclick="acFilterByState('actively_repeating')" title="Alerts still firing within the expected interval, no incident yet">
+<div class="stat-card" id="acTileRepeating" style="border-color:rgba(247,185,79,0.3);background:linear-gradient(135deg,rgba(247,185,79,0.08),rgba(247,185,79,0.02));cursor:pointer" onclick="acFilterByState('actively_repeating')" title="Alerts still firing within the expected interval — may or may not have an incident">
 <div class="stat-label">Actively Repeating</div>
 <div class="stat-value" id="acStatRepeating">0</div>
-<div class="stat-delta">no incident yet</div>
+<div class="stat-delta">still firing</div>
 </div>
-<div class="stat-card green" id="acTileResolved" style="cursor:pointer" onclick="acFilterByState('confirmed_resolved')" title="Alerts with a resolved notification and no incident">
+<div class="stat-card green" id="acTileResolved" style="cursor:pointer" onclick="acFilterByState('confirmed_resolved')" title="Alerts whose latest notification was a resolved variant — may or may not have an incident linked to an earlier occurrence">
 <div class="stat-label">Confirmed Resolved</div>
 <div class="stat-value" id="acStatResolved">0</div>
-<div class="stat-delta">self-resolved, no incident needed</div>
+<div class="stat-delta">latest notification: resolved</div>
 </div>
 <div class="stat-card blue" id="acTileIncident" style="cursor:pointer" onclick="acFilterByState('incident_created')" title="Alerts that led to a created incident">
 <div class="stat-label">Incident Created</div>
