@@ -1757,7 +1757,7 @@ function filterC360Picker(q) {
     header.style.cssText = 'font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px';
     header.textContent = group.label + ' (' + names.length + ')';
     var grid = document.createElement('div');
-    grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px';
+    grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px';
     names.forEach(function (name) { grid.appendChild(buildC360PickerCard(name, custMap[name])); });
     section.appendChild(header);
     section.appendChild(grid);
