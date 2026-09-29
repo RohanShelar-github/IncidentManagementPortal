@@ -1604,7 +1604,7 @@ function renderDataManagement() {
       var inUse = incidents.some(function (i) { return i.customer === c.customer_name; });
       var stage = c.environment_stage || '';
       var stageControl = isAdminUser
-        ? '<select onchange="changeCustomerEnvironmentStage(' + c.id + ', this.value)" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 6px;color:var(--text);font-size:11px;outline:none;cursor:pointer">'
+        ? '<select onchange="changeCustomerEnvironmentStage(' + c.id + ', this.value)" style="flex:0 0 130px;width:130px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 6px;color:var(--text);font-size:11px;outline:none;cursor:pointer">'
           + '<option value=""' + (!stage ? ' selected' : '') + '>Not set</option>'
           + '<option value="production"' + (stage === 'production' ? ' selected' : '') + '>Production</option>'
           + '<option value="uat"' + (stage === 'uat' ? ' selected' : '') + '>UAT</option>'
