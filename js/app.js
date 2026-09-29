@@ -5579,7 +5579,7 @@ function saveIncident() {
   const mttdMinutes = (mttdH * 60) + mttdM;
   const mttdStr = mttdMinutes > 0 ? minutesToHM(mttdMinutes) : '';
 
-  if (!title || !customer || !severity || !engineer) {
+  if (!title || !customer || !project.trim() || !severity || !engineer) {
     showToast('Please fill in all required fields', 'error');
     return;
   }
@@ -9439,7 +9439,7 @@ function saveDetailEdit() {
   const date = document.getElementById('dp_f_date').value;
   const desc = (document.getElementById('dp_f_desc')?.innerHTML || '').trim();
 
-  if (!title || !customer || !severity || !engineer) {
+  if (!title || !customer || !project.trim() || !severity || !engineer) {
     showToast('Please fill in all required fields', 'error');
     return;
   }

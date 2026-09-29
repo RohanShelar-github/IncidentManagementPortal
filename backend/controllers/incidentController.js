@@ -292,7 +292,7 @@ const createIncident = async (req, res) => {
         return res.status(409).json({ success: false, message: 'This draft cannot be finalized because its saved form data is invalid.' });
       }
     }
-    if (!b.title || !b.severity) return res.status(400).json({ success: false, message: 'Title and severity are required' });
+    if (!b.title || !b.severity || !String(b.project || '').trim()) return res.status(400).json({ success: false, message: 'Title, severity, and project are required' });
     if (normalizeStatus(b.status || 'New') === 'closed') {
       const closureError = validateIncidentClosureFields({
         rca: b.rca, resolution: b.resolution, resolvedBy: b.resolved_by || b.resolvedBy,
