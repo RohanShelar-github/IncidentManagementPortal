@@ -1676,6 +1676,26 @@ function updateLiveCustomersCard() {
   el.textContent = customerRecords.filter(function (c) { return c.environment_stage === 'production'; }).length;
 }
 
+// A dedicated, permission-free list view for the Dashboard's Live Customers
+// card. Deliberately NOT a navigate('datamanagement') — that page requires
+// manage_data (only Admin/PMO/Manager have it), so routing every role's
+// dashboard click there would just throw an access-denied error for anyone
+// else. customerRecords is already loaded for all logged-in roles (it feeds
+// the Customer dropdowns everywhere), so this only ever reads data the
+// current user already has.
+function showLiveCustomersModal() {
+  var overlay = document.getElementById('liveCustomersOverlay');
+  var list = document.getElementById('liveCustomersList');
+  if (!overlay || !list) return;
+  var liveCustomers = customerRecords.filter(function (c) { return c.environment_stage === 'production'; });
+  list.innerHTML = liveCustomers.length
+    ? liveCustomers.map(function (c) {
+        return '<div style="padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text)">' + escapeMetricHtml(c.customer_name) + '</div>';
+      }).join('')
+    : '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px">No customers are currently marked Production</div>';
+  overlay.style.display = 'flex';
+}
+
 // ─── CUSTOMER 360 ──────────────────────────────────────────────────────────
 function _showC360Picker() {
   var overlay = document.getElementById('c360PickerOverlay');

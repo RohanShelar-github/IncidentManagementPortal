@@ -79,10 +79,20 @@ test('addCustomer sends the selected dmNewCustomerStage value along with the new
 
 // ── Frontend: Dashboard shows ONLY the Live/Production count ──────────────
 
-test('the Dashboard has exactly one new "Live Customers" KPI card, clickable through to Data Management for the full breakdown — no UAT/Development cards on the Dashboard', () => {
-  assert.match(html, /<div class="stat-card green metric-kpi-card" id="dashboardCardLiveCustomers" onclick="navigate\('datamanagement'\)"[^>]*title="View the full Production\/UAT\/Development breakdown in Data Management">/);
+test('the Dashboard has exactly one new "Live Customers" KPI card, opening a dedicated read-only modal (not navigating to Data Management, which most roles can\'t access) — no UAT/Development cards on the Dashboard', () => {
+  assert.match(html, /<div class="stat-card green metric-kpi-card" id="dashboardCardLiveCustomers" onclick="showLiveCustomersModal\(\)"[^>]*title="View the list of customers currently in Production">/);
   assert.match(html, /<div class="stat-label">Live Customers<\/div>\s*\n<div class="stat-value" id="statLiveCustomers">—<\/div>\s*\n<div class="stat-delta" id="statLiveCustomersSub">in Production<\/div>/);
   assert.doesNotMatch(html, /id="statUatCustomers"|id="statDevelopmentCustomers"|id="dashboardCardUatCustomers"|id="dashboardCardDevelopmentCustomers"/, 'the Dashboard must not show UAT/Development customer counts, only Data Management does');
+  assert.doesNotMatch(html, /id="dashboardCardLiveCustomers"[^>]*onclick="navigate\('datamanagement'\)"/, 'must not route to the permission-gated Data Management page');
+});
+
+test('showLiveCustomersModal is a self-contained, permission-free list view (reads already-loaded customerRecords client-side, no manage_data check) — since Data Management itself requires manage_data (Admin/PMO/Manager only) and routing every role there would throw an access-denied error for everyone else', () => {
+  assert.match(html, /<div id="liveCustomersOverlay" style="display:none;position:fixed;inset:0;z-index:8000;/);
+  assert.match(html, /<div id="liveCustomersList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px"><\/div>/);
+  assert.match(frontend, /function showLiveCustomersModal\(\) \{/);
+  assert.match(frontend, /var liveCustomers = customerRecords\.filter\(function \(c\) \{ return c\.environment_stage === 'production'; \}\);/);
+  assert.match(frontend, /overlay\.style\.display = 'flex';/);
+  assert.doesNotMatch(frontend, /function showLiveCustomersModal\(\) \{[\s\S]{0,400}hasPermission/, 'the list view itself must not gate on a permission the current role might lack');
 });
 
 test('updateLiveCustomersCard counts only Production-stage customers, and is called every time master data reloads', () => {
