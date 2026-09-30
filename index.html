@@ -1468,9 +1468,10 @@
 </div>
 <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Comments</div>
 <div id="acCommentsList" style="display:flex;flex-direction:column;gap:2px;max-height:220px;overflow-y:auto;margin-bottom:14px"></div>
-<div class="form-group form-full" style="margin:0">
+<div class="form-group form-full" style="margin:0;position:relative">
 <label class="form-label">Add a comment</label>
-<textarea id="acCommentInput" placeholder="Explain the cause of this alert, or why an incident was or wasn't created…" rows="3" style="width:100%"></textarea>
+<div id="acMentionDropdown" style="display:none;position:absolute;bottom:calc(100% + 4px);left:0;right:0;background:var(--surface);border:1px solid var(--border2);border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,0.35);z-index:999;overflow:hidden"></div>
+<textarea id="acCommentInput" onblur="setTimeout(function(){closeMentionDropdown('acMentionDropdown')},200)" oninput="handleMentionInput(this,'acMentionDropdown')" onkeydown="handleAcCommentKey(event)" placeholder="Explain the cause of this alert, or why an incident was or wasn't created… use @name to mention" rows="3" style="width:100%"></textarea>
 </div>
 </div>
 <div class="modal-footer">

@@ -44,6 +44,19 @@ async function notifyUsers({ actorId, message, type = 'info', incidentRef = null
   }
 }
 
+// Returns the active users whose full name is @mentioned in text, including
+// their email — used to send an actual email notification (notifyUsers only
+// ever records an in-app notification row, never an email).
+async function findMentionedUsers(text) {
+  try {
+    const [users] = await pool.query('SELECT id, full_name, email FROM users WHERE is_active = 1');
+    return users.filter((user) => containsMention(text, user.full_name));
+  } catch (error) {
+    console.error('Mention lookup error:', error);
+    return [];
+  }
+}
+
 async function notifyMailboxUsers({ fromName, subject, mailboxMessageId }) {
   try {
     const messageId = String(mailboxMessageId || '').trim();
@@ -83,6 +96,7 @@ module.exports = {
   notifyMailboxUsers,
   markMailboxNotificationsRead,
   containsMention,
+  findMentionedUsers,
   purgeExpiredNotifications,
   NOTIFICATION_RETENTION_HOURS,
   NOTIFICATION_PURGE_INTERVAL_MS

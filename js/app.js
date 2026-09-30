@@ -11724,6 +11724,7 @@ function acOpenIncident(incidentRef) {
 // didn't become an incident.
 let acActiveCommentFingerprintKey = null;
 let acActiveCommentFingerprint = null;
+let acActiveCommentSubject = null;
 
 // commentsOnly hides everything but the Comments section itself (badges,
 // meta grid, occurrence history, email viewer, and the resolve/delete
@@ -11734,6 +11735,7 @@ function acOpenAlertDetail(fingerprintKey, commentsOnly) {
   if (!row) return;
   acActiveCommentFingerprintKey = fingerprintKey;
   acActiveCommentFingerprint = row.fingerprint || '';
+  acActiveCommentSubject = row.subject || '';
 
   const detailSections = document.getElementById('adDetailSections');
   if (detailSections) detailSections.style.display = commentsOnly ? 'none' : '';
@@ -11913,6 +11915,10 @@ function acRenderComments(comments) {
   }).join('');
 }
 
+function handleAcCommentKey(e) {
+  if (selectMentionOnEnter(e, 'acCommentInput', 'acMentionDropdown')) return;
+}
+
 function acSubmitComment() {
   const input = document.getElementById('acCommentInput');
   const text = input ? input.value.trim() : '';
@@ -11923,12 +11929,13 @@ function acSubmitComment() {
   fetch(window.APP_CONFIG.API_BASE_URL + '/operations-alerts/comments', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ fingerprintKey: acActiveCommentFingerprintKey, fingerprint: acActiveCommentFingerprint, comment: text })
+    body: JSON.stringify({ fingerprintKey: acActiveCommentFingerprintKey, fingerprint: acActiveCommentFingerprint, alertSubject: acActiveCommentSubject, comment: text })
   })
     .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
     .then(function (result) {
       if (!result.ok || !result.data.success) throw new Error(result.data.message || 'Unable to add comment');
       if (input) input.value = '';
+      closeMentionDropdown('acMentionDropdown');
       acLoadComments(acActiveCommentFingerprintKey);
       const row = alertComplianceReportData.find(function (r) { return r.fingerprintKey === acActiveCommentFingerprintKey; });
       if (row) row.commentCount = (row.commentCount || 0) + 1;

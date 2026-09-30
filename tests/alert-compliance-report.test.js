@@ -737,3 +737,44 @@ test('getAlertComplianceReport looks up the linked incident\'s status per group 
   assert.match(reportController, /if \(linkedIncident && CLOSED_INCIDENT_STATUSES\.has\(linkedIncident\.status\)\) \{\s*\n\s*state = 'confirmed_resolved';\s*\n\s*\}/);
   assert.match(reportController, /annotated\.filter\(\(m\) => m\.incidentCreated\)\.map\(\(m\) => \[m\.id, \{ ref: m\.incidentRef, status: m\.incidentStatus \|\| null \}\]\)/);
 });
+
+// ── Requirement: @mention autocomplete in the alert comment box, and an ──
+// ── actual email sent to each mentioned user (not just an in-app note)  ──
+
+test('the alert comment textarea wires the same handleMentionInput/closeMentionDropdown pattern already used by the other two comment boxes, into its own dedicated acMentionDropdown', () => {
+  assert.match(html, /<div id="acMentionDropdown" style="display:none;position:absolute;bottom:calc\(100% \+ 4px\);left:0;right:0;background:var\(--surface\);border:1px solid var\(--border2\);border-radius:10px;box-shadow:0 8px 28px rgba\(0,0,0,0\.35\);z-index:999;overflow:hidden"><\/div>/);
+  assert.match(html, /<textarea id="acCommentInput" onblur="setTimeout\(function\(\)\{closeMentionDropdown\('acMentionDropdown'\)\},200\)" oninput="handleMentionInput\(this,'acMentionDropdown'\)" onkeydown="handleAcCommentKey\(event\)"/);
+});
+
+test('handleAcCommentKey only intercepts Enter to accept a mention suggestion (via the shared selectMentionOnEnter), leaving plain Enter/newline behavior alone for this multi-line textarea', () => {
+  assert.match(frontend, /function handleAcCommentKey\(e\) \{\s*\n\s*if \(selectMentionOnEnter\(e, 'acCommentInput', 'acMentionDropdown'\)\) return;\s*\n\}/);
+});
+
+test('acOpenAlertDetail also captures the alert\'s subject text (acActiveCommentSubject), and acSubmitComment sends it along as alertSubject for the mention email — it is never persisted to operations_alert_comments itself', () => {
+  assert.match(frontend, /let acActiveCommentSubject = null;/);
+  assert.match(frontend, /acActiveCommentSubject = row\.subject \|\| '';/);
+  assert.match(frontend, /body: JSON\.stringify\(\{ fingerprintKey: acActiveCommentFingerprintKey, fingerprint: acActiveCommentFingerprint, alertSubject: acActiveCommentSubject, comment: text \}\)/);
+});
+
+test('notificationService exposes findMentionedUsers, returning active users (with email) whose full name is @mentioned, reusing the same containsMention check notifyUsers already relies on', () => {
+  const notificationService = fs.readFileSync(path.join(root, 'backend', 'services', 'notificationService.js'), 'utf8');
+  assert.match(notificationService, /async function findMentionedUsers\(text\) \{/);
+  assert.match(notificationService, /SELECT id, full_name, email FROM users WHERE is_active = 1/);
+  assert.match(notificationService, /return users\.filter\(\(user\) => containsMention\(text, user\.full_name\)\);/);
+  assert.match(notificationService, /module\.exports = \{\s*\n\s*notifyUsers,\s*\n\s*notifyMailboxUsers,\s*\n\s*markMailboxNotificationsRead,\s*\n\s*containsMention,\s*\n\s*findMentionedUsers,/);
+});
+
+test('addAlertComment records the usual in-app mention notification AND emails every @mentioned user with an email address, via the existing generic sendCriticalIncidentEmail sender', () => {
+  assert.match(reportController, /const \{ notifyUsers, findMentionedUsers \} = require\('\.\.\/services\/notificationService'\);/);
+  assert.match(reportController, /const \{ listMailboxFolderMessages, getInboxMessage, sendCriticalIncidentEmail, htmlEscape \} = require\('\.\.\/services\/emailService'\);/);
+  assert.match(reportController, /await notifyUsers\(\{\s*\n\s*actorId: req\.user\.id,\s*\n\s*message: `\$\{actorName\} commented on an alert\$\{alertSubject \? ` \(\$\{alertSubject\}\)` : ''\}: \$\{commentText\}`,\s*\n\s*type: 'alert_comment',\s*\n\s*mentionText: commentText\s*\n\s*\}\);/);
+  assert.match(reportController, /const mentioned = await findMentionedUsers\(commentText\);/);
+  assert.match(reportController, /await Promise\.all\(mentioned\.filter\(\(user\) => user\.email\)\.map\(\(user\) =>\s*\n\s*sendCriticalIncidentEmail\(\{/);
+});
+
+test('a mention email delivery failure is caught per-recipient and only logged — it must never make the comment endpoint itself fail or roll back the already-saved comment', () => {
+  const bodyStart = reportController.indexOf('const addAlertComment = async');
+  const bodyEnd = reportController.indexOf('const resolveAlertManually');
+  const body = reportController.slice(bodyStart, bodyEnd);
+  assert.match(body, /\.catch\(\(error\) => console\.error\('Mention email delivery error:', error\.message\)\)/);
+});
