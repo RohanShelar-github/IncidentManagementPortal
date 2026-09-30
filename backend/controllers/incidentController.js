@@ -4,8 +4,8 @@ const {
   minutesToHM,
   resolveDurationMinutes
 } = require('../services/incidentNormalization');
-const { notifyUsers } = require('../services/notificationService');
-const { sendIncidentClosedEmail, sendIncidentCreatedEmail, sendCriticalIncidentEmail, htmlEscape, safeIncidentEmailHtml } = require('../services/emailService');
+const { notifyUsers, findMentionedUsers } = require('../services/notificationService');
+const { sendIncidentClosedEmail, sendIncidentCreatedEmail, sendCriticalIncidentEmail, htmlEscape, safeIncidentEmailHtml, mentionNotificationEmailHtml } = require('../services/emailService');
 const { finalizeIncidentDraft, getReadyDraftForFinalization } = require('./incidentDraftController');
 const INCIDENT_NOTIFICATION_CC = 'its24x7@magicsoftware.com,cloudopssupport@magicsoftware.com';
 
@@ -836,7 +836,7 @@ const addComment = async (req, res) => {
     if (!text) return res.status(400).json({ success: false, message: 'Comment text is required' });
 
     await connection.beginTransaction();
-    const [rows] = await connection.query('SELECT comments FROM incidents WHERE id = ? FOR UPDATE', [dbId]);
+    const [rows] = await connection.query('SELECT comments, title FROM incidents WHERE id = ? FOR UPDATE', [dbId]);
     const comments = parseComments(rows[0] && rows[0].comments);
     const comment = {
       author: req.user.name || req.user.email || 'User',
@@ -853,13 +853,34 @@ const addComment = async (req, res) => {
       [dbId, 'comment', req.user.id, text]
     );
     await connection.commit();
+    const actorName = req.user.name || req.user.email || 'A user';
     await notifyUsers({
       actorId: req.user.id,
-      message: `${req.user.name || req.user.email} commented on ${req.params.id}: ${text}`,
+      message: `${actorName} commented on ${req.params.id}: ${text}`,
       type: 'comment',
       incidentRef: req.params.id,
       mentionText: text
     });
+    const mentioned = await findMentionedUsers(text);
+    const actorEmail = String(req.user.email || '').trim();
+    const portalBaseUrl = String(process.env.PORTAL_BASE_URL || '').replace(/\/$/, '');
+    const incidentTitle = rows[0] && rows[0].title || '';
+    await Promise.all(mentioned.filter((user) => user.email).map((user) =>
+      sendCriticalIncidentEmail({
+        from: process.env.MAIL_FROM,
+        to: user.email,
+        // CC the commenter too, so they get a copy of who was notified —
+        // skipped when they mentioned themselves, since to/cc would be identical.
+        cc: actorEmail && actorEmail.toLowerCase() !== String(user.email).toLowerCase() ? actorEmail : '',
+        subject: `You were mentioned in a comment on ${req.params.id}`,
+        html: mentionNotificationEmailHtml({
+          actorName, commentText: text,
+          itemLabel: `${req.params.id}${incidentTitle ? `: ${incidentTitle}` : ''}`,
+          actionUrl: portalBaseUrl ? `${portalBaseUrl}/?incident=${encodeURIComponent(req.params.id)}#incidents` : '',
+          actionLabel: `Open ${req.params.id}`
+        })
+      }).catch((error) => console.error('Mention email delivery error:', error.message))
+    ));
     return res.status(201).json({ success: true, message: 'Comment added successfully', data: comment });
   } catch (error) {
     await connection.rollback();

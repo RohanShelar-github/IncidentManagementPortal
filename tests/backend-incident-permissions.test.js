@@ -27,3 +27,37 @@ test('public health response contains no infrastructure or integration configura
   const implementation = server.slice(start, end);
   assert.doesNotMatch(implementation, /databaseName|databaseTime|emailConfigured|aiConfigured|error\.message/);
 });
+
+// ── Requirement: @mentioning a user in an incident comment also emails them ──
+// ── (not just the existing in-app notification), CC'ing the commenter too  ──
+
+test('incidentController imports findMentionedUsers and mentionNotificationEmailHtml alongside its existing notification/email imports', () => {
+  const controller = read('backend/controllers/incidentController.js');
+  assert.match(controller, /const \{ notifyUsers, findMentionedUsers \} = require\('\.\.\/services\/notificationService'\);/);
+  assert.match(controller, /const \{ sendIncidentClosedEmail, sendIncidentCreatedEmail, sendCriticalIncidentEmail, htmlEscape, safeIncidentEmailHtml, mentionNotificationEmailHtml \} = require\('\.\.\/services\/emailService'\);/);
+});
+
+test('addComment sends an email (via the shared mentionNotificationEmailHtml template) to every @mentioned user, in addition to the existing in-app notifyUsers call', () => {
+  const controller = read('backend/controllers/incidentController.js');
+  const start = controller.indexOf('const addComment = async');
+  const end = controller.indexOf('module.exports');
+  const body = controller.slice(start, end);
+  assert.match(body, /const mentioned = await findMentionedUsers\(text\);/);
+  assert.match(body, /await Promise\.all\(mentioned\.filter\(\(user\) => user\.email\)\.map\(\(user\) =>\s*\n\s*sendCriticalIncidentEmail\(\{/);
+  assert.match(body, /subject: `You were mentioned in a comment on \$\{req\.params\.id\}`,/);
+  assert.match(body, /html: mentionNotificationEmailHtml\(\{\s*\n\s*actorName, commentText: text,\s*\n\s*itemLabel: `\$\{req\.params\.id\}\$\{incidentTitle \? `: \$\{incidentTitle\}` : ''\}`,\s*\n\s*actionUrl: portalBaseUrl \? `\$\{portalBaseUrl\}\/\?incident=\$\{encodeURIComponent\(req\.params\.id\)\}#incidents` : '',\s*\n\s*actionLabel: `Open \$\{req\.params\.id\}`\s*\n\s*\}\)/);
+});
+
+test('the incident comment mention email CCs the commenter, skipped only when they mentioned themselves, and a delivery failure is caught per-recipient without failing the comment request', () => {
+  const controller = read('backend/controllers/incidentController.js');
+  const start = controller.indexOf('const addComment = async');
+  const end = controller.indexOf('module.exports');
+  const body = controller.slice(start, end);
+  assert.match(body, /cc: actorEmail && actorEmail\.toLowerCase\(\) !== String\(user\.email\)\.toLowerCase\(\) \? actorEmail : '',/);
+  assert.match(body, /\.catch\(\(error\) => console\.error\('Mention email delivery error:', error\.message\)\)/);
+});
+
+test('addComment now also selects the incident title (in addition to comments) so the mention email can show a readable item label, not just the bare incident ref', () => {
+  const controller = read('backend/controllers/incidentController.js');
+  assert.match(controller, /SELECT comments, title FROM incidents WHERE id = \? FOR UPDATE/);
+});

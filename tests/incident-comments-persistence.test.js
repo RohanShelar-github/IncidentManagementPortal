@@ -13,7 +13,7 @@ test('incidents table stores tags and comments as JSON', () => {
 });
 
 test('comment API appends comments to the incident row and preserves activity logging', () => {
-  assert.match(controller, /SELECT comments FROM incidents WHERE id = \? FOR UPDATE/);
+  assert.match(controller, /SELECT comments, title FROM incidents WHERE id = \? FOR UPDATE/);
   assert.match(controller, /UPDATE incidents SET comments = \? WHERE id = \?/);
   assert.match(controller, /INSERT INTO activity_logs/);
 });

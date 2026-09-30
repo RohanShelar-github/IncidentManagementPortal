@@ -15,7 +15,7 @@
 // No new tables, no writes anywhere in this file.
 
 const pool = require('../config/database');
-const { listMailboxFolderMessages, getInboxMessage, sendCriticalIncidentEmail, htmlEscape } = require('../services/emailService');
+const { listMailboxFolderMessages, getInboxMessage, sendCriticalIncidentEmail, mentionNotificationEmailHtml } = require('../services/emailService');
 const { classifyOperationsMessage } = require('../services/operationsMailClassificationService');
 const { attachMailboxIncidentLinks, matchingCustomersByName } = require('./mailboxController');
 const { notifyUsers, findMentionedUsers } = require('../services/notificationService');
@@ -232,14 +232,6 @@ const listAlertComments = async (req, res) => {
   }
 };
 
-// Builds the email sent to each @mentioned user — a lighter, one-off
-// template than incidentEmail(), since it isn't reporting an incident.
-function mentionEmailHtml({ actorName, commentText, alertSubject }) {
-  const portalBaseUrl = String(process.env.PORTAL_BASE_URL || '').replace(/\/$/, '');
-  const reportUrl = portalBaseUrl ? `${portalBaseUrl}/#alertCompliance` : '';
-  return `<!doctype html><html><body style="margin:0;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a"><div style="max-width:640px;margin:24px auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden"><div style="background:#172554;padding:20px 24px;color:#fff"><div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;opacity:.8">AOC 24×7 Incident Management</div><h1 style="font-size:20px;margin:8px 0 0">You were mentioned in a comment</h1></div><div style="padding:24px"><div style="font-size:13px;color:#334155;margin-bottom:14px"><strong>${htmlEscape(actorName)}</strong> mentioned you on this Alert Compliance item:</div><div style="font-size:14px;font-weight:700;margin-bottom:14px">${htmlEscape(alertSubject || 'Alert Compliance')}</div><div style="background:#f8fafc;border-left:4px solid #3b82f6;padding:12px 14px;font-size:13px;line-height:1.6">${htmlEscape(commentText)}</div>${reportUrl ? `<div style="margin-top:24px;text-align:center"><a href="${htmlEscape(reportUrl)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700;font-size:14px">Open Alert Compliance</a></div>` : ''}</div></div></body></html>`;
-}
-
 const addAlertComment = async (req, res) => {
   try {
     const key = String(req.body.fingerprintKey || '').trim().toLowerCase();
@@ -266,6 +258,7 @@ const addAlertComment = async (req, res) => {
     });
     const mentioned = await findMentionedUsers(commentText);
     const actorEmail = String(req.user.email || '').trim();
+    const portalBaseUrl = String(process.env.PORTAL_BASE_URL || '').replace(/\/$/, '');
     await Promise.all(mentioned.filter((user) => user.email).map((user) =>
       sendCriticalIncidentEmail({
         from: process.env.MAIL_FROM,
@@ -274,7 +267,12 @@ const addAlertComment = async (req, res) => {
         // skipped when they mentioned themselves, since to/cc would be identical.
         cc: actorEmail && actorEmail.toLowerCase() !== String(user.email).toLowerCase() ? actorEmail : '',
         subject: `You were mentioned in an Alert Compliance comment`,
-        html: mentionEmailHtml({ actorName, commentText, alertSubject })
+        html: mentionNotificationEmailHtml({
+          actorName, commentText,
+          itemLabel: alertSubject || 'Alert Compliance',
+          actionUrl: portalBaseUrl ? `${portalBaseUrl}/#alertCompliance` : '',
+          actionLabel: 'Open Alert Compliance'
+        })
       }).catch((error) => console.error('Mention email delivery error:', error.message))
     ));
 

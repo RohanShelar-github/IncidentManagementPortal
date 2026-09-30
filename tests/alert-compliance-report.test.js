@@ -764,12 +764,19 @@ test('notificationService exposes findMentionedUsers, returning active users (wi
   assert.match(notificationService, /module\.exports = \{\s*\n\s*notifyUsers,\s*\n\s*notifyMailboxUsers,\s*\n\s*markMailboxNotificationsRead,\s*\n\s*containsMention,\s*\n\s*findMentionedUsers,/);
 });
 
-test('addAlertComment records the usual in-app mention notification AND emails every @mentioned user with an email address, via the existing generic sendCriticalIncidentEmail sender', () => {
+test('addAlertComment records the usual in-app mention notification AND emails every @mentioned user with an email address, via the existing generic sendCriticalIncidentEmail sender and the shared mentionNotificationEmailHtml template', () => {
   assert.match(reportController, /const \{ notifyUsers, findMentionedUsers \} = require\('\.\.\/services\/notificationService'\);/);
-  assert.match(reportController, /const \{ listMailboxFolderMessages, getInboxMessage, sendCriticalIncidentEmail, htmlEscape \} = require\('\.\.\/services\/emailService'\);/);
+  assert.match(reportController, /const \{ listMailboxFolderMessages, getInboxMessage, sendCriticalIncidentEmail, mentionNotificationEmailHtml \} = require\('\.\.\/services\/emailService'\);/);
   assert.match(reportController, /await notifyUsers\(\{\s*\n\s*actorId: req\.user\.id,\s*\n\s*message: `\$\{actorName\} commented on an alert\$\{alertSubject \? ` \(\$\{alertSubject\}\)` : ''\}: \$\{commentText\}`,\s*\n\s*type: 'alert_comment',\s*\n\s*mentionText: commentText\s*\n\s*\}\);/);
   assert.match(reportController, /const mentioned = await findMentionedUsers\(commentText\);/);
   assert.match(reportController, /await Promise\.all\(mentioned\.filter\(\(user\) => user\.email\)\.map\(\(user\) =>\s*\n\s*sendCriticalIncidentEmail\(\{/);
+  assert.match(reportController, /html: mentionNotificationEmailHtml\(\{\s*\n\s*actorName, commentText,\s*\n\s*itemLabel: alertSubject \|\| 'Alert Compliance',\s*\n\s*actionUrl: portalBaseUrl \? `\$\{portalBaseUrl\}\/#alertCompliance` : '',\s*\n\s*actionLabel: 'Open Alert Compliance'\s*\n\s*\}\)/);
+});
+
+test('emailService exports a shared mentionNotificationEmailHtml template, reused by both the Alert Compliance and incident comment mention emails instead of duplicating the markup', () => {
+  const emailService = fs.readFileSync(path.join(root, 'backend', 'services', 'emailService.js'), 'utf8');
+  assert.match(emailService, /function mentionNotificationEmailHtml\(\{ actorName, commentText, itemLabel, actionUrl, actionLabel \}\) \{/);
+  assert.match(emailService, /module\.exports = \{[^}]*mentionNotificationEmailHtml[^}]*\};/);
 });
 
 test('the mention email CCs the commenter so they get a copy of who was notified, except when they mentioned themselves (to and cc would be identical)', () => {

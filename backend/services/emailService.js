@@ -197,6 +197,13 @@ function incidentEmail(incident) {
   return { subject, body, html: orderedHtml, incidentUrl };
 }
 
+// Shared template for "you were @mentioned in a comment" emails — used by
+// both the incident comment thread and the Alert Compliance comment box, so
+// the two features don't maintain two copies of the same markup.
+function mentionNotificationEmailHtml({ actorName, commentText, itemLabel, actionUrl, actionLabel }) {
+  return `<!doctype html><html><body style="margin:0;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a"><div style="max-width:640px;margin:24px auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden"><div style="background:#172554;padding:20px 24px;color:#fff"><div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;opacity:.8">AOC 24×7 Incident Management</div><h1 style="font-size:20px;margin:8px 0 0">You were mentioned in a comment</h1></div><div style="padding:24px"><div style="font-size:13px;color:#334155;margin-bottom:14px"><strong>${htmlEscape(actorName)}</strong> mentioned you${itemLabel ? ' on' : ''}:</div>${itemLabel ? `<div style="font-size:14px;font-weight:700;margin-bottom:14px">${htmlEscape(itemLabel)}</div>` : ''}<div style="background:#f8fafc;border-left:4px solid #3b82f6;padding:12px 14px;font-size:13px;line-height:1.6">${htmlEscape(commentText)}</div>${actionUrl ? `<div style="margin-top:24px;text-align:center"><a href="${htmlEscape(actionUrl)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700;font-size:14px">${htmlEscape(actionLabel || 'Open')}</a></div>` : ''}</div></div></body></html>`;
+}
+
 function cleanAddressList(value, fallback) {
   const raw = value === undefined ? fallback : value;
   const addresses = String(raw || '').split(',').map((item) => item.trim()).filter(Boolean);
@@ -755,4 +762,4 @@ async function sendIncidentClosedEmail(incident) {
 // function, unchanged) so the Alert Compliance report can page through raw
 // inbox messages once and classify locally, instead of issuing one Graph
 // request per category and adding to the mailbox's shared concurrency load.
-module.exports = { cleanAddressList, configured, countUnreadMailboxMessages, deleteInboxMessage, enrichInboxConversations, getAccessToken, getGraphAccessToken, getInboxAttachment, getInboxMessage, getOperationsMailboxCounts, graphRecipients, hasDisplayableEmailContent, htmlEscape, incidentEmail, inboundMailboxAddress, inlineDataImagesForEmail, listConversationMessages, listInboxMessages, listMailboxFolderMessages, listSentMessages, markInboxMessageRead, replyToInboxMessage, safeIncidentEmailHtml, sanitizeMailboxReplyHtml, sanitizeSignatureLayoutHtml, sendCriticalIncidentEmail, sendIncidentClosedEmail, sendIncidentCreatedEmail, sendNewMailboxMessage, setInboxMessageReadState, writeMailDiagnostic, xmlEscape };
+module.exports = { cleanAddressList, configured, countUnreadMailboxMessages, deleteInboxMessage, enrichInboxConversations, getAccessToken, getGraphAccessToken, getInboxAttachment, getInboxMessage, getOperationsMailboxCounts, graphRecipients, hasDisplayableEmailContent, htmlEscape, incidentEmail, inboundMailboxAddress, inlineDataImagesForEmail, listConversationMessages, listInboxMessages, listMailboxFolderMessages, listSentMessages, markInboxMessageRead, mentionNotificationEmailHtml, replyToInboxMessage, safeIncidentEmailHtml, sanitizeMailboxReplyHtml, sanitizeSignatureLayoutHtml, sendCriticalIncidentEmail, sendIncidentClosedEmail, sendIncidentCreatedEmail, sendNewMailboxMessage, setInboxMessageReadState, writeMailDiagnostic, xmlEscape };
