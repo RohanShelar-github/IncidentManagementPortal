@@ -772,6 +772,11 @@ test('addAlertComment records the usual in-app mention notification AND emails e
   assert.match(reportController, /await Promise\.all\(mentioned\.filter\(\(user\) => user\.email\)\.map\(\(user\) =>\s*\n\s*sendCriticalIncidentEmail\(\{/);
 });
 
+test('the mention email CCs the commenter so they get a copy of who was notified, except when they mentioned themselves (to and cc would be identical)', () => {
+  assert.match(reportController, /const actorEmail = String\(req\.user\.email \|\| ''\)\.trim\(\);/);
+  assert.match(reportController, /cc: actorEmail && actorEmail\.toLowerCase\(\) !== String\(user\.email\)\.toLowerCase\(\) \? actorEmail : '',/);
+});
+
 test('a mention email delivery failure is caught per-recipient and only logged — it must never make the comment endpoint itself fail or roll back the already-saved comment', () => {
   const bodyStart = reportController.indexOf('const addAlertComment = async');
   const bodyEnd = reportController.indexOf('const resolveAlertManually');
