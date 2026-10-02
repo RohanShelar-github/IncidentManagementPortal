@@ -140,13 +140,13 @@ test('mailboxHasCreateIncidentButton is the single source of truth for "does thi
   assert.match(frontend, /function mailboxHasCreateIncidentButton\(message\) \{\s*\n\s*return hasPermission\('create_incidents'\) && message\.mailboxSource !== 'sent' && !message\.incidentCreated && !message\.incidentDraft && !isResolvedOperationsEmail\(message\) && message\.incidentButtonEligible !== false;\s*\n\}/);
 });
 
-test('a new "Create Incident Button" read-filter option lets the user isolate just the actionable alerts among many frequently-repeating, suppressed ones', () => {
-  assert.match(frontend, /incident_eligible: 'Create Incident Button'/);
+test('a new "Create Incident" read-filter option lets the user isolate just the actionable alerts among many frequently-repeating, suppressed ones', () => {
+  assert.match(frontend, /incident_eligible: 'Create Incident'/);
   assert.match(frontend, /\['all', 'unread', 'read', 'incident_sent', 'incident_eligible'\]\.indexOf\(filter\) > -1/);
-  assert.match(frontend, /\['incident_eligible', 'Create Incident Button'\]/);
+  assert.match(frontend, /\['incident_eligible', 'Create Incident'\]/);
   assert.match(frontend, /if \(mailboxReadFilter === 'incident_eligible'\) messages = messages\.filter\(mailboxHasCreateIncidentButton\);/);
 });
 
-test('selecting the Create Incident Button filter is a plain client-side re-render over already-loaded messages, like Unread/Read — it does not need a fresh loadMailbox() round trip the way switching to/from Incident Sent does', () => {
+test('selecting the Create Incident filter is a plain client-side re-render over already-loaded messages, like Unread/Read — it does not need a fresh loadMailbox() round trip the way switching to/from Incident Sent does', () => {
   assert.match(frontend, /if \(mailboxReadFilter === 'incident_sent' \|\| previous === 'incident_sent'\) loadMailbox\(\); else renderMailboxList\(\);/);
 });
