@@ -48,7 +48,7 @@ test('createIncidentTag is admin-only, requires a non-empty name, and handles du
   assert.match(masterDataController, /const createIncidentTag = async \(req, res\) => \{\s*\n\s*if \(!isAdmin\(req\)\) return res\.status\(403\)/);
   assert.match(masterDataController, /if \(!name\) return res\.status\(400\)\.json\(\{ success: false, message: 'Tag name is required' \}\);/);
   assert.match(masterDataController, /if \(error\?\.code === 'ER_DUP_ENTRY'\) return res\.status\(409\)/);
-  assert.match(masterDataController, /module\.exports = \{ getMasterData, createCustomer, updateCustomerCsm, updateCustomerEnvironmentStage, deactivateCustomer, createArea, deactivateArea, createIncidentTag, deleteIncidentTag \};/);
+  assert.match(masterDataController, /module\.exports = \{ getMasterData, createCustomer, updateCustomerCsm, updateCustomerEnvironmentStage, updateCustomerInternalFlag, deactivateCustomer, createArea, deactivateArea, createIncidentTag, deleteIncidentTag \};/);
   assert.match(masterDataRoutes, /router\.post\('\/tags', createIncidentTag\);/);
 });
 

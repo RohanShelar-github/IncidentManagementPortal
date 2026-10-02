@@ -1631,9 +1631,14 @@ function renderDataManagement() {
           + '<option value="on_hold"' + (stage === 'on_hold' ? ' selected' : '') + '>On Hold</option>'
           + '</select>'
         : '<span style="font-size:11px;color:var(--text-muted)">' + (CUSTOMER_ENV_STAGE_LABELS[stage] || 'Not set') + '</span>';
+      var isInternal = Boolean(c.is_internal);
+      var internalControl = isAdminUser
+        ? '<label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-muted);cursor:pointer;flex:0 0 auto;white-space:nowrap"><input type="checkbox" onchange="changeCustomerInternalFlag(' + c.id + ', this.checked)"' + (isInternal ? ' checked' : '') + '/> Internal</label>'
+        : (isInternal ? '<span class="badge badge-medium" style="font-size:10px;flex:0 0 auto">Internal</span>' : '<span style="flex:0 0 auto"></span>');
       return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">'
         + '<span style="font-size:13px;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + c.customer_name + '</span>'
         + stageControl
+        + internalControl
         + (!inUse ? '<button onclick="removeCustomer(\'' + c.customer_name + '\')" style="background:transparent;color:#f75c7c;border:none;font-size:15px;padding:3px 7px;cursor:pointer" title="Remove customer" aria-label="Remove customer">&#128465;</button>' : '<span style="font-size:11px;color:var(--text-muted)">In use</span>')
         + '</div>';
     }).join('');
@@ -1719,6 +1724,9 @@ function buildC360PickerCard(name, health) {
   var d = health || { total: 0, open: 0, critical: 0 };
   var dot = d.critical > 0 ? '#f75c7c' : d.open > 0 ? '#f7b94f' : '#2dd4a0';
   var statusLabel = d.critical > 0 ? 'Critical' : d.open > 0 ? 'At Risk' : 'Healthy';
+  var record = customerRecords.find(function (c) { return c.customer_name === name; });
+  var isInternal = Boolean(record && record.is_internal);
+  var internalBadge = isInternal ? ' <span class="badge badge-medium" style="font-size:9px;padding:1px 6px;vertical-align:middle">INTERNAL</span>' : '';
   var card = document.createElement('div');
   card.style.cssText = 'padding:12px 14px;border-radius:10px;border:1px solid var(--border);cursor:pointer;background:var(--surface2);transition:all .15s';
   card.onmouseenter = function () { this.style.borderColor = dot; this.style.background = 'rgba(79,142,247,0.06)'; };
@@ -1729,7 +1737,7 @@ function buildC360PickerCard(name, health) {
   };
   card.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
     + '<div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,rgba(79,142,247,0.2),rgba(124,92,247,0.15));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--accent)">' + name.substring(0, 2).toUpperCase() + '</div>'
-    + '<div style="flex:1;font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + name + '</div>'
+    + '<div style="flex:1;min-width:0;font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + name + internalBadge + '</div>'
     + '<span style="width:7px;height:7px;border-radius:50%;background:' + dot + ';flex-shrink:0"></span></div>'
     + '<div style="display:flex;gap:8px;font-size:11px"><span style="color:var(--text-muted)">' + d.total + ' incidents</span>'
     + '<span style="color:' + dot + ';font-weight:600">' + statusLabel + '</span></div>';
@@ -2185,9 +2193,12 @@ function addCustomer() {
   if (customers.indexOf(name) >= 0) { showToast('Customer already exists', 'error'); return; }
   var stageSel = document.getElementById('dmNewCustomerStage');
   var stage = stageSel ? stageSel.value : '';
-  masterDataRequest('/master-data/customers', 'POST', { customer_name: name, environment_stage: stage || undefined }, function () {
+  var internalChk = document.getElementById('dmNewCustomerInternal');
+  var isInternal = internalChk ? internalChk.checked : false;
+  masterDataRequest('/master-data/customers', 'POST', { customer_name: name, environment_stage: stage || undefined, is_internal: isInternal }, function () {
     inp.value = '';
     if (stageSel) stageSel.value = '';
+    if (internalChk) internalChk.checked = false;
     addAudit('??', 'Added Customer', name);
     showToast('Customer "' + name + '" added', 'success');
   });
@@ -2200,6 +2211,16 @@ function changeCustomerEnvironmentStage(id, stage) {
   if (!stage) { showToast('Select a stage', 'error'); return; }
   masterDataRequest('/master-data/customers/' + id + '/environment-stage', 'PATCH', { environment_stage: stage }, function () {
     showToast('Customer stage updated', 'success');
+  });
+}
+
+// Admin-only: marks a customer as internal (e.g. "Demo", "Matrix" — test/
+// internal accounts rather than real external customers), shown as an
+// "Internal" tag on its Customer 360 picker card.
+function changeCustomerInternalFlag(id, isInternal) {
+  if (!requireAdminMasterData()) return;
+  masterDataRequest('/master-data/customers/' + id + '/internal-flag', 'PATCH', { is_internal: isInternal }, function () {
+    showToast(isInternal ? 'Customer marked as Internal' : 'Customer unmarked as Internal', 'success');
   });
 }
 

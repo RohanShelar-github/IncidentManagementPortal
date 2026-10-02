@@ -16,6 +16,7 @@ function customerDto(row) {
     inbound_csm_name: row.inbound_csm_name,
     outbound_csm_name: row.outbound_csm_name,
     environment_stage: row.environment_stage || null,
+    is_internal: row.is_internal === 1 || row.is_internal === true,
     is_active: row.is_active === 1 || row.is_active === true,
     created_at: row.created_at,
     updated_at: row.updated_at
@@ -87,10 +88,11 @@ const createCustomer = async (req, res) => {
     if (environmentStage && !CUSTOMER_ENVIRONMENT_STAGES.has(environmentStage)) {
       return res.status(400).json({ success: false, message: 'Environment stage must be one of production, uat, development, on_hold' });
     }
+    const isInternal = Boolean(req.body.is_internal);
     const [result] = await pool.query(
       `INSERT INTO customers
-       (customer_name, customer_code, customer_branch, region, timezone, environment_stage, inbound_csm_name, outbound_csm_name, created_by, updated_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (customer_name, customer_code, customer_branch, region, timezone, environment_stage, is_internal, inbound_csm_name, outbound_csm_name, created_by, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         name,
         code,
@@ -98,6 +100,7 @@ const createCustomer = async (req, res) => {
         req.body.region || null,
         req.body.timezone || null,
         environmentStage || null,
+        isInternal,
         req.body.inbound_csm_name || null,
         req.body.outbound_csm_name || null,
         req.user.id,
@@ -145,6 +148,23 @@ const updateCustomerEnvironmentStage = async (req, res) => {
     res.json({ success: true, data: customerDto(rows[0]) });
   } catch (error) {
     console.error('Update customer environment stage error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
+  }
+};
+
+const updateCustomerInternalFlag = async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ success: false, message: 'Admin access required' });
+  try {
+    const isInternal = Boolean(req.body.is_internal);
+    await pool.query(
+      'UPDATE customers SET is_internal = ?, updated_by = ? WHERE id = ?',
+      [isInternal, req.user.id, req.params.id]
+    );
+    const [rows] = await pool.query('SELECT * FROM customers WHERE id = ? LIMIT 1', [req.params.id]);
+    if (!rows.length) return res.status(404).json({ success: false, message: 'Customer not found' });
+    res.json({ success: true, data: customerDto(rows[0]) });
+  } catch (error) {
+    console.error('Update customer internal flag error:', error);
     res.status(500).json({ success: false, message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
@@ -237,4 +257,4 @@ const deleteIncidentTag = async (req, res) => {
   }
 };
 
-module.exports = { getMasterData, createCustomer, updateCustomerCsm, updateCustomerEnvironmentStage, deactivateCustomer, createArea, deactivateArea, createIncidentTag, deleteIncidentTag };
+module.exports = { getMasterData, createCustomer, updateCustomerCsm, updateCustomerEnvironmentStage, updateCustomerInternalFlag, deactivateCustomer, createArea, deactivateArea, createIncidentTag, deleteIncidentTag };

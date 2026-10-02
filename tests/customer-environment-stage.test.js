@@ -39,14 +39,14 @@ test('customerDto exposes environment_stage, and createCustomer accepts + valida
   assert.match(masterDataController, /environment_stage: row\.environment_stage \|\| null,/);
   assert.match(masterDataController, /const CUSTOMER_ENVIRONMENT_STAGES = new Set\(\['production', 'uat', 'development', 'on_hold'\]\);/);
   assert.match(masterDataController, /const environmentStage = String\(req\.body\.environment_stage \|\| ''\)\.trim\(\)\.toLowerCase\(\);\s*\n\s*if \(environmentStage && !CUSTOMER_ENVIRONMENT_STAGES\.has\(environmentStage\)\) \{/);
-  assert.match(masterDataController, /customer_branch, region, timezone, environment_stage, inbound_csm_name, outbound_csm_name, created_by, updated_by\)/);
+  assert.match(masterDataController, /customer_branch, region, timezone, environment_stage, is_internal, inbound_csm_name, outbound_csm_name, created_by, updated_by\)/);
 });
 
 test('updateCustomerEnvironmentStage is admin-only, rejects anything outside the 4 allowed values, and is routed under PATCH /customers/:id/environment-stage', () => {
   assert.match(masterDataController, /const updateCustomerEnvironmentStage = async \(req, res\) => \{\s*\n\s*if \(!isAdmin\(req\)\) return res\.status\(403\)/);
   assert.match(masterDataController, /if \(!CUSTOMER_ENVIRONMENT_STAGES\.has\(environmentStage\)\) \{\s*\n\s*return res\.status\(400\)\.json\(\{ success: false, message: 'Environment stage must be one of production, uat, development, on_hold' \}\);/);
   assert.match(masterDataController, /UPDATE customers SET environment_stage = \?, updated_by = \? WHERE id = \?/);
-  assert.match(masterDataController, /module\.exports = \{ getMasterData, createCustomer, updateCustomerCsm, updateCustomerEnvironmentStage, deactivateCustomer, createArea, deactivateArea, createIncidentTag, deleteIncidentTag \};/);
+  assert.match(masterDataController, /module\.exports = \{ getMasterData, createCustomer, updateCustomerCsm, updateCustomerEnvironmentStage, updateCustomerInternalFlag, deactivateCustomer, createArea, deactivateArea, createIncidentTag, deleteIncidentTag \};/);
   assert.match(masterDataRoutes, /router\.patch\('\/customers\/:id\/environment-stage', updateCustomerEnvironmentStage\);/);
 });
 
@@ -84,8 +84,8 @@ test('changeCustomerEnvironmentStage is admin-gated (requireAdminMasterData, the
   assert.match(frontend, /masterDataRequest\('\/master-data\/customers\/' \+ id \+ '\/environment-stage', 'PATCH', \{ environment_stage: stage \}, function \(\) \{/);
 });
 
-test('addCustomer sends the selected dmNewCustomerStage value along with the new customer, and resets the select back to blank after a successful add', () => {
-  assert.match(frontend, /var stageSel = document\.getElementById\('dmNewCustomerStage'\);\s*\n\s*var stage = stageSel \? stageSel\.value : '';\s*\n\s*masterDataRequest\('\/master-data\/customers', 'POST', \{ customer_name: name, environment_stage: stage \|\| undefined \}, function \(\) \{\s*\n\s*inp\.value = '';\s*\n\s*if \(stageSel\) stageSel\.value = '';/);
+test('addCustomer sends the selected dmNewCustomerStage value and the dmNewCustomerInternal checkbox along with the new customer, and resets both back to blank/unchecked after a successful add', () => {
+  assert.match(frontend, /var stageSel = document\.getElementById\('dmNewCustomerStage'\);\s*\n\s*var stage = stageSel \? stageSel\.value : '';\s*\n\s*var internalChk = document\.getElementById\('dmNewCustomerInternal'\);\s*\n\s*var isInternal = internalChk \? internalChk\.checked : false;\s*\n\s*masterDataRequest\('\/master-data\/customers', 'POST', \{ customer_name: name, environment_stage: stage \|\| undefined, is_internal: isInternal \}, function \(\) \{\s*\n\s*inp\.value = '';\s*\n\s*if \(stageSel\) stageSel\.value = '';\s*\n\s*if \(internalChk\) internalChk\.checked = false;/);
 });
 
 // ── Frontend: no Dashboard card — the breakdown lives in Customer 360 ─────
@@ -120,4 +120,36 @@ test('a section is only rendered when it has customers, and only non-empty group
 test('each customer card in the grouped picker still hands off to the existing openCustomer360 flow, closing the picker overlay first, unchanged from before the grouping was added', () => {
   assert.match(frontend, /function buildC360PickerCard\(name, health\) \{/);
   assert.match(frontend, /card\.onclick = function \(\) \{\s*\n\s*document\.getElementById\('c360PickerOverlay'\)\.style\.display = 'none';\s*\n\s*openCustomer360\(name\);\s*\n\s*\};/);
+});
+
+// ── Requirement: an admin-editable "Internal" flag per customer, shown as ──
+// ── an INTERNAL tag on its Customer 360 picker card                       ──
+
+test('the migration adds customers.is_internal as a boolean, defaulting to 0 (not internal) for every existing customer, using the same idempotent conditional-ADD-COLUMN pattern as environment_stage', () => {
+  const internalMigration = fs.readFileSync(path.join(root, 'backend', 'sql', '045_customer_internal_flag.sql'), 'utf8');
+  assert.match(internalMigration, /SELECT COUNT\(\*\) FROM information_schema\.columns\s*\n\s*WHERE table_schema = DATABASE\(\) AND table_name = 'customers'\s*\n\s*AND column_name = 'is_internal'/);
+  assert.match(internalMigration, /ALTER TABLE customers ADD COLUMN is_internal TINYINT\(1\) NOT NULL DEFAULT 0 AFTER environment_stage/);
+  assert.doesNotMatch(internalMigration, /UPDATE customers/);
+});
+
+test('customerDto exposes is_internal as a boolean, createCustomer accepts an optional is_internal, and the new admin-only update endpoint is wired and exported', () => {
+  assert.match(masterDataController, /is_internal: row\.is_internal === 1 \|\| row\.is_internal === true,/);
+  assert.match(masterDataController, /const isInternal = Boolean\(req\.body\.is_internal\);\s*\n\s*const \[result\] = await pool\.query\(/);
+  assert.match(masterDataController, /const updateCustomerInternalFlag = async \(req, res\) => \{\s*\n\s*if \(!isAdmin\(req\)\) return res\.status\(403\)/);
+  assert.match(masterDataController, /UPDATE customers SET is_internal = \?, updated_by = \? WHERE id = \?/);
+  assert.match(masterDataRoutes, /router\.patch\('\/customers\/:id\/internal-flag', updateCustomerInternalFlag\);/);
+});
+
+test('only an admin sees an editable Internal checkbox per customer row in Data Management (calling changeCustomerInternalFlag on change) — everyone else sees an INTERNAL badge or nothing', () => {
+  assert.match(frontend, /var isInternal = Boolean\(c\.is_internal\);\s*\n\s*var internalControl = isAdminUser\s*\n\s*\? '<label[^']*><input type="checkbox" onchange="changeCustomerInternalFlag\(' \+ c\.id \+ ', this\.checked\)"/);
+  assert.match(frontend, /: \(isInternal \? '<span class="badge badge-medium" style="font-size:10px;flex:0 0 auto">Internal<\/span>' : '<span style="flex:0 0 auto"><\/span>'\);/);
+});
+
+test('changeCustomerInternalFlag is admin-gated (requireAdminMasterData) and PATCHes the new endpoint', () => {
+  assert.match(frontend, /function changeCustomerInternalFlag\(id, isInternal\) \{\s*\n\s*if \(!requireAdminMasterData\(\)\) return;\s*\n\s*masterDataRequest\('\/master-data\/customers\/' \+ id \+ '\/internal-flag', 'PATCH', \{ is_internal: isInternal \}, function \(\) \{/);
+});
+
+test('the Customer 360 picker card shows an INTERNAL badge next to the name when that customer record has is_internal set, looked up from customerRecords by name', () => {
+  assert.match(frontend, /var record = customerRecords\.find\(function \(c\) \{ return c\.customer_name === name; \}\);\s*\n\s*var isInternal = Boolean\(record && record\.is_internal\);\s*\n\s*var internalBadge = isInternal \? ' <span class="badge badge-medium" style="font-size:9px;padding:1px 6px;vertical-align:middle">INTERNAL<\/span>' : '';/);
+  assert.match(frontend, /'<div style="flex:1;min-width:0;font-size:13px;font-weight:600;color:var\(--text\);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' \+ name \+ internalBadge \+ '<\/div>'/);
 });
