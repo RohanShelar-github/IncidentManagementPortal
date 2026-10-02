@@ -474,6 +474,55 @@ async function listMailboxFolderMessages(folder, limit = 50, category = 'all', c
   return { messages, nextLink: data['@odata.nextLink'] || null };
 }
 
+// Alert categories relevant to the Operations mailbox's "+ Create Incident"
+// button windowing (see operationsAlertGroupingService.markIncidentButtonWindowStarts).
+const ALERT_WINDOW_CATEGORIES = new Set(['coralogix', 'azure', 'jira']);
+const ALERT_WINDOW_FETCH_MAX_PAGES = 20; // safety ceiling on Graph calls per fetch
+
+// Pages the inbox newest-first until a full page is older than sinceMs,
+// classifying and keeping only alert-category messages. This looks at a
+// repeating alert's full occurrence history over the window, not just
+// whichever page of the mailbox list's own pagination the UI currently has
+// loaded — otherwise an older occurrence that started the current 8-hour
+// window could be missing from the computation entirely.
+async function fetchAlertMessagesSince(sinceMs) {
+  const collected = [];
+  let cursor = null;
+  for (let page = 0; page < ALERT_WINDOW_FETCH_MAX_PAGES; page += 1) {
+    const { messages, nextLink } = await listMailboxFolderMessages('inbox', 100, 'all', cursor);
+    if (!messages.length) break;
+    let reachedCutoff = false;
+    for (const message of messages) {
+      const receivedMs = message.receivedAt ? new Date(message.receivedAt).getTime() : NaN;
+      if (Number.isFinite(receivedMs) && receivedMs < sinceMs) { reachedCutoff = true; continue; }
+      const { category, jiraIssueKey } = classifyOperationsMessage(message);
+      if (!ALERT_WINDOW_CATEGORIES.has(category)) continue;
+      collected.push({ ...message, category, jiraIssueKey });
+    }
+    if (reachedCutoff || !nextLink) break;
+    cursor = nextLink;
+  }
+  return collected;
+}
+
+let alertWindowMessagesCache = null; // { expiresAt, messages }
+const ALERT_WINDOW_CACHE_TTL_MS = 90 * 1000;
+
+// The Operations mailbox list polls every 30s per open tab/user, and this
+// button-eligibility computation needs a dedicated, independently-paginated
+// Graph fetch (see fetchAlertMessagesSince) on top of the list's own fetch —
+// without caching, every poll from every viewer would duplicate it. A short
+// cache is enough: the 8-hour lookback barely shifts within a 90s window, so
+// a stale few seconds at the edge never changes which occurrence starts a
+// window.
+async function getCachedAlertMessagesSince(sinceMs) {
+  const now = Date.now();
+  if (alertWindowMessagesCache && alertWindowMessagesCache.expiresAt > now) return alertWindowMessagesCache.messages;
+  const messages = await fetchAlertMessagesSince(sinceMs);
+  alertWindowMessagesCache = { expiresAt: now + ALERT_WINDOW_CACHE_TTL_MS, messages };
+  return messages;
+}
+
 async function listConversationMessages(conversationId) {
   const key = String(conversationId || '').trim();
   if (!key) return [];
@@ -762,4 +811,4 @@ async function sendIncidentClosedEmail(incident) {
 // function, unchanged) so the Alert Compliance report can page through raw
 // inbox messages once and classify locally, instead of issuing one Graph
 // request per category and adding to the mailbox's shared concurrency load.
-module.exports = { cleanAddressList, configured, countUnreadMailboxMessages, deleteInboxMessage, enrichInboxConversations, getAccessToken, getGraphAccessToken, getInboxAttachment, getInboxMessage, getOperationsMailboxCounts, graphRecipients, hasDisplayableEmailContent, htmlEscape, incidentEmail, inboundMailboxAddress, inlineDataImagesForEmail, listConversationMessages, listInboxMessages, listMailboxFolderMessages, listSentMessages, markInboxMessageRead, mentionNotificationEmailHtml, replyToInboxMessage, safeIncidentEmailHtml, sanitizeMailboxReplyHtml, sanitizeSignatureLayoutHtml, sendCriticalIncidentEmail, sendIncidentClosedEmail, sendIncidentCreatedEmail, sendNewMailboxMessage, setInboxMessageReadState, writeMailDiagnostic, xmlEscape };
+module.exports = { cleanAddressList, configured, countUnreadMailboxMessages, deleteInboxMessage, enrichInboxConversations, getAccessToken, getCachedAlertMessagesSince, getGraphAccessToken, getInboxAttachment, getInboxMessage, getOperationsMailboxCounts, graphRecipients, hasDisplayableEmailContent, htmlEscape, incidentEmail, inboundMailboxAddress, inlineDataImagesForEmail, listConversationMessages, listInboxMessages, listMailboxFolderMessages, listSentMessages, markInboxMessageRead, mentionNotificationEmailHtml, replyToInboxMessage, safeIncidentEmailHtml, sanitizeMailboxReplyHtml, sanitizeSignatureLayoutHtml, sendCriticalIncidentEmail, sendIncidentClosedEmail, sendIncidentCreatedEmail, sendNewMailboxMessage, setInboxMessageReadState, writeMailDiagnostic, xmlEscape };

@@ -38,7 +38,8 @@ test('the AI copilot and the notification poller unwrap the new {messages, nextL
 test('the inbox and sent mailbox routes accept a cursor and return nextCursor to the client', () => {
   assert.match(mailboxController, /const cursor = typeof req\.query\.cursor === 'string' && req\.query\.cursor \? req\.query\.cursor : null;/);
   assert.match(mailboxController, /const \{ messages, nextLink \} = await listInboxMessages\(req\.query\.limit, req\.query\.category, cursor\);/);
-  assert.match(mailboxController, /data: await attachMailboxIncidentLinks\(messages\), nextCursor: nextLink/);
+  assert.match(mailboxController, /const linked = await attachMailboxIncidentLinks\(messages\);/);
+  assert.match(mailboxController, /res\.json\(\{ success: true, data, nextCursor: nextLink \}\);/);
   assert.match(mailboxController, /const \{ messages, nextLink \} = await listSentMessages\(req\.query\.limit, cursor\);/);
 });
 

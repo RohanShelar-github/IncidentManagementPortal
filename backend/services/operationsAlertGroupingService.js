@@ -164,14 +164,62 @@ function deriveAlertState(group, now = Date.now()) {
   return minutesSinceLastSeen > QUIET_THRESHOLD_MINUTES ? 'went_quiet' : 'actively_repeating';
 }
 
+// How often the Operations mailbox list's "+ Create Incident" button
+// re-appears for one repeating alert. Within a rolling window this long, only
+// the occurrence that STARTS the window gets the button — every other repeat
+// in that same window is suppressed, since offering it again for every
+// 10-minute repeat of the same alert is just noise once a decision was
+// already available for the first one.
+const INCIDENT_BUTTON_WINDOW_MS = 8 * 60 * 60 * 1000;
+
+// Given a flat list of alert messages (ideally spanning at least the
+// trailing INCIDENT_BUTTON_WINDOW_MS, not just one paginated screen of the
+// mailbox list — see emailService.getCachedAlertMessagesSince), returns the
+// Set of message ids that should show the "+ Create Incident" button: for
+// each alert identity (alertFingerprint), its occurrences are sorted
+// chronologically and greedily bucketed into consecutive windows — the first
+// occurrence starts a window and is eligible; each later occurrence either
+// falls inside that window (not eligible) or lands at/after
+// INCIDENT_BUTTON_WINDOW_MS past the window's start, in which case it starts
+// the next window and is eligible, repeating indefinitely.
+//
+// Resolved-variant notifications are excluded entirely — the button is never
+// shown for them anyway (see isResolvedOperationsEmail on the frontend), so
+// they must not consume or start a window either.
+function markIncidentButtonWindowStarts(messages) {
+  const byFingerprint = new Map();
+  (messages || []).forEach((message) => {
+    if (isResolvedVariant(message && message.subject)) return;
+    const receivedMs = message && message.receivedAt ? new Date(message.receivedAt).getTime() : NaN;
+    if (!Number.isFinite(receivedMs)) return;
+    const key = alertFingerprint(message);
+    if (!byFingerprint.has(key)) byFingerprint.set(key, []);
+    byFingerprint.get(key).push({ id: message.id, receivedMs });
+  });
+  const eligibleIds = new Set();
+  byFingerprint.forEach((occurrences) => {
+    occurrences.sort((a, b) => a.receivedMs - b.receivedMs);
+    let windowStartMs = null;
+    occurrences.forEach((occurrence) => {
+      if (windowStartMs === null || occurrence.receivedMs - windowStartMs >= INCIDENT_BUTTON_WINDOW_MS) {
+        windowStartMs = occurrence.receivedMs;
+        eligibleIds.add(occurrence.id);
+      }
+    });
+  });
+  return eligibleIds;
+}
+
 module.exports = {
   EXPECTED_NOTIFICATION_INTERVAL_MINUTES,
   QUIET_THRESHOLD_MINUTES,
+  INCIDENT_BUTTON_WINDOW_MS,
   normalizeAlertSubject,
   isResolvedVariant,
   alertFingerprint,
   alertDayKey,
   fingerprintKey,
   groupMessagesIntoAlerts,
-  deriveAlertState
+  deriveAlertState,
+  markIncidentButtonWindowStarts
 };

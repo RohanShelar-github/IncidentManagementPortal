@@ -1,9 +1,10 @@
 'use strict';
 
 const pool = require('../config/database');
-const { deleteInboxMessage, getInboxAttachment, getInboxMessage, getOperationsMailboxCounts, listInboxMessages, listSentMessages, markInboxMessageRead, replyToInboxMessage, sanitizeMailboxReplyHtml, sendNewMailboxMessage, setInboxMessageReadState } = require('../services/emailService');
+const { deleteInboxMessage, getCachedAlertMessagesSince, getInboxAttachment, getInboxMessage, getOperationsMailboxCounts, listInboxMessages, listSentMessages, markInboxMessageRead, replyToInboxMessage, sanitizeMailboxReplyHtml, sendNewMailboxMessage, setInboxMessageReadState } = require('../services/emailService');
 const { markMailboxNotificationsRead, notifyMailboxUsers } = require('../services/notificationService');
 const { noHistorianReadIncidentDefaults, operationsIncidentDefaults } = require('../services/operationsMailClassificationService');
+const { INCIDENT_BUTTON_WINDOW_MS, markIncidentButtonWindowStarts } = require('../services/operationsAlertGroupingService');
 
 let knownMailboxMessageIds = null;
 let mailboxPollTimer = null;
@@ -352,7 +353,19 @@ async function listMailbox(req, res) {
   try {
     const cursor = typeof req.query.cursor === 'string' && req.query.cursor ? req.query.cursor : null;
     const { messages, nextLink } = await listInboxMessages(req.query.limit, req.query.category, cursor);
-    res.json({ success: true, data: await attachMailboxIncidentLinks(messages), nextCursor: nextLink });
+    const linked = await attachMailboxIncidentLinks(messages);
+    // null = computation unavailable this time (e.g. Graph hiccup) — falls
+    // back to showing the button everywhere, same as before this feature
+    // existed, rather than letting a transient failure hide every button.
+    let eligibleIds = null;
+    try {
+      const windowMessages = await getCachedAlertMessagesSince(Date.now() - INCIDENT_BUTTON_WINDOW_MS);
+      eligibleIds = markIncidentButtonWindowStarts(windowMessages);
+    } catch (error) {
+      console.error('Incident-button window computation error:', error.message);
+    }
+    const data = linked.map((message) => ({ ...message, incidentButtonEligible: eligibleIds ? eligibleIds.has(message.id) : true }));
+    res.json({ success: true, data, nextCursor: nextLink });
   } catch (error) {
     console.error('Mailbox list error:', error.message);
     res.status(502).json({ success: false, message: 'Unable to load the Microsoft 365 mailbox.' });
