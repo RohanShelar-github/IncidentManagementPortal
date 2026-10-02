@@ -164,26 +164,31 @@ function deriveAlertState(group, now = Date.now()) {
   return minutesSinceLastSeen > QUIET_THRESHOLD_MINUTES ? 'went_quiet' : 'actively_repeating';
 }
 
-// Maps a Coralogix/Azure alert's own severity wording to the simpler P1/P2/P3
-// scale the Alert Compliance report shows — explicitly NOT the same as
-// Coralogix's own embedded "Priority" label (its Error alerts are its own
-// "P2", Warning its own "P3"); this is a deliberately different, fixed
-// mapping requested for this report specifically.
+// Maps Azure's severity wording to P1/P2/P3 — Azure has no native P-number
+// of its own, unlike Coralogix (see deriveAlertSeverity below), so its
+// severity word is mapped through this fixed scale instead.
 const ALERT_SEVERITY_WORD_TO_LEVEL = { critical: 'P1', error: 'P1', warning: 'P2', informational: 'P3', information: 'P3' };
 
 // Derives P1/P2/P3 for one alert occurrence from its subject and full body
-// text. Three patterns, tried in order, cover every style observed in the
-// live mailbox:
+// text. Patterns, tried in order, cover every style observed in the live
+// mailbox:
 //   1. Azure "Historian Read" style subjects carry severity as a number
 //      right in the subject — "Azure: Activated Severity: 0 ..." or
 //      "...Severity: Sev2 ..." — using Azure Monitor's documented scale
 //      (Sev0=Critical, Sev1=Error, Sev2=Warning, Sev3=Informational,
 //      Sev4=Verbose). No body fetch needed for these at all.
-//   2. Coralogix metric alerts render "Severity CRITICAL Priority P1" (word
-//      immediately after the "Severity" label) in the body.
+//   2. Coralogix metric alerts render "Severity WARNING Priority P3" in the
+//      body — its OWN P-number right there, not following this report's
+//      Critical/Error=P1, Warning=P2, Information=P3 scale (e.g. Coralogix
+//      tags its own Warning alerts "P3", not "P2"). Shown exactly this way
+//      in the raw email, so this mirrors that literal P-number as-is rather
+//      than re-deriving a different one from the severity word.
 //   3. Azure's other alert style ("Alert 'X' was fired/resolved") instead
 //      renders "Critical severity" (word immediately BEFORE "severity") in
-//      the body.
+//      the body, with no native P-number of its own — mapped via the scale
+//      above.
+//   4. A bare "Severity <word>" with no Priority number following it (format
+//      variation) falls back to the same word-based mapping as #3.
 // Returns null when none of these are found — callers show "—" for that row
 // rather than guessing.
 function deriveAlertSeverity(subject, bodyText) {
@@ -195,10 +200,12 @@ function deriveAlertSeverity(subject, bodyText) {
     return 'P3';
   }
   const text = String(bodyText || '');
-  const labelThenWord = text.match(/\bSeverity\s+(Critical|Error|Warning|Informational|Information)\b/i);
-  if (labelThenWord) return ALERT_SEVERITY_WORD_TO_LEVEL[labelThenWord[1].toLowerCase()] || null;
+  const coralogixOwnPriority = text.match(/\bSeverity\s+(?:Critical|Error|Warning|Informational|Information)\s+Priority\s+(P[123])\b/i);
+  if (coralogixOwnPriority) return coralogixOwnPriority[1].toUpperCase();
   const wordThenLabel = text.match(/\b(Critical|Error|Warning|Informational|Information)\s+severity\b/i);
   if (wordThenLabel) return ALERT_SEVERITY_WORD_TO_LEVEL[wordThenLabel[1].toLowerCase()] || null;
+  const labelThenWord = text.match(/\bSeverity\s+(Critical|Error|Warning|Informational|Information)\b/i);
+  if (labelThenWord) return ALERT_SEVERITY_WORD_TO_LEVEL[labelThenWord[1].toLowerCase()] || null;
   return null;
 }
 

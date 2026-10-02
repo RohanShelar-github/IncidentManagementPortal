@@ -801,10 +801,15 @@ test('deriveAlertSeverity reads Azure\'s own numeric "Severity: N" subject conve
   assert.equal(grouping.deriveAlertSeverity('Azure: Activated Severity: 4 BUR No Historian Read', 'Critical severity text here'), 'P3', 'Sev4 (Verbose) falls back to P3, and the numeric subject match must win over any body text');
 });
 
-test('deriveAlertSeverity falls back to Coralogix\'s own body convention — "Severity <WORD>" immediately followed by its own (different, ignored) "Priority" label — mapping Critical/Error to P1 and Warning to P2 per this report\'s own rule, not Coralogix\'s internal Priority number', () => {
+test('deriveAlertSeverity mirrors Coralogix\'s own embedded "Priority P#" exactly as shown in the email — not a word-based re-derivation — since the raw email already displays that literal P-number to the viewer and a differing value would look wrong next to it', () => {
   assert.equal(grouping.deriveAlertSeverity('Coralogix Alert on magic / X', 'Severity CRITICAL Priority P1 Conditions ...'), 'P1');
-  assert.equal(grouping.deriveAlertSeverity('Coralogix Alert on magic / X', 'Severity ERROR Priority P2 Conditions ...'), 'P1', 'Coralogix tags this its own "P2", but this report\'s rule maps Error to P1, not P2');
-  assert.equal(grouping.deriveAlertSeverity('Coralogix Alert on magic / X', 'Severity WARNING Priority P3 Conditions ...'), 'P2', 'Coralogix tags this its own "P3", but this report\'s rule maps Warning to P2, not P3');
+  assert.equal(grouping.deriveAlertSeverity('Coralogix Alert on magic / X', 'Severity ERROR Priority P2 Conditions ...'), 'P2', 'mirrors Coralogix\'s own "P2" tag for this alert as-is');
+  assert.equal(grouping.deriveAlertSeverity('Coralogix Alert on magic / X', 'Severity WARNING Priority P3 Conditions ...'), 'P3', 'mirrors Coralogix\'s own "P3" tag for this alert as-is, even though it is a Warning');
+});
+
+test('a bare "Severity <WORD>" with no Priority number following it still falls back to the word-based mapping, same as Azure\'s other style', () => {
+  assert.equal(grouping.deriveAlertSeverity('Coralogix Alert on magic / X', 'Severity CRITICAL with no priority label at all'), 'P1');
+  assert.equal(grouping.deriveAlertSeverity('Coralogix Alert on magic / X', 'Severity WARNING with no priority label at all'), 'P2');
 });
 
 test('deriveAlertSeverity also recognizes Azure\'s other alert style, where the word comes BEFORE the word "severity" in the body (e.g. "Critical severity Alert \'X\' was fired") instead of after a "Severity:" label', () => {
