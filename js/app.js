@@ -582,6 +582,26 @@ function openLinkedIncidentIfReady() {
   setTimeout(function () { openDetailPanel(incidentId); }, 0);
   return true;
 }
+
+// A popped-out mail window (see popOutMailboxMessage) is just this same app
+// loaded in a new, same-origin window — window.open() copies sessionStorage
+// to it per spec, so the normal login/session bootstrap above already
+// authenticates it with zero extra plumbing. This only decides what it shows
+// once that bootstrap reaches "home".
+function openMailPopoutIfReady() {
+  var id = '', folder = '';
+  try {
+    var params = new URLSearchParams(window.location.search);
+    id = params.get('popoutMail') || '';
+    folder = params.get('popoutFolder') || '';
+  } catch (e) { }
+  if (!id) return false;
+  document.body.classList.add('mail-popout-mode');
+  mailboxActiveView = folder === 'sent' ? 'sent' : 'all';
+  navigateInternal('mailbox', document.getElementById('mailboxNav'));
+  setTimeout(function () { openMailboxMessage(id); }, 0);
+  return true;
+}
 let filteredIncidents = [];
 let currentPage = 1;
 let perPage = 8;
@@ -3064,6 +3084,17 @@ function legacyRenderMailboxList() {
 function mailboxFormatBytes(value) { var bytes = Number(value || 0); if (!bytes) return ''; var units = ['B', 'KB', 'MB', 'GB'], index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1); return (bytes / Math.pow(1024, index)).toFixed(index ? 1 : 0) + ' ' + units[index]; }
 function mailboxMessageFolder(message) { return message && (message.mailboxSource === 'sent' || mailboxActiveView === 'sent') ? 'sent' : 'inbox'; }
 function mailboxMessagePath(message, suffix) { return '/mailbox/' + mailboxMessageFolder(message) + '/' + encodeURIComponent(message.id) + (suffix || ''); }
+// Pops a single email out into its own larger browser window — same app,
+// same origin, just loaded with ?popoutMail=<id> so openMailPopoutIfReady()
+// (see its definition near openLinkedIncidentIfReady) opens straight to it
+// in a chrome-free reading pane instead of the normal dashboard. Reusing a
+// per-message window name means double-clicking the same email again just
+// refocuses its existing popout rather than opening a duplicate.
+function popOutMailboxMessage(message) {
+  var folder = mailboxMessageFolder(message);
+  var url = window.location.pathname + '?popoutMail=' + encodeURIComponent(message.id) + '&popoutFolder=' + folder;
+  window.open(url, 'mailpopout_' + message.id, 'width=1040,height=860,menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes');
+}
 function downloadMailboxAttachment(message, attachment) {
   fetch(window.APP_CONFIG.API_BASE_URL + mailboxMessagePath(message, '/attachments/' + encodeURIComponent(attachment.id) + '/download'), { headers: { Authorization: 'Bearer ' + mailboxToken() } })
     .then(function (response) { if (!response.ok) return response.json().then(function (data) { throw new Error(data.message || 'Unable to download attachment'); }); return response.blob(); })
@@ -3203,7 +3234,7 @@ function showMailboxReply(message, detail, initialMode) {
   var toolbar = document.createElement('div'); toolbar.className = 'mailbox-compose-toolbar'; [['bold','B','Bold'],['italic','I','Italic'],['underline','U','Underline'],['insertUnorderedList','• List','Bulleted list'],['insertOrderedList','1. List','Numbered list'],['createLink','↗ Link','Insert link'],['addSignature','Signature','Add saved signature'],['removeFormat','Tx','Clear formatting']].forEach(function (entry) { var button = document.createElement('button'); button.type = 'button'; button.className = 'mailbox-tool'; button.textContent = entry[1]; button.title = entry[2]; button.onclick = function () { if (entry[0] === 'addSignature') { appendMailboxSignature(editor); return; } var value = entry[0] === 'createLink' ? window.prompt('Paste the link URL') : null; if (entry[0] !== 'createLink' || value) document.execCommand(entry[0], false, value); editor.focus(); }; toolbar.appendChild(button); });
   var editor = document.createElement('div'); editor.className = 'mailbox-rich-editor'; editor.contentEditable = 'true'; editor.setAttribute('role', 'textbox'); editor.setAttribute('aria-label', 'Email message'); editor.dataset.placeholder = 'Write your message…'; configureMailboxComposeImageEditor(editor, 'mailboxReplyEditor'); addMailboxComposeImageTools(toolbar, editor);
   var attachments = document.createElement('div'); attachments.className = 'mailbox-compose-attachments'; var fileInput = document.createElement('input'); fileInput.type = 'file'; fileInput.multiple = true; fileInput.id = 'mailboxReplyFiles'; var fileLabel = document.createElement('label'); fileLabel.className = 'mailbox-attach-button'; fileLabel.htmlFor = fileInput.id; fileLabel.textContent = 'Attach files'; var fileNames = document.createElement('span'); fileNames.className = 'mailbox-file-names'; fileNames.textContent = 'Up to 10 files, 2.5 MB each'; fileInput.onchange = function () { fileNames.textContent = fileInput.files.length ? Array.from(fileInput.files).map(function (file) { return file.name; }).join(', ') : 'Up to 10 files, 2.5 MB each'; }; attachments.append(fileInput, fileLabel, fileNames);
-  var actions = document.createElement('div'); actions.className = 'mailbox-reply-actions'; var cancel = document.createElement('button'); cancel.className = 'btn btn-secondary btn-sm'; cancel.textContent = 'Discard'; cancel.onclick = function () { form.remove(); }; var send = document.createElement('button'); send.className = 'btn btn-primary btn-sm'; send.textContent = 'Send'; send.onclick = function () { var html = editor.innerHTML.trim(); if (!editor.textContent.trim() && !editor.querySelector('img')) { showToast('Please enter a message.', 'error'); return; } send.disabled = true; send.textContent = 'Preparing…'; mailboxFilesToPayload(fileInput.files).then(function (attachmentsPayload) { send.textContent = 'Sending…'; return fetch(window.APP_CONFIG.API_BASE_URL + mailboxMessagePath(message, '/reply'), { method: 'POST', headers: { Authorization: 'Bearer ' + mailboxToken(), 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: mode.value, to: to.value.trim(), cc: cc.value.trim(), bcc: bcc.value.trim(), subject: subject.value.trim(), html: html, attachments: attachmentsPayload }) }).then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to send email'); return data; }); }); }).then(function () { showToast('Email sent from the AOC mailbox.', 'success'); form.remove(); if (mailboxActiveView === 'sent') loadMailbox(); }).catch(function (error) { send.disabled = false; send.textContent = 'Send'; showToast(error.message, 'error'); }); }; actions.append(cancel, send);
+  var actions = document.createElement('div'); actions.className = 'mailbox-reply-actions'; var cancel = document.createElement('button'); cancel.className = 'btn btn-secondary btn-sm'; cancel.textContent = 'Discard'; cancel.onclick = function () { form.remove(); }; var send = document.createElement('button'); send.className = 'btn btn-primary btn-sm'; send.textContent = 'Send'; send.onclick = function () { var html = editor.innerHTML.trim(); if (!editor.textContent.trim() && !editor.querySelector('img')) { showToast('Please enter a message.', 'error'); return; } send.disabled = true; send.textContent = 'Preparing…'; mailboxFilesToPayload(fileInput.files).then(function (attachmentsPayload) { send.textContent = 'Sending…'; return fetch(window.APP_CONFIG.API_BASE_URL + mailboxMessagePath(message, '/reply'), { method: 'POST', headers: { Authorization: 'Bearer ' + mailboxToken(), 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: mode.value, to: to.value.trim(), cc: cc.value.trim(), bcc: bcc.value.trim(), subject: subject.value.trim(), html: html, attachments: attachmentsPayload }) }).then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to send email'); return data; }); }); }).then(function () { showToast('Email sent from the AOC mailbox.', 'success'); form.remove(); if (mailboxActiveView === 'sent') loadMailbox(); if (document.body.classList.contains('mail-popout-mode')) setTimeout(function () { window.close(); }, 1200); }).catch(function (error) { send.disabled = false; send.textContent = 'Send'; showToast(error.message, 'error'); }); }; actions.append(cancel, send);
   var recipientInputs = [to, cc]; var toControl = attachMailboxRecipientSuggestions(to, 'To', recipientInputs); var ccControl = attachMailboxRecipientSuggestions(cc, 'CC', recipientInputs); loadRecipientDirectory();
   form.append(heading, toControl, ccControl, bcc, subject, recipientHelp, toolbar, editor, attachments, actions); detail.querySelector('.mailbox-detail-body-wrap').before(form); var composerObserver = new MutationObserver(function () { if (!form.isConnected) { if (bodyWrap) bodyWrap.style.display = ''; composerObserver.disconnect(); } }); composerObserver.observe(detail, { childList: true }); updateMode(); toControl._render(); ccControl._render(); editor.focus();
 }
@@ -3455,7 +3486,7 @@ renderMailboxList = function () {
   if (!conversations.length) { var empty = document.createElement('div'); empty.className = 'mailbox-empty'; empty.textContent = mailboxSearchQuery ? 'No messages match this search.' : 'No ' + operationsViewLabel(mailboxActiveView).toLowerCase() + ' found.'; list.appendChild(empty); return; }
   conversations.forEach(function (thread) {
     var latest = thread.latest, isConversation = thread.messages.length > 1, expanded = expandedMailboxConversationIds.has(thread.key), unread = thread.messages.some(function (message) { return !message.isRead && message.mailboxSource !== 'sent'; });
-    var row = document.createElement('div'); row.className = 'mailbox-row' + (isConversation ? ' mailbox-conversation' : '') + (unread ? ' unread' : '') + (thread.messages.some(function (message) { return message.id === selectedMailboxId; }) ? ' active' : ''); row.dataset.messageId = latest.id; row.onclick = function () { openMailboxMessage(latest.id); };
+    var row = document.createElement('div'); row.className = 'mailbox-row' + (isConversation ? ' mailbox-conversation' : '') + (unread ? ' unread' : '') + (thread.messages.some(function (message) { return message.id === selectedMailboxId; }) ? ' active' : ''); row.dataset.messageId = latest.id; row.onclick = function () { openMailboxMessage(latest.id); }; row.ondblclick = function (event) { event.preventDefault(); popOutMailboxMessage(latest); };
     var toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'mailbox-thread-toggle'; toggle.textContent = expanded ? '⌄' : '›'; toggle.title = expanded ? 'Collapse conversation' : 'Expand conversation'; toggle.onclick = function (event) { event.stopPropagation(); if (expanded) expandedMailboxConversationIds.delete(thread.key); else expandedMailboxConversationIds.add(thread.key); renderMailboxList(); };
     if (hasMailboxPermission('delete_mailbox')) { var mailboxIds = (mailboxActiveView === 'sent' ? thread.messages : thread.messages.filter(function (message) { return message.mailboxSource !== 'sent'; })).map(function (message) { return message.id; }); if (mailboxIds.length) { var check = document.createElement('input'); check.type = 'checkbox'; check.className = isConversation ? 'mailbox-conversation-select' : 'mailbox-row-check'; check.checked = mailboxIds.every(function (id) { return selectedMailboxMessageIds.has(id); }); check.setAttribute('aria-label', 'Select ' + (isConversation ? 'conversation: ' : '') + (latest.subject || 'No subject')); check.onclick = function (event) { event.stopPropagation(); }; check.onchange = function () { mailboxIds.forEach(function (id) { if (check.checked) selectedMailboxMessageIds.add(id); else selectedMailboxMessageIds.delete(id); }); updateMailboxBulkControls(); }; row.appendChild(check); } }
     var from = document.createElement('div'); from.className = 'mailbox-from'; from.textContent = latest.mailboxSource === 'sent' ? ('To: ' + (latest.to || 'No recipient')) : (latest.fromName || latest.from);
@@ -3463,7 +3494,7 @@ renderMailboxList = function () {
     var meta = document.createElement('div'); meta.className = 'mailbox-meta'; meta.textContent = mailboxDate(latest.sentAt || latest.receivedAt); var preview = document.createElement('div'); preview.className = 'mailbox-meta'; preview.textContent = mailboxPlainText(latest.preview || ''); if (isConversation) row.appendChild(toggle); row.append(from, subject, meta, preview);
     if (mailboxActiveView !== 'sent' && hasPermission('create_incidents') && latest.mailboxSource !== 'sent' && !isResolvedOperationsEmail(latest)) { var create = latest.incidentCreated ? mailboxIncidentCreatedAction(latest) : latest.incidentDraft ? mailboxIncidentDraftAction(latest) : mailboxCreateIncidentButton(latest); create.classList.add('mailbox-row-create-incident'); row.appendChild(create); }
     list.appendChild(row);
-    if (isConversation && expanded) thread.messages.forEach(function (message) { var child = document.createElement('div'); child.className = 'mailbox-thread-message' + (!message.isRead && message.mailboxSource !== 'sent' ? ' unread' : '') + (message.id === selectedMailboxId ? ' active' : ''); child.onclick = function () { openMailboxMessage(message.id); }; var sender = document.createElement('div'); sender.className = 'mailbox-from'; sender.textContent = message.mailboxSource === 'sent' ? ('To: ' + (message.to || 'No recipient')) : (message.fromName || message.from); var line = document.createElement('div'); line.className = 'mailbox-meta'; line.textContent = mailboxPlainText(message.preview || ''); var source = document.createElement('span'); source.className = 'mailbox-category'; source.textContent = message.mailboxSource === 'sent' ? 'Sent' : 'Inbox'; var childIncidentBadge = mailboxIncidentCreatedBadge(message); child.append(sender, line, source); if (childIncidentBadge) child.appendChild(childIncidentBadge); list.appendChild(child); });
+    if (isConversation && expanded) thread.messages.forEach(function (message) { var child = document.createElement('div'); child.className = 'mailbox-thread-message' + (!message.isRead && message.mailboxSource !== 'sent' ? ' unread' : '') + (message.id === selectedMailboxId ? ' active' : ''); child.onclick = function () { openMailboxMessage(message.id); }; child.ondblclick = function (event) { event.preventDefault(); popOutMailboxMessage(message); }; var sender = document.createElement('div'); sender.className = 'mailbox-from'; sender.textContent = message.mailboxSource === 'sent' ? ('To: ' + (message.to || 'No recipient')) : (message.fromName || message.from); var line = document.createElement('div'); line.className = 'mailbox-meta'; line.textContent = mailboxPlainText(message.preview || ''); var source = document.createElement('span'); source.className = 'mailbox-category'; source.textContent = message.mailboxSource === 'sent' ? 'Sent' : 'Inbox'; var childIncidentBadge = mailboxIncidentCreatedBadge(message); child.append(sender, line, source); if (childIncidentBadge) child.appendChild(childIncidentBadge); list.appendChild(child); });
   });
 };
 
@@ -3797,6 +3828,7 @@ function openMailboxMessage(id) {
         ? 'To: ' + (message.to || '') + '\nSent: ' + mailboxDate(message.sentAt || message.receivedAt)
         : 'From: ' + (message.fromName || message.from) + (message.from ? ' <' + message.from + '>' : '') + (message.to ? '\nTo: ' + message.to : '') + '\nReceived: ' + mailboxDate(message.receivedAt);
       var detailIncidentNotice = mailboxIncidentCreatedNotice(message);
+      if (document.body.classList.contains('mail-popout-mode')) document.title = message.subject || 'Email';
       head.append(subject, meta); if (detailIncidentNotice) head.appendChild(detailIncidentNotice);
       var actions = document.createElement('div'); actions.className = 'mailbox-message-actions';
       if (hasMailboxPermission('send_mailbox')) actions.append(mailboxActionButton('Reply', '↩', function () { showMailboxReply(message, detail, 'reply'); }), mailboxActionButton('Reply all', '↩↩', function () { showMailboxReply(message, detail, 'replyAll'); }), mailboxActionButton('Forward', '↪', function () { showMailboxReply(message, detail, 'forward'); }));
@@ -10719,7 +10751,7 @@ function verifySessionAndInit() {
               portal.style.display = 'block';
             }
 
-            if (!openLinkedIncidentIfReady()) {
+            if (!openLinkedIncidentIfReady() && !openMailPopoutIfReady()) {
               var hash = 'home';
               var navEl = document.getElementById('homeNav');
               navigate(hash, navEl);

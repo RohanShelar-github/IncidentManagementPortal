@@ -2161,6 +2161,24 @@
     outline-offset: 2px;
   }
 
+  /* ─── MAIL POPOUT MODE ───────────────────────────────── */
+  /* Set by openMailPopoutIfReady() (js/app.js) when this window was opened
+     via popOutMailboxMessage() to show one email full-size, chrome-free —
+     mirrors the print-styles approach below but driven by a body class
+     instead of @media print. */
+  body.mail-popout-mode .sidebar,
+  body.mail-popout-mode .sidebar-overlay,
+  body.mail-popout-mode .topbar,
+  body.mail-popout-mode .status-bar,
+  body.mail-popout-mode #operationsNav,
+  body.mail-popout-mode .mailbox-list-card,
+  body.mail-popout-mode .page-header { display: none !important; }
+  body.mail-popout-mode .main { margin-left: 0 !important; width: 100% !important; }
+  body.mail-popout-mode .content { padding: 0 !important; height: 100vh !important; }
+  body.mail-popout-mode #page-mailbox.active { height: 100vh !important; max-height: none !important; }
+  body.mail-popout-mode .mailbox-layout { grid-template-columns: 1fr !important; height: 100vh !important; max-height: none !important; gap: 0 !important; }
+  body.mail-popout-mode .mailbox-message-card { border-radius: 0 !important; height: 100vh !important; max-height: none !important; }
+
   /* ─── PRINT STYLES ───────────────────────────────────── */
   @media print {
     .sidebar, .topbar, .bulk-bar, .session-warn,
