@@ -11340,6 +11340,11 @@ const ALERT_COMPLIANCE_CATEGORY_LABELS = {
   azure: 'Azure',
   jira: 'Customer Raised Tickets'
 };
+// Derived server-side (see operationsAlertGroupingService.deriveAlertSeverity)
+// from each Coralogix/Azure alert's own Critical/Error/Warning/Information
+// wording — Jira tickets never have a severity, so r.severity is null there.
+const ALERT_COMPLIANCE_SEVERITY_LABELS = { P1: 'P1', P2: 'P2', P3: 'P3' };
+const ALERT_COMPLIANCE_SEVERITY_CLASS = { P1: 'badge-critical', P2: 'badge-high', P3: 'badge-medium' };
 // Manual, optional tracking of whether a real incident is still pending for
 // a resolved alert that has no incidentRef auto-linked to it — independent
 // of the automatic link, and only shown/settable for confirmed_resolved or
@@ -11392,7 +11397,7 @@ function loadAlertComplianceReport() {
   const daysEl = document.getElementById('acFilterDays');
   const days = daysEl ? daysEl.value : '14';
   const tbody = document.getElementById('acTableBody');
-  const colCount = hasPermission('delete_alert_compliance_alerts') ? 9 : 8;
+  const colCount = hasPermission('delete_alert_compliance_alerts') ? 10 : 9;
   acSelectedAlerts.clear();
   acCurrentPage = 1;
   if (tbody) tbody.innerHTML = '<tr><td colspan="' + colCount + '" style="text-align:center;color:var(--text-muted);padding:20px">Loading alert activity…</td></tr>';
@@ -11503,11 +11508,13 @@ function acSortBy(col) {
 // silently drift out of sync on which rows count as "currently filtered".
 function acRowMatchesFilters(r) {
   const category = document.getElementById('acFilterCategory')?.value || '';
+  const severity = document.getElementById('acFilterSeverity')?.value || '';
   const state = document.getElementById('acFilterState')?.value || '';
   const customer = document.getElementById('acFilterCustomer')?.value || '';
   const dateFrom = document.getElementById('acFilterDateFrom')?.value || '';
   const dateTo = document.getElementById('acFilterDateTo')?.value || '';
   if (category && r.category !== category) return false;
+  if (severity && r.severity !== severity) return false;
   // "Incident Created" is not a real activity state (see
   // operationsAlertGroupingService.deriveAlertState) — it's a separate
   // fact shown in the detail view, so filtering by it means "has an
@@ -11528,7 +11535,7 @@ function renderAlertComplianceTable() {
   const countEl = document.getElementById('acRowCount');
   if (!tbody) return;
   const canDelete = hasPermission('delete_alert_compliance_alerts');
-  const colCount = canDelete ? 9 : 8;
+  const colCount = canDelete ? 10 : 9;
 
   const selectHeaderCell = document.getElementById('acSelectHeaderCell');
   if (selectHeaderCell) selectHeaderCell.style.display = canDelete ? '' : 'none';
@@ -11588,6 +11595,7 @@ function renderAlertComplianceTable() {
       + checkCell
       + '<td style="max-width:320px">' + subjectCell + '</td>'
       + '<td>' + escapeMetricHtml(acCategoryLabel(r.category)) + '</td>'
+      + '<td>' + (r.severity ? '<span class="badge ' + ALERT_COMPLIANCE_SEVERITY_CLASS[r.severity] + '">' + escapeMetricHtml(ALERT_COMPLIANCE_SEVERITY_LABELS[r.severity]) + '</span>' : '<span style="color:var(--text-muted)">—</span>') + '</td>'
       + '<td>' + escapeMetricHtml(r.customer || '—') + '</td>'
       + '<td>' + acFormatTimestamp(r.firstSeen) + '</td>'
       + '<td>' + acFormatTimestamp(r.lastSeen) + '</td>'

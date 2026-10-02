@@ -560,7 +560,7 @@ test('acDeleteSelectedAlerts confirms once (via the shared acRequestDelete helpe
 });
 
 test('loadAlertComplianceReport resets the selection and uses a permission-aware colspan for the loading/error placeholder rows', () => {
-  assert.match(frontend, /const colCount = hasPermission\('delete_alert_compliance_alerts'\) \? 9 : 8;/);
+  assert.match(frontend, /const colCount = hasPermission\('delete_alert_compliance_alerts'\) \? 10 : 9;/);
   assert.match(frontend, /acSelectedAlerts\.clear\(\);\s*\n\s*acCurrentPage = 1;\s*\n\s*if \(tbody\) tbody\.innerHTML = '<tr><td colspan="' \+ colCount \+ '"/);
 });
 
@@ -681,7 +681,7 @@ test('acUpdateIncidentSubstatus posts to /incident-substatus without requiring a
 // ── Requirement: sortable (ascending/descending) column headers ───────────
 
 test('every sortable column header uses its own ac-sort-th class (kept separate from the Incidents table\'s sort-th, so the two tables\' click handlers can never collide) with a data-col and an acSortBy(...) click handler', () => {
-  const cols = ['subject', 'category', 'customer', 'firstSeen', 'lastSeen', 'state', 'incidentRef', 'commentCount'];
+  const cols = ['subject', 'category', 'severity', 'customer', 'firstSeen', 'lastSeen', 'state', 'incidentRef', 'commentCount'];
   cols.forEach(function (col) {
     const re = new RegExp('<th class="ac-sort-th" data-col="' + col + '" onclick="acSortBy\\(\'' + col + '\'\\)"');
     assert.match(html, re, 'missing sortable header for column: ' + col);
@@ -789,4 +789,77 @@ test('a mention email delivery failure is caught per-recipient and only logged �
   const bodyEnd = reportController.indexOf('const resolveAlertManually');
   const body = reportController.slice(bodyStart, bodyEnd);
   assert.match(body, /\.catch\(\(error\) => console\.error\('Mention email delivery error:', error\.message\)\)/);
+});
+
+// ── Requirement: a derived P1/P2/P3 severity for Coralogix/Azure alerts ───
+
+test('deriveAlertSeverity reads Azure\'s own numeric "Severity: N" subject convention first (Sev0/Sev1=Critical/Error→P1, Sev2=Warning→P2, Sev3+=Informational→P3), with or without the "Sev" prefix, before ever looking at body text', () => {
+  assert.equal(grouping.deriveAlertSeverity('Azure: Activated Severity: 0 BUR No Historian Read', ''), 'P1');
+  assert.equal(grouping.deriveAlertSeverity('Azure: Deactivated Severity: 1 BUR No Historian Read', ''), 'P1');
+  assert.equal(grouping.deriveAlertSeverity('Azure: Activated Severity: Sev2 XPI_ProjectStatus', ''), 'P2');
+  assert.equal(grouping.deriveAlertSeverity('Azure: Deactivated Severity: 3 BUR No Historian Read', ''), 'P3');
+  assert.equal(grouping.deriveAlertSeverity('Azure: Activated Severity: 4 BUR No Historian Read', 'Critical severity text here'), 'P3', 'Sev4 (Verbose) falls back to P3, and the numeric subject match must win over any body text');
+});
+
+test('deriveAlertSeverity falls back to Coralogix\'s own body convention — "Severity <WORD>" immediately followed by its own (different, ignored) "Priority" label — mapping Critical/Error to P1 and Warning to P2 per this report\'s own rule, not Coralogix\'s internal Priority number', () => {
+  assert.equal(grouping.deriveAlertSeverity('Coralogix Alert on magic / X', 'Severity CRITICAL Priority P1 Conditions ...'), 'P1');
+  assert.equal(grouping.deriveAlertSeverity('Coralogix Alert on magic / X', 'Severity ERROR Priority P2 Conditions ...'), 'P1', 'Coralogix tags this its own "P2", but this report\'s rule maps Error to P1, not P2');
+  assert.equal(grouping.deriveAlertSeverity('Coralogix Alert on magic / X', 'Severity WARNING Priority P3 Conditions ...'), 'P2', 'Coralogix tags this its own "P3", but this report\'s rule maps Warning to P2, not P3');
+});
+
+test('deriveAlertSeverity also recognizes Azure\'s other alert style, where the word comes BEFORE the word "severity" in the body (e.g. "Critical severity Alert \'X\' was fired") instead of after a "Severity:" label', () => {
+  assert.equal(grouping.deriveAlertSeverity("Alert 'Critical Availability Alert - Virtual Machine - Unavailable' was fired", "some text Critical severity Alert 'Critical Availability Alert' more text"), 'P1');
+  assert.equal(grouping.deriveAlertSeverity("Alert 'X' was fired", 'Warning severity Alert X'), 'P2');
+  assert.equal(grouping.deriveAlertSeverity("Alert 'X' was fired", 'Informational severity Alert X'), 'P3');
+});
+
+test('deriveAlertSeverity returns null when no recognized severity text exists anywhere, rather than guessing — e.g. Jira customer tickets and the generic word "information" appearing in ordinary prose (not immediately paired with "severity")', () => {
+  assert.equal(grouping.deriveAlertSeverity('A new support issue CD-174 was reported by the customer', 'No historian read related content'), null);
+  assert.equal(grouping.deriveAlertSeverity('Notification for Scheduled Maintenance', 'Feel free to refer to your portal for more information.'), null, 'the bare word "information" elsewhere in ordinary prose must not be misread as a severity level');
+});
+
+test('operationsAlertGroupingService exports deriveAlertSeverity', () => {
+  assert.match(fs.readFileSync(path.join(root, 'backend', 'services', 'operationsAlertGroupingService.js'), 'utf8'), /module\.exports = \{[\s\S]*deriveAlertSeverity[\s\S]*\};/);
+});
+
+test('mailboxController now exports plainMailText so the report controller can reuse the same HTML-to-plain-text stripping instead of matching a severity regex against raw, tag-laden HTML', () => {
+  const mailboxController = fs.readFileSync(path.join(root, 'backend', 'controllers', 'mailboxController.js'), 'utf8');
+  assert.match(mailboxController, /function plainMailText\(value\) \{/);
+  assert.match(mailboxController, /module\.exports = \{[^}]*\bplainMailText\b[^}]*\};/);
+  assert.match(reportController, /const \{ attachMailboxIncidentLinks, matchingCustomersByName, plainMailText \} = require\('\.\/mailboxController'\);/);
+});
+
+test('getAlertComplianceReport computes severity per group: a cheap subject-only attempt first (covers Azure\'s numeric-subject style for free), then — only for Coralogix/Azure groups still unresolved, never Jira — fetches that group\'s latest occurrence body, stripped to plain text, caches the result by message id, and retries once before giving up on a transient failure', () => {
+  assert.match(reportController, /report\.forEach\(\(r\) => \{ r\.severity = deriveAlertSeverity\(r\.subject, ''\); \}\);/);
+  assert.match(reportController, /const needsSeverityBodyFetch = report\.filter\(\(r\) => r\.severity === null && \(r\.category === 'coralogix' \|\| r\.category === 'azure'\) && r\.occurrences\[0\]\);/);
+  assert.match(reportController, /const alertSeverityCache = new Map\(\); \/\/ messageId -> \{ severity, expiresAt \}/);
+  assert.match(reportController, /const ALERT_SEVERITY_CACHE_TTL_MS = 24 \* 60 \* 60 \* 1000;/);
+  assert.match(reportController, /if \(cached && cached\.expiresAt > severityCacheNow\) \{ r\.severity = cached\.severity; return; \}/);
+  assert.match(reportController, /for \(let attempt = 0; attempt < 2; attempt \+= 1\) \{/);
+  assert.match(reportController, /const severity = deriveAlertSeverity\(r\.subject, plainMailText\(message\.body \|\| message\.preview \|\| ''\)\);/);
+});
+
+test('the severity body-fetch batch is kept small (2 at a time, with a pause between batches) since the mailbox already sits close to Microsoft Graph\'s own concurrency ceiling from the unrelated Operations mail center polling', () => {
+  assert.match(reportController, /const SEVERITY_BODY_FETCH_BATCH_SIZE = 2;/);
+  assert.match(reportController, /if \(i \+ SEVERITY_BODY_FETCH_BATCH_SIZE < needsSeverityBodyFetch\.length\) await sleep\(200\);/);
+});
+
+test('the frontend adds a Severity filter (All/P1/P2/P3) that narrows acRowMatchesFilters exactly like Category does', () => {
+  assert.match(html, /<option value="P1">P1 — Critical\/Error<\/option>/);
+  assert.match(html, /<option value="P2">P2 — Warning<\/option>/);
+  assert.match(html, /<option value="P3">P3 — Information<\/option>/);
+  assert.match(frontend, /const severity = document\.getElementById\('acFilterSeverity'\)\?\.value \|\| '';/);
+  assert.match(frontend, /if \(severity && r\.severity !== severity\) return false;/);
+});
+
+test('the table has a sortable Severity column (header + badge cell), positioned right after Category, rendering "—" when a group has no derived severity instead of an empty cell', () => {
+  assert.match(html, /<th class="ac-sort-th" data-col="severity" onclick="acSortBy\('severity'\)" style="cursor:pointer;user-select:none">Severity<\/th>/);
+  assert.match(frontend, /const ALERT_COMPLIANCE_SEVERITY_LABELS = \{ P1: 'P1', P2: 'P2', P3: 'P3' \};/);
+  assert.match(frontend, /const ALERT_COMPLIANCE_SEVERITY_CLASS = \{ P1: 'badge-critical', P2: 'badge-high', P3: 'badge-medium' \};/);
+  assert.match(frontend, /\(r\.severity \? '<span class="badge ' \+ ALERT_COMPLIANCE_SEVERITY_CLASS\[r\.severity\] \+ '">' \+ escapeMetricHtml\(ALERT_COMPLIANCE_SEVERITY_LABELS\[r\.severity\]\) \+ '<\/span>' : '<span style="color:var\(--text-muted\)">—<\/span>'\)/);
+});
+
+test('both table colspan placeholders (loading/error and empty-state) account for the new Severity column — 10 when the delete checkbox column is also shown, 9 otherwise', () => {
+  assert.match(frontend, /const colCount = hasPermission\('delete_alert_compliance_alerts'\) \? 10 : 9;/);
+  assert.match(frontend, /const colCount = canDelete \? 10 : 9;/);
 });

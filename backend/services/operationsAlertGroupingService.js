@@ -164,6 +164,44 @@ function deriveAlertState(group, now = Date.now()) {
   return minutesSinceLastSeen > QUIET_THRESHOLD_MINUTES ? 'went_quiet' : 'actively_repeating';
 }
 
+// Maps a Coralogix/Azure alert's own severity wording to the simpler P1/P2/P3
+// scale the Alert Compliance report shows — explicitly NOT the same as
+// Coralogix's own embedded "Priority" label (its Error alerts are its own
+// "P2", Warning its own "P3"); this is a deliberately different, fixed
+// mapping requested for this report specifically.
+const ALERT_SEVERITY_WORD_TO_LEVEL = { critical: 'P1', error: 'P1', warning: 'P2', informational: 'P3', information: 'P3' };
+
+// Derives P1/P2/P3 for one alert occurrence from its subject and full body
+// text. Three patterns, tried in order, cover every style observed in the
+// live mailbox:
+//   1. Azure "Historian Read" style subjects carry severity as a number
+//      right in the subject — "Azure: Activated Severity: 0 ..." or
+//      "...Severity: Sev2 ..." — using Azure Monitor's documented scale
+//      (Sev0=Critical, Sev1=Error, Sev2=Warning, Sev3=Informational,
+//      Sev4=Verbose). No body fetch needed for these at all.
+//   2. Coralogix metric alerts render "Severity CRITICAL Priority P1" (word
+//      immediately after the "Severity" label) in the body.
+//   3. Azure's other alert style ("Alert 'X' was fired/resolved") instead
+//      renders "Critical severity" (word immediately BEFORE "severity") in
+//      the body.
+// Returns null when none of these are found — callers show "—" for that row
+// rather than guessing.
+function deriveAlertSeverity(subject, bodyText) {
+  const subjectSeverityMatch = String(subject || '').match(/Severity:\s*(?:Sev)?\s*(\d)/i);
+  if (subjectSeverityMatch) {
+    const level = Number(subjectSeverityMatch[1]);
+    if (level <= 1) return 'P1';
+    if (level === 2) return 'P2';
+    return 'P3';
+  }
+  const text = String(bodyText || '');
+  const labelThenWord = text.match(/\bSeverity\s+(Critical|Error|Warning|Informational|Information)\b/i);
+  if (labelThenWord) return ALERT_SEVERITY_WORD_TO_LEVEL[labelThenWord[1].toLowerCase()] || null;
+  const wordThenLabel = text.match(/\b(Critical|Error|Warning|Informational|Information)\s+severity\b/i);
+  if (wordThenLabel) return ALERT_SEVERITY_WORD_TO_LEVEL[wordThenLabel[1].toLowerCase()] || null;
+  return null;
+}
+
 // How often the Operations mailbox list's "+ Create Incident" button
 // re-appears for one repeating alert. Within a rolling window this long, only
 // the occurrence that STARTS the window gets the button — every other repeat
@@ -221,5 +259,6 @@ module.exports = {
   fingerprintKey,
   groupMessagesIntoAlerts,
   deriveAlertState,
-  markIncidentButtonWindowStarts
+  markIncidentButtonWindowStarts,
+  deriveAlertSeverity
 };

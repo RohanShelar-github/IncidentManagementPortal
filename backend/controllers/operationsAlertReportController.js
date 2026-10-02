@@ -17,9 +17,16 @@
 const pool = require('../config/database');
 const { listMailboxFolderMessages, getInboxMessage, sendCriticalIncidentEmail, mentionNotificationEmailHtml } = require('../services/emailService');
 const { classifyOperationsMessage } = require('../services/operationsMailClassificationService');
-const { attachMailboxIncidentLinks, matchingCustomersByName } = require('./mailboxController');
+const { attachMailboxIncidentLinks, matchingCustomersByName, plainMailText } = require('./mailboxController');
 const { notifyUsers, findMentionedUsers } = require('../services/notificationService');
-const { groupMessagesIntoAlerts, deriveAlertState, fingerprintKey } = require('../services/operationsAlertGroupingService');
+const { groupMessagesIntoAlerts, deriveAlertState, fingerprintKey, deriveAlertSeverity } = require('../services/operationsAlertGroupingService');
+
+// Alert bodies never change once sent, so a resolved severity can be cached
+// for a long time — avoids re-fetching the same historical message's full
+// body (a dedicated Graph call) every time the report reloads with an
+// unchanged "days" window.
+const alertSeverityCache = new Map(); // messageId -> { severity, expiresAt }
+const ALERT_SEVERITY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 // Jira ('Customer Raised Tickets') included alongside the monitoring alert
 // providers — see operationsAlertGroupingService.alertFingerprint for how
@@ -174,6 +181,50 @@ const getAlertComplianceReport = async (req, res) => {
       );
       const substatusByKey = new Map(substatusRows.map((row) => [row.fingerprint_key, row.substatus]));
       report.forEach((r) => { r.incidentSubstatus = substatusByKey.get(r.fingerprintKey) || null; });
+
+      // Severity (P1/P2/P3), Coralogix/Azure only (never Jira tickets) — a
+      // cheap subject-only check first, since Azure's "Historian Read" style
+      // already carries "Severity: N" in the subject itself (normalizeAlertSubject
+      // never touches that text). Only groups still unresolved after that —
+      // Coralogix alerts and Azure's other ('Alert X was fired/resolved')
+      // style — need their latest occurrence's full body fetched, since
+      // neither puts severity in the subject line.
+      report.forEach((r) => { r.severity = deriveAlertSeverity(r.subject, ''); });
+      const needsSeverityBodyFetch = report.filter((r) => r.severity === null && (r.category === 'coralogix' || r.category === 'azure') && r.occurrences[0]);
+      const severityCacheNow = Date.now();
+      // Kept small and serialized-ish on purpose: this mailbox already sits
+      // close to Microsoft Graph's own per-app concurrency ceiling from the
+      // Operations mail center's unrelated background polling, so stacking
+      // another 5-wide burst of requests on top of it reliably tripped
+      // "Application is over its MailboxConcurrency limit." A single retry
+      // after a short pause is enough to ride out that transient throttling
+      // without the group's severity staying permanently unset.
+      const SEVERITY_BODY_FETCH_BATCH_SIZE = 2;
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      for (let i = 0; i < needsSeverityBodyFetch.length; i += SEVERITY_BODY_FETCH_BATCH_SIZE) {
+        const batch = needsSeverityBodyFetch.slice(i, i + SEVERITY_BODY_FETCH_BATCH_SIZE);
+        await Promise.all(batch.map(async (r) => {
+          const messageId = r.occurrences[0].id;
+          const cached = alertSeverityCache.get(messageId);
+          if (cached && cached.expiresAt > severityCacheNow) { r.severity = cached.severity; return; }
+          for (let attempt = 0; attempt < 2; attempt += 1) {
+            try {
+              const message = await getInboxMessage(messageId);
+              const severity = deriveAlertSeverity(r.subject, plainMailText(message.body || message.preview || ''));
+              alertSeverityCache.set(messageId, { severity, expiresAt: severityCacheNow + ALERT_SEVERITY_CACHE_TTL_MS });
+              r.severity = severity;
+              return;
+            } catch (error) {
+              if (attempt === 0) { await sleep(600); continue; }
+              // A source email can be deleted/unavailable, or Graph is still
+              // throttling after the retry — leave severity unset for this
+              // one group rather than failing the whole report.
+              console.warn('Alert severity body fetch skipped:', messageId, error.message);
+            }
+          }
+        }));
+        if (i + SEVERITY_BODY_FETCH_BATCH_SIZE < needsSeverityBodyFetch.length) await sleep(200);
+      }
     }
 
     const summary = {
