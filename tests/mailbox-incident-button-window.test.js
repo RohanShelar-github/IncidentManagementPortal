@@ -105,14 +105,28 @@ test('emailService exposes a cached, bounded fetch of recent alert messages for 
   assert.match(emailService, /module\.exports = \{ cleanAddressList, configured, countUnreadMailboxMessages, deleteInboxMessage, enrichInboxConversations, getAccessToken, getCachedAlertMessagesSince,/);
 });
 
+test('a cached window fetch is only reused when it already covers at least as far back as what is now being requested, so a wider lookback (e.g. Load More scrolled further into history) always triggers a fresh, correctly-ranged fetch instead of silently serving a too-narrow cached range', () => {
+  assert.match(emailService, /if \(alertWindowMessagesCache && alertWindowMessagesCache\.expiresAt > now && alertWindowMessagesCache\.sinceMs <= sinceMs\) \{/);
+  assert.match(emailService, /alertWindowMessagesCache = \{ expiresAt: now \+ ALERT_WINDOW_CACHE_TTL_MS, sinceMs, messages \};/);
+});
+
 test('mailboxController.listMailbox computes incidentButtonEligible per message via the cached window fetch, falling back to true (never suppress) if the computation itself fails', () => {
   assert.match(mailboxController, /const \{ INCIDENT_BUTTON_WINDOW_MS, markIncidentButtonWindowStarts \} = require\('\.\.\/services\/operationsAlertGroupingService'\);/);
   const start = mailboxController.indexOf('async function listMailbox');
   const end = mailboxController.indexOf('async function listIncidentSentMailbox');
   const body = mailboxController.slice(start, end);
-  assert.match(body, /const windowMessages = await getCachedAlertMessagesSince\(Date\.now\(\) - INCIDENT_BUTTON_WINDOW_MS\);/);
+  assert.match(body, /const windowMessages = await getCachedAlertMessagesSince\(sinceMs\);/);
   assert.match(body, /eligibleIds = markIncidentButtonWindowStarts\(windowMessages\);/);
   assert.match(body, /incidentButtonEligible: eligibleIds \? eligibleIds\.has\(message\.id\) : true/);
+});
+
+test('the window fetch always covers back to at least the oldest message on the CURRENT page, not just the last 8 hours from now — otherwise an older message already more than 8h old would be excluded from the computation entirely and would wrongly show no button at all, instead of getting its own earlier window start', () => {
+  const start = mailboxController.indexOf('async function listMailbox');
+  const end = mailboxController.indexOf('async function listIncidentSentMailbox');
+  const body = mailboxController.slice(start, end);
+  assert.match(body, /const receivedTimesMs = messages\.map\(\(message\) => \(message\.receivedAt \? new Date\(message\.receivedAt\)\.getTime\(\) : NaN\)\)\.filter\(Number\.isFinite\);/);
+  assert.match(body, /const oldestVisibleMs = receivedTimesMs\.length \? Math\.min\(\.\.\.receivedTimesMs\) : Date\.now\(\);/);
+  assert.match(body, /const sinceMs = Math\.min\(Date\.now\(\) - INCIDENT_BUTTON_WINDOW_MS, oldestVisibleMs\);/);
 });
 
 test('the frontend only suppresses the plain "+ Create Incident" button when incidentButtonEligible is explicitly false — the incidentCreated/incidentDraft badge branches are untouched', () => {

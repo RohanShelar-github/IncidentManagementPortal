@@ -359,7 +359,16 @@ async function listMailbox(req, res) {
     // existed, rather than letting a transient failure hide every button.
     let eligibleIds = null;
     try {
-      const windowMessages = await getCachedAlertMessagesSince(Date.now() - INCIDENT_BUTTON_WINDOW_MS);
+      // Must cover at least the trailing 8 hours AND reach back to the
+      // oldest message on THIS page — otherwise, once "Load More" (or simply
+      // an older message existing on the current page) goes further back
+      // than 8 hours, those older messages are absent from the computation
+      // entirely and would wrongly show no button at all instead of getting
+      // their own earlier window starts.
+      const receivedTimesMs = messages.map((message) => (message.receivedAt ? new Date(message.receivedAt).getTime() : NaN)).filter(Number.isFinite);
+      const oldestVisibleMs = receivedTimesMs.length ? Math.min(...receivedTimesMs) : Date.now();
+      const sinceMs = Math.min(Date.now() - INCIDENT_BUTTON_WINDOW_MS, oldestVisibleMs);
+      const windowMessages = await getCachedAlertMessagesSince(sinceMs);
       eligibleIds = markIncidentButtonWindowStarts(windowMessages);
     } catch (error) {
       console.error('Incident-button window computation error:', error.message);

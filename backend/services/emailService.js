@@ -505,21 +505,29 @@ async function fetchAlertMessagesSince(sinceMs) {
   return collected;
 }
 
-let alertWindowMessagesCache = null; // { expiresAt, messages }
+let alertWindowMessagesCache = null; // { expiresAt, sinceMs, messages }
 const ALERT_WINDOW_CACHE_TTL_MS = 90 * 1000;
 
 // The Operations mailbox list polls every 30s per open tab/user, and this
 // button-eligibility computation needs a dedicated, independently-paginated
 // Graph fetch (see fetchAlertMessagesSince) on top of the list's own fetch —
 // without caching, every poll from every viewer would duplicate it. A short
-// cache is enough: the 8-hour lookback barely shifts within a 90s window, so
-// a stale few seconds at the edge never changes which occurrence starts a
-// window.
+// cache is enough: an 8-hour-or-wider lookback barely shifts within a 90s
+// window, so a stale few seconds at the edge never changes which occurrence
+// starts a window.
+//
+// The caller (mailboxController.listMailbox) may ask for a much wider
+// lookback than 8 hours once "Load More" has scrolled further into history —
+// a cached fetch must only be reused when it already covers at least as far
+// back as what's now being requested, otherwise an older page's messages
+// would silently be missing from the eligibility computation.
 async function getCachedAlertMessagesSince(sinceMs) {
   const now = Date.now();
-  if (alertWindowMessagesCache && alertWindowMessagesCache.expiresAt > now) return alertWindowMessagesCache.messages;
+  if (alertWindowMessagesCache && alertWindowMessagesCache.expiresAt > now && alertWindowMessagesCache.sinceMs <= sinceMs) {
+    return alertWindowMessagesCache.messages;
+  }
   const messages = await fetchAlertMessagesSince(sinceMs);
-  alertWindowMessagesCache = { expiresAt: now + ALERT_WINDOW_CACHE_TTL_MS, messages };
+  alertWindowMessagesCache = { expiresAt: now + ALERT_WINDOW_CACHE_TTL_MS, sinceMs, messages };
   return messages;
 }
 
