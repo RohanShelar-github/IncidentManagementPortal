@@ -730,7 +730,12 @@
   .mailbox-attachment:hover { border-color:var(--accent); color:var(--accent); } .mailbox-attachment span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:260px; } .mailbox-attachment small { color:var(--text-muted); white-space:nowrap; }
   .mailbox-reply { flex:1 1 auto; min-height:0; margin:20px 28px 28px; padding:18px; overflow-y:auto; border:1px solid var(--border); border-radius:10px; background:var(--surface2); }
   .mailbox-reply textarea { display:block; width:100%; min-height:110px; resize:vertical; margin:0; } .mailbox-reply-actions { position:sticky; bottom:0; display:flex; justify-content:flex-end; gap:8px; margin-top:10px; padding-top:10px; background:var(--surface2); }
-  .mailbox-compose { display:grid; gap:9px; } .mailbox-compose-head { display:flex; align-items:center; justify-content:space-between; gap:12px; } .mailbox-compose-head .mailbox-reply-label { margin:0; }
+  /* flex column (not grid) so the message editor below can flex:1 to claim
+     all leftover vertical space inside .mailbox-reply, instead of sitting at
+     a small fixed height with blank space wasted beneath it — this matters
+     most in a popped-out mail window (see MAIL POPOUT MODE), which is
+     exactly when there's the most extra height to give it. */
+  .mailbox-compose { display:flex; flex-direction:column; gap:9px; } .mailbox-compose-head { display:flex; align-items:center; justify-content:space-between; gap:12px; } .mailbox-compose-head .mailbox-reply-label { margin:0; }
   .mailbox-compose-input { width:100%; min-height:34px; padding:7px 10px; color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:7px; font:12px var(--font); }
   .mailbox-compose-input[readonly], .mailbox-compose-input:disabled { opacity:.78; background:var(--surface2); cursor:not-allowed; } .mailbox-recipient-help { font-size:11px; color:var(--text-muted); margin-top:-3px; }
   .mailbox-compose-toolbar { display:flex; flex-wrap:wrap; gap:5px; padding:7px; background:var(--surface); border:1px solid var(--border); border-bottom:0; border-radius:8px 8px 0 0; }
@@ -740,7 +745,7 @@
   .incident-description-toolbar { display:flex; align-items:center; gap:4px; padding:6px 8px; background:var(--surface2); border:1px solid var(--border); border-bottom:0; border-radius:8px 8px 0 0; }
   .incident-description-toolbar button { min-width:28px; padding:4px 7px; color:var(--text2); background:var(--surface); border:1px solid var(--border); border-radius:5px; cursor:pointer; font-size:11px; font-family:inherit; line-height:1.2; }
   .incident-description-toolbar button:hover, .incident-description-toolbar button:focus-visible { color:var(--accent); border-color:var(--accent); background:var(--surface2); outline:none; }
-  .mailbox-rich-editor { min-height:150px; padding:13px; color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:0 0 8px 8px; outline:none; line-height:1.55; overflow:auto; } .mailbox-rich-editor:empty::before { content:attr(data-placeholder); color:var(--text-muted); pointer-events:none; }
+  .mailbox-rich-editor { flex:1 1 auto; min-height:150px; padding:13px; color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:0 0 8px 8px; outline:none; line-height:1.55; overflow:auto; } .mailbox-rich-editor:empty::before { content:attr(data-placeholder); color:var(--text-muted); pointer-events:none; }
   /* Signatures are normally authored with dark corporate text for a white email
      canvas. Keep their editor light in both portal themes so they stay legible. */
   #mailboxSignatureEditor { color:#172033; background:#fff; border-color:#dce3ee; }

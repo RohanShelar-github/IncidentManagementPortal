@@ -62,3 +62,8 @@ test('a dedicated CSS rule set hides the sidebar/topbar/operations nav/message l
   assert.match(css, /body\.mail-popout-mode \.mailbox-layout \{ grid-template-columns: 1fr !important;/);
   assert.match(css, /body\.mail-popout-mode \.mailbox-message-card \{ border-radius: 0 !important;/);
 });
+
+test('the compose message editor fills all leftover vertical space in the reply/forward box (flex column + flex:1 on the editor) instead of sitting at a small fixed height with blank space wasted below it — the bigger write-a-reply view the popout window exists for', () => {
+  assert.match(css, /\.mailbox-compose \{ display:flex; flex-direction:column; gap:9px; \}/);
+  assert.match(css, /\.mailbox-rich-editor \{ flex:1 1 auto; min-height:150px;/);
+});
