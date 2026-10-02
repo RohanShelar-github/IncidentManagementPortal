@@ -75,7 +75,7 @@ test('Operations mailbox provides an Outlook-style read filter with a persistent
   assert.match(ui, /function ensureMailboxReadFilterUi/);
   assert.match(ui, /mailboxReadFilter = 'all'/);
   assert.match(ui, /setMailboxReadFilter/);
-  assert.match(ui, /\['all', 'All'\], \['unread', 'Unread'\], \['read', 'Read'\], \['incident_sent', 'Incident Sent'\]/);
+  assert.match(ui, /\['all', 'All'\], \['unread', 'Unread'\], \['read', 'Read'\], \['incident_sent', 'Incident Sent'\], \['incident_eligible', 'Create Incident Button'\]/);
   assert.match(ui, /mailboxReadFilter === 'incident_sent'/);
   assert.match(ui, /Boolean\(message\.incidentCreated\)/);
   assert.match(ui, /setMailboxMessageReadStateInUi/);

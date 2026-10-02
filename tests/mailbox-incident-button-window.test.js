@@ -129,6 +129,24 @@ test('the window fetch always covers back to at least the oldest message on the 
   assert.match(body, /const sinceMs = Math\.min\(Date\.now\(\) - INCIDENT_BUTTON_WINDOW_MS, oldestVisibleMs\);/);
 });
 
-test('the frontend only suppresses the plain "+ Create Incident" button when incidentButtonEligible is explicitly false — the incidentCreated/incidentDraft badge branches are untouched', () => {
-  assert.match(frontend, /var create = latest\.incidentCreated \? mailboxIncidentCreatedAction\(latest\) : latest\.incidentDraft \? mailboxIncidentDraftAction\(latest\) : \(latest\.incidentButtonEligible === false \? null : mailboxCreateIncidentButton\(latest\)\); if \(create\) \{ create\.classList\.add\('mailbox-row-create-incident'\); row\.appendChild\(create\); \}/);
+test('the frontend only suppresses the plain "+ Create Incident" button when mailboxHasCreateIncidentButton says no — the incidentCreated/incidentDraft badge branches are untouched', () => {
+  assert.match(frontend, /var create = latest\.incidentCreated \? mailboxIncidentCreatedAction\(latest\) : latest\.incidentDraft \? mailboxIncidentDraftAction\(latest\) : \(mailboxHasCreateIncidentButton\(latest\) \? mailboxCreateIncidentButton\(latest\) : null\); if \(create\) \{ create\.classList\.add\('mailbox-row-create-incident'\); row\.appendChild\(create\); \}/);
+});
+
+// ── Requirement: a list filter to find the (rare) actionable alert among ──
+// ── many suppressed repeats, instead of scrolling through all of them     ──
+
+test('mailboxHasCreateIncidentButton is the single source of truth for "does this message show the + Create Incident button" — permission, not-sent, no existing incident/draft, not a resolved notification, and window-eligible', () => {
+  assert.match(frontend, /function mailboxHasCreateIncidentButton\(message\) \{\s*\n\s*return hasPermission\('create_incidents'\) && message\.mailboxSource !== 'sent' && !message\.incidentCreated && !message\.incidentDraft && !isResolvedOperationsEmail\(message\) && message\.incidentButtonEligible !== false;\s*\n\}/);
+});
+
+test('a new "Create Incident Button" read-filter option lets the user isolate just the actionable alerts among many frequently-repeating, suppressed ones', () => {
+  assert.match(frontend, /incident_eligible: 'Create Incident Button'/);
+  assert.match(frontend, /\['all', 'unread', 'read', 'incident_sent', 'incident_eligible'\]\.indexOf\(filter\) > -1/);
+  assert.match(frontend, /\['incident_eligible', 'Create Incident Button'\]/);
+  assert.match(frontend, /if \(mailboxReadFilter === 'incident_eligible'\) messages = messages\.filter\(mailboxHasCreateIncidentButton\);/);
+});
+
+test('selecting the Create Incident Button filter is a plain client-side re-render over already-loaded messages, like Unread/Read — it does not need a fresh loadMailbox() round trip the way switching to/from Incident Sent does', () => {
+  assert.match(frontend, /if \(mailboxReadFilter === 'incident_sent' \|\| previous === 'incident_sent'\) loadMailbox\(\); else renderMailboxList\(\);/);
 });

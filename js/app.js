@@ -3354,9 +3354,9 @@ function isResolvedOperationsEmail(message) {
 }
 
 function operationsViewLabel(view) { return ({ all: 'All Incoming', coralogix: 'Coralogix Alerts', azure: 'Azure Alerts', jira: 'Customer Raised Tickets', sent: 'Sent Items' })[view] || 'All Incoming'; }
-function mailboxReadFilterLabel(filter) { return ({ all: 'All', unread: 'Unread', read: 'Read', incident_sent: 'Incident Sent' })[filter] || 'All'; }
+function mailboxReadFilterLabel(filter) { return ({ all: 'All', unread: 'Unread', read: 'Read', incident_sent: 'Incident Sent', incident_eligible: 'Create Incident Button' })[filter] || 'All'; }
 function setMailboxView(view) { mailboxActiveView = ['all', 'coralogix', 'azure', 'jira', 'sent'].indexOf(view) > -1 ? view : 'all'; if (mailboxActiveView === 'sent') mailboxReadFilter = 'all'; mailboxSearchQuery = ''; var search = document.getElementById('mailboxSearch'); if (search) search.value = ''; selectedMailboxId = null; selectedMailboxMessageIds.clear(); var detail = document.getElementById('mailboxDetail'); if (detail) detail.innerHTML = '<div class="mailbox-empty">Select an email to read it here.</div>'; ensureOperationsMailboxUi(); loadMailbox(); }
-function setMailboxReadFilter(filter) { var previous = mailboxReadFilter; mailboxReadFilter = ['all', 'unread', 'read', 'incident_sent'].indexOf(filter) > -1 ? filter : 'all'; selectedMailboxId = null; selectedMailboxMessageIds.clear(); var detail = document.getElementById('mailboxDetail'); if (detail) detail.innerHTML = '<div class="mailbox-empty">Select an email to read it here.</div>'; ensureOperationsMailboxUi(); if (mailboxReadFilter === 'incident_sent' || previous === 'incident_sent') loadMailbox(); else renderMailboxList(); }
+function setMailboxReadFilter(filter) { var previous = mailboxReadFilter; mailboxReadFilter = ['all', 'unread', 'read', 'incident_sent', 'incident_eligible'].indexOf(filter) > -1 ? filter : 'all'; selectedMailboxId = null; selectedMailboxMessageIds.clear(); var detail = document.getElementById('mailboxDetail'); if (detail) detail.innerHTML = '<div class="mailbox-empty">Select an email to read it here.</div>'; ensureOperationsMailboxUi(); if (mailboxReadFilter === 'incident_sent' || previous === 'incident_sent') loadMailbox(); else renderMailboxList(); }
 function ensureMailboxReadFilterUi(layout) {
   var head = layout && layout.querySelector('.mailbox-list-head'); if (!head) return;
   var actions = head.querySelector('.mailbox-list-actions'); if (!actions) return;
@@ -3365,7 +3365,7 @@ function ensureMailboxReadFilterUi(layout) {
     wrap = document.createElement('div'); wrap.id = 'mailboxReadFilter'; wrap.className = 'mailbox-read-filter';
     var button = document.createElement('button'); button.id = 'mailboxReadFilterButton'; button.type = 'button'; button.className = 'mailbox-filter-button'; button.setAttribute('aria-haspopup', 'menu'); button.onclick = function (event) { event.stopPropagation(); var menu = document.getElementById('mailboxReadFilterMenu'); if (menu) menu.hidden = !menu.hidden; };
     var menu = document.createElement('div'); menu.id = 'mailboxReadFilterMenu'; menu.className = 'mailbox-filter-menu'; menu.setAttribute('role', 'menu'); menu.hidden = true;
-    [['all', 'All'], ['unread', 'Unread'], ['read', 'Read'], ['incident_sent', 'Incident Sent']].forEach(function (option) { var item = document.createElement('button'); item.type = 'button'; item.dataset.mailboxReadFilter = option[0]; item.setAttribute('role', 'menuitem'); item.textContent = option[1]; item.onclick = function () { menu.hidden = true; setMailboxReadFilter(option[0]); }; menu.appendChild(item); });
+    [['all', 'All'], ['unread', 'Unread'], ['read', 'Read'], ['incident_sent', 'Incident Sent'], ['incident_eligible', 'Create Incident Button']].forEach(function (option) { var item = document.createElement('button'); item.type = 'button'; item.dataset.mailboxReadFilter = option[0]; item.setAttribute('role', 'menuitem'); item.textContent = option[1]; item.onclick = function () { menu.hidden = true; setMailboxReadFilter(option[0]); }; menu.appendChild(item); });
     wrap.append(button, menu); actions.insertBefore(wrap, actions.firstChild);
   }
   wrap.style.display = mailboxActiveView === 'sent' ? 'none' : '';
@@ -3373,11 +3373,21 @@ function ensureMailboxReadFilterUi(layout) {
   wrap.querySelectorAll('[data-mailbox-read-filter]').forEach(function (item) { item.classList.toggle('active', item.dataset.mailboxReadFilter === mailboxReadFilter); });
 }
 function setMailboxSearch(value) { mailboxSearchQuery = String(value || '').trim().toLowerCase(); renderMailboxList(); }
+// True exactly when renderMailboxList would render the plain "+ Create
+// Incident" button for this message — i.e. it's the one occurrence among a
+// repeating alert's suppressed-by-the-8h-window siblings that's actually
+// actionable right now. Kept as its own function (not inlined) so the
+// Create Incident Button filter and the button's own render condition can
+// never silently drift apart.
+function mailboxHasCreateIncidentButton(message) {
+  return hasPermission('create_incidents') && message.mailboxSource !== 'sent' && !message.incidentCreated && !message.incidentDraft && !isResolvedOperationsEmail(message) && message.incidentButtonEligible !== false;
+}
 function mailboxVisibleMessages() {
   var messages = mailboxMessages;
   if (mailboxReadFilter === 'unread') messages = messages.filter(function (message) { return !message.isRead && message.mailboxSource !== 'sent'; });
   if (mailboxReadFilter === 'read') messages = messages.filter(function (message) { return message.isRead && message.mailboxSource !== 'sent'; });
   if (mailboxReadFilter === 'incident_sent') messages = messages.filter(function (message) { return message.mailboxSource !== 'sent' && Boolean(message.incidentCreated); });
+  if (mailboxReadFilter === 'incident_eligible') messages = messages.filter(mailboxHasCreateIncidentButton);
   if (!mailboxSearchQuery) return messages;
   return messages.filter(function (message) { return [message.fromName, message.from, message.to, message.subject, message.preview, message.jiraIssueKey].join(' ').toLowerCase().indexOf(mailboxSearchQuery) > -1; });
 }
@@ -3492,7 +3502,7 @@ renderMailboxList = function () {
     var from = document.createElement('div'); from.className = 'mailbox-from'; from.textContent = latest.mailboxSource === 'sent' ? ('To: ' + (latest.to || 'No recipient')) : (latest.fromName || latest.from);
     var subject = document.createElement('div'); subject.className = 'mailbox-subject'; subject.textContent = latest.subject || '(No subject)'; if (thread.messages.length > 1) { var total = document.createElement('span'); total.className = 'mailbox-category'; total.textContent = thread.messages.length + ' messages'; subject.appendChild(total); }
     var meta = document.createElement('div'); meta.className = 'mailbox-meta'; meta.textContent = mailboxDate(latest.sentAt || latest.receivedAt); var preview = document.createElement('div'); preview.className = 'mailbox-meta'; preview.textContent = mailboxPlainText(latest.preview || ''); if (isConversation) row.appendChild(toggle); row.append(from, subject, meta, preview);
-    if (mailboxActiveView !== 'sent' && hasPermission('create_incidents') && latest.mailboxSource !== 'sent' && !isResolvedOperationsEmail(latest)) { var create = latest.incidentCreated ? mailboxIncidentCreatedAction(latest) : latest.incidentDraft ? mailboxIncidentDraftAction(latest) : (latest.incidentButtonEligible === false ? null : mailboxCreateIncidentButton(latest)); if (create) { create.classList.add('mailbox-row-create-incident'); row.appendChild(create); } }
+    if (mailboxActiveView !== 'sent' && hasPermission('create_incidents') && latest.mailboxSource !== 'sent' && !isResolvedOperationsEmail(latest)) { var create = latest.incidentCreated ? mailboxIncidentCreatedAction(latest) : latest.incidentDraft ? mailboxIncidentDraftAction(latest) : (mailboxHasCreateIncidentButton(latest) ? mailboxCreateIncidentButton(latest) : null); if (create) { create.classList.add('mailbox-row-create-incident'); row.appendChild(create); } }
     list.appendChild(row);
     if (isConversation && expanded) thread.messages.forEach(function (message) { var child = document.createElement('div'); child.className = 'mailbox-thread-message' + (!message.isRead && message.mailboxSource !== 'sent' ? ' unread' : '') + (message.id === selectedMailboxId ? ' active' : ''); child.onclick = function () { openMailboxMessage(message.id); }; child.ondblclick = function (event) { event.preventDefault(); popOutMailboxMessage(message); }; var sender = document.createElement('div'); sender.className = 'mailbox-from'; sender.textContent = message.mailboxSource === 'sent' ? ('To: ' + (message.to || 'No recipient')) : (message.fromName || message.from); var line = document.createElement('div'); line.className = 'mailbox-meta'; line.textContent = mailboxPlainText(message.preview || ''); var source = document.createElement('span'); source.className = 'mailbox-category'; source.textContent = message.mailboxSource === 'sent' ? 'Sent' : 'Inbox'; var childIncidentBadge = mailboxIncidentCreatedBadge(message); child.append(sender, line, source); if (childIncidentBadge) child.appendChild(childIncidentBadge); list.appendChild(child); });
   });
