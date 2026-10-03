@@ -375,3 +375,29 @@ Backup and cleanup completed.
 Verifying the new backup restores cleanly and matches live row counts... 
 Skipping verification — last run was less than 7 day(s) ago. Pass --force to run anyway.
 Staging backup files for git... 
+warning: in the working copy of 'MySQL Database Backup/backup.log', LF will be replaced by CRLF the next time Git touches it
+[Dev dfb830e] Automated database backup
+ 3 files changed, 1903 insertions(+)
+ create mode 100644 MySQL Database Backup/incident_management_db_2026-10-01_02-00-02.sql
+ create mode 100644 MySQL Database Backup/incident_management_db_2026-10-02_02-00-03.sql
+Pushing to origin main... 
+Everything up-to-date
+Backup committed and pushed successfully. 
+ 
+===== Sat 10/03/2026  2:00:02.50 ===== 
+Starting backup of database: incident_management_db 
+Backup successful: C:\Incident Management Portal\MySQL Database Backup\incident_management_db_2026-10-03_02-00-02.sql 
+Deleting backups older than 2 days... 
+Backup and cleanup completed. 
+ 
+===== Sun 10/04/2026  2:00:03.04 ===== 
+Running database dump... 
+===== Sun 10/04/2026  2:00:03.77 ===== 
+Starting backup of database: incident_management_db 
+Backup successful: C:\Incident Management Portal\MySQL Database Backup\incident_management_db_2026-10-04_02-00-03.sql 
+Deleting backups older than 2 days... 
+Backup and cleanup completed. 
+ 
+Verifying the new backup restores cleanly and matches live row counts... 
+Skipping verification — last run was less than 7 day(s) ago. Pass --force to run anyway.
+Staging backup files for git... 
