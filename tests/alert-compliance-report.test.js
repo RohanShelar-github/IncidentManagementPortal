@@ -841,7 +841,7 @@ test('getAlertComplianceReport computes severity per group: a cheap subject-only
   assert.match(reportController, /const ALERT_SEVERITY_CACHE_TTL_MS = 24 \* 60 \* 60 \* 1000;/);
   assert.match(reportController, /if \(cached && cached\.expiresAt > severityCacheNow\) \{ r\.severity = cached\.severity; return; \}/);
   assert.match(reportController, /for \(let attempt = 0; attempt < 2; attempt \+= 1\) \{/);
-  assert.match(reportController, /const severity = deriveAlertSeverity\(r\.subject, plainMailText\(message\.body \|\| message\.preview \|\| ''\)\);/);
+  assert.match(reportController, /const severity = deriveAlertSeverity\(r\.subject, plainMailText\(message\.body \|\| message\.preview \|\| ''\), r\.category\);/);
 });
 
 test('the severity body-fetch batch is kept small (2 at a time, with a pause between batches) since the mailbox already sits close to Microsoft Graph\'s own concurrency ceiling from the unrelated Operations mail center polling', () => {
@@ -867,4 +867,45 @@ test('the table has a sortable Severity column (header + badge cell), positioned
 test('both table colspan placeholders (loading/error and empty-state) account for the new Severity column — 10 when the delete checkbox column is also shown, 9 otherwise', () => {
   assert.match(frontend, /const colCount = hasPermission\('delete_alert_compliance_alerts'\) \? 10 : 9;/);
   assert.match(frontend, /const colCount = canDelete \? 10 : 9;/);
+});
+
+// ── Requirement: Azure-only fallback to the exported Azure Monitor alert- ──
+// ── rules reference, when neither subject nor body states a severity      ──
+
+test('azureAlertSeverityRules loads the exported CSV and maps SevN to P1/P2/P3 (Sev0/Sev1=P1, Sev2=P2, Sev3+=P3)', () => {
+  const azureRules = require(path.join(root, 'backend', 'services', 'azureAlertSeverityRules.js'));
+  // Exact quoted-subject-name lookups against real rule names from the CSV.
+  assert.equal(azureRules.lookupAzureAlertSeverityByRuleName("Alert 'Critical Availability Alert - Virtual Machine - Unavailable' was STATE", ''), 'P1', 'Sev0 -> P1');
+  assert.equal(azureRules.lookupAzureAlertSeverityByRuleName("Alert 'Free Disk Space Low' was STATE", ''), 'P1');
+  // Free Disk Space Low is actually Sev1 in the CSV, not Sev0 — both still map to P1.
+  assert.equal(azureRules.lookupAzureAlertSeverityByRuleName("Alert 'CPU Usage' was STATE", ''), 'P2', 'Sev2 -> P2');
+  assert.equal(azureRules.lookupAzureAlertSeverityByRuleName("Alert 'Failure Anomalies - ngcmdeapp' was STATE", ''), 'P3', 'Sev3 -> P3');
+  assert.equal(azureRules.lookupAzureAlertSeverityByRuleName("Alert 'NGC Service Health Alert Rule' was STATE", ''), 'P3', 'Sev4 -> P3');
+});
+
+test('azureAlertSeverityRules also finds a rule name mentioned in prose (not quoted) in the subject+body, for alerts like Azure Service Health notices that name their own alert rule inline', () => {
+  const azureRules = require(path.join(root, 'backend', 'services', 'azureAlertSeverityRules.js'));
+  assert.equal(azureRules.lookupAzureAlertSeverityByRuleName('Action required: Prepare for Azure VM series retirements', 'The activity log alert NGC Service Health Alert Rule was triggered for the Azure subscription MCS-US'), 'P3');
+});
+
+test('azureAlertSeverityRules returns null, not a guess, when no known rule name appears anywhere', () => {
+  const azureRules = require(path.join(root, 'backend', 'services', 'azureAlertSeverityRules.js'));
+  assert.equal(azureRules.lookupAzureAlertSeverityByRuleName('Some unrelated subject', 'Some unrelated body text with no rule name in it'), null);
+});
+
+test('deriveAlertSeverity only reaches the Azure rule-name fallback when subject AND body both have nothing, and only when category is azure — it never overrides a real severity word found in the body, and never applies to Coralogix/Jira even if their text happens to contain a matching rule name', () => {
+  // Azure, nothing in subject or body at all -> falls through to the CSV.
+  assert.equal(grouping.deriveAlertSeverity("Alert 'Redis Connection Lost' was STATE", '', 'azure'), 'P1');
+  // Azure, but a real severity word IS present in the body -> that wins, CSV is never consulted.
+  assert.equal(grouping.deriveAlertSeverity("Alert 'Redis Connection Lost' was STATE", 'Warning severity for this alert', 'azure'), 'P2');
+  // Same subject/body, but category is NOT azure -> fallback must not apply, even though the text would otherwise match.
+  assert.equal(grouping.deriveAlertSeverity("Alert 'Redis Connection Lost' was STATE", '', 'coralogix'), null);
+  assert.equal(grouping.deriveAlertSeverity("Alert 'Redis Connection Lost' was STATE", '', 'jira'), null);
+  assert.equal(grouping.deriveAlertSeverity("Alert 'Redis Connection Lost' was STATE", '', undefined), null, 'no category at all must also never trigger the Azure-only fallback');
+});
+
+test('the report only passes category into deriveAlertSeverity on the body-fetch pass, not the cheap subject-only first pass, so the Azure CSV fallback can never pre-empt a real severity word that would have been found in the body', () => {
+  assert.match(reportController, /report\.forEach\(\(r\) => \{ r\.severity = deriveAlertSeverity\(r\.subject, ''\); \}\);/);
+  assert.doesNotMatch(reportController, /deriveAlertSeverity\(r\.subject, ''\), r\.category\)/);
+  assert.match(reportController, /const severity = deriveAlertSeverity\(r\.subject, plainMailText\(message\.body \|\| message\.preview \|\| ''\), r\.category\);/);
 });

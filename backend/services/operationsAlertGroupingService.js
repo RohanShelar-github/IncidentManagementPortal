@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const { lookupAzureAlertSeverityByRuleName } = require('./azureAlertSeverityRules');
 
 // Groups repeated Operations-mailbox alert notifications (Coralogix / Azure)
 // into a single logical "alert" so a PMO/Admin report can show one row per
@@ -189,9 +190,16 @@ const ALERT_SEVERITY_WORD_TO_LEVEL = { critical: 'P1', error: 'P1', warning: 'P2
 //      above.
 //   4. A bare "Severity <word>" with no Priority number following it (format
 //      variation) falls back to the same word-based mapping as #3.
+//   5. Azure only, last resort: several Azure alert templates (activity-log
+//      "was fired/resolved" style alerts for things like inactive-project or
+//      Redis checks) never state a severity anywhere in their own email at
+//      all — neither subject nor body. For these, and only when category is
+//      'azure', the alert's own configured severity is looked up by rule
+//      name from an exported Azure Monitor alert-rules reference (see
+//      azureAlertSeverityRules.js) instead of being left unclassified.
 // Returns null when none of these are found — callers show "—" for that row
 // rather than guessing.
-function deriveAlertSeverity(subject, bodyText) {
+function deriveAlertSeverity(subject, bodyText, category) {
   const subjectSeverityMatch = String(subject || '').match(/Severity:\s*(?:Sev)?\s*(\d)/i);
   if (subjectSeverityMatch) {
     const level = Number(subjectSeverityMatch[1]);
@@ -206,6 +214,10 @@ function deriveAlertSeverity(subject, bodyText) {
   if (wordThenLabel) return ALERT_SEVERITY_WORD_TO_LEVEL[wordThenLabel[1].toLowerCase()] || null;
   const labelThenWord = text.match(/\bSeverity\s+(Critical|Error|Warning|Informational|Information)\b/i);
   if (labelThenWord) return ALERT_SEVERITY_WORD_TO_LEVEL[labelThenWord[1].toLowerCase()] || null;
+  if (category === 'azure') {
+    const fromRuleReference = lookupAzureAlertSeverityByRuleName(subject, bodyText);
+    if (fromRuleReference) return fromRuleReference;
+  }
   return null;
 }
 

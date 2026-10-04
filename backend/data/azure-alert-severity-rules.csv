@@ -1,0 +1,120 @@
+Name,Condition,Severity,Target scope,Target resource type,Signal type,Status
+aiml - node-ngcmdeapp,Failed locations >= 1,Sev0,ngcmdeapp,Application Insights,microsoft.insights/metricalerts,Enabled
+aiml service-ngcmdeappinsights,Failed locations >= 1,Sev1,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+aiml-frontend-ngcmdeapp-standard,Failed locations >= 1,Sev0,ngcmdeapp,Application Insights,microsoft.insights/metricalerts,Enabled
+aiml-ngcmdeapp-standard,Failed locations >= 1,Sev0,ngcmdeapp,Application Insights,microsoft.insights/metricalerts,Enabled
+APL High DE MDE Data Processing Time,DE Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+APL High KF MDE Data Processing Time,KF Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+APL No Historian Read,APL Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+ATL No Historian Read,ATL Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+BAL No Historian Read,BAL Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+BAL Slow Historian Read,BAL Historian Read Seconds > 45,Sev2,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+BCP No Historian Read,BCP Historian Read Count <= 1 and 1 more condition,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+BRO No Historian Read,BRO Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+BUR High DE MDE Data Processing Time,DE Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+BUR High KF MDE Data Processing Time,KF Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+BUR No Historian Read,BUR Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+CIN No Historian Read,CIN Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+CLB No Historian Read,CLB Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+CLB No Historian Read1,CLB Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+CPU Usage,Percentage CPU > 80,Sev2,NGCXPAPRODVM%2C NGCXPILAVM1 and 2 more ,Virtual machine,microsoft.insights/metricalerts,Enabled
+CPU Usage Exceeded 85 Percent on 'ngcaimlappserviceplan' App Service Plan,CpuPercentage > 85,Sev0,ngcaimlappserviceplan,App Service plan,microsoft.insights/metricalerts,Enabled
+CPU Usage Exceeded 95 Percent on 'ngcappservice' App Service Plan,CpuPercentage > 95,Sev0,ngcappservice,App Service plan,microsoft.insights/metricalerts,Enabled
+CPU Usage Exceeded 95 Percent on 'ngcprodappserviceplan' App Service Plan,CpuPercentage > 95,Sev0,ngcprodappserviceplan,App Service plan,microsoft.insights/metricalerts,Enabled
+CPU Usage Exceeded 95 Percent on 'ngcwsappserviceplan' App Service Plan,CpuPercentage > 95,Sev0,ngcwsappserviceplan,App Service plan,microsoft.insights/metricalerts,Enabled
+Critical - MDE Site Availability Down,Table rows >= 1 ,Sev0,ngcmdeapp,Application Insights,microsoft.insights/scheduledqueryrules,Enabled
+Critical - Workspace Site Availability Down,Table rows >= 1 ,Sev0,ngcmdeapp,Application Insights,microsoft.insights/scheduledqueryrules,Enabled
+Critical - XPA Availability Down,Table rows >= 1 ,Sev0,MCS-US,Subscription,microsoft.insights/scheduledqueryrules,Enabled
+Critical - XPI Availability Down,Table rows >= 1 ,Sev0,MCS-US,Subscription,microsoft.insights/scheduledqueryrules,Enabled
+Critical Alert - AIML Dataprocessing Status Inactive,Table rows >= 1 ,Sev0,ngcmdeapp,Application Insights,microsoft.insights/scheduledqueryrules,Enabled
+Critical Alert - AIML Rule Engine Status Inactive,Table rows >= 1 ,Sev0,ngcmdeapp,Application Insights,microsoft.insights/scheduledqueryrules,Enabled
+Critical Alert - AIML Service Status Inactive,Table rows = 1 In selected dimensions,Sev0,ngcmdeapp,Application Insights,microsoft.insights/scheduledqueryrules,Enabled
+Critical Alert - Issue with Redis,Table rows >= 1 ,Sev0,uatngcfactoryeyeapitest,Application Insights,microsoft.insights/scheduledqueryrules,Enabled
+Critical Alert - MDE Health Status Inactive,Table rows >= 1 ,Sev0,ngcmdeapp,Application Insights,microsoft.insights/scheduledqueryrules,Enabled
+Critical Alert - MESInsights Health Status Inactive,Table rows >= 1 ,Sev0,ngcmdeapp,Application Insights,microsoft.insights/scheduledqueryrules,Enabled
+Critical Alert for MySQL Flexible Server,memory_percent > 95 and 4 more conditions,Sev0,ngcaimlanomalydatabase,Azure Database for MySQL flexible server,microsoft.insights/metricalerts,Enabled
+Critical Availability Alert - Virtual Machine - Unavailable,Table rows >= 4 ,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/scheduledqueryrules,Enabled
+DLS No Historian Read,DLS Historian Read Count < 1 and 1 more condition,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+ELO No Historian Read,ELO Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+Error – Effective Unprocessed Blob Count ≥ 20,Table rows > 1 In selected dimensions,Sev1,uatngcfactoryeyeapitest,Application Insights,microsoft.insights/scheduledqueryrules,Enabled
+Error – Plant Dashboard Update Delay (API Slowdown),Table rows >= 1 In selected dimensions,Sev1,uatngcfactoryeyeapitest,Application Insights,microsoft.insights/scheduledqueryrules,Enabled
+Error – Product Code Missing in Both API and Kusto,Table rows >= 1 In selected dimensions,Sev1,uatngcfactoryeyeapitest,Application Insights,microsoft.insights/scheduledqueryrules,Enabled
+Error – Product code not found%2C last product code found,Table rows >= 1 In selected dimensions,Sev1,uatngcfactoryeyeapitest,Application Insights,microsoft.insights/scheduledqueryrules,Enabled
+Failure Anomalies - kdgtest,Failure Anomalies detected,Sev3,kdgtest,Application Insights,microsoft.alertsmanagement/smartdetectoralertrules,Enabled
+Failure Anomalies - ngcboardprofile,Failure Anomalies detected,Sev3,ngcboardprofile,Application Insights,microsoft.alertsmanagement/smartdetectoralertrules,Enabled
+Failure Anomalies - ngcdatalaketrigger,Failure Anomalies detected,Sev2,ngcdatalaketrigger,Application Insights,microsoft.alertsmanagement/smartdetectoralertrules,Enabled
+Failure Anomalies - ngcmdeapp,Failure Anomalies detected,Sev3,ngcmdeapp,Application Insights,microsoft.alertsmanagement/smartdetectoralertrules,Enabled
+Failure Anomalies - ngcmdeappinsights,Failure Anomalies detected,Sev3,ngcmdeappinsights,Application Insights,microsoft.alertsmanagement/smartdetectoralertrules,Enabled
+Failure Anomalies - ngconprem,Failure Anomalies detected,Sev3,ngconprem,Application Insights,microsoft.alertsmanagement/smartdetectoralertrules,Enabled
+Failure Anomalies - ngcsensordataappinsight,Failure Anomalies detected,Sev3,ngcsensordataappinsight,Application Insights,microsoft.alertsmanagement/smartdetectoralertrules,Enabled
+Failure Anomalies - sensordataappinsight,Failure Anomalies detected,Sev3,sensordataappinsight,Application Insights,microsoft.alertsmanagement/smartdetectoralertrules,Enabled
+Failure Anomalies - uatngcboardprofilev3,Failure Anomalies detected,Sev3,uatngcboardprofilev3,Application Insights,microsoft.alertsmanagement/smartdetectoralertrules,Enabled
+Failure Anomalies - uatngcfactoryeyeapi,Failure Anomalies detected,Sev3,uatngcfactoryeyeapi,Application Insights,microsoft.alertsmanagement/smartdetectoralertrules,Enabled
+Failure Anomalies - uatngcfactoryeyeapidev2,Failure Anomalies detected,Sev3,uatngcfactoryeyeapidev2,Application Insights,microsoft.alertsmanagement/smartdetectoralertrules,Enabled
+Failure Anomalies - uatngcfactoryeyeapidev3,Failure Anomalies detected,Sev3,uatngcfactoryeyeapidev3,Application Insights,microsoft.alertsmanagement/smartdetectoralertrules,Enabled
+Failure Anomalies - uatngcfactoryeyeapidev3202501101912,Failure Anomalies detected,Sev3,uatngcfactoryeyeapidev3202501101912,Application Insights,microsoft.alertsmanagement/smartdetectoralertrules,Enabled
+Failure Anomalies - uatngcfactoryeyeapitest,Failure Anomalies detected,Sev3,uatngcfactoryeyeapitest,Application Insights,microsoft.alertsmanagement/smartdetectoralertrules,Enabled
+Failure Anomalies - uattaggraphv2,Failure Anomalies detected,Sev3,uattaggraphv2,Application Insights,microsoft.alertsmanagement/smartdetectoralertrules,Enabled
+Free Disk Space Low,Table rows >= 1 In selected dimensions,Sev1,All virtual machines in 'MCS-US' ,Virtual machine,microsoft.insights/scheduledqueryrules,Enabled
+FTD High DE MDE Data Processing Time,DE Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+FTD High KF MDE Data Processing Time,KF Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+FTD No Historian Read,FTD Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+GTMaxInstances,InstanceCount > 8,Sev2,ngcdaex,Azure Data Explorer Cluster,microsoft.insights/metricalerts,Enabled
+High MDE Data Processing Queue,MDE Queue Size > 5000,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+High Sensor Data Processing Queue,Sensor Queue Size > 25000,Sev2,ngcsensordataappinsight,Application Insights,microsoft.insights/metricalerts,Enabled
+JAX No Historian Read,JAX Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+JSP No Historian Read,JSP Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+MagicXPA_InactiveProjectsAlert,Table rows >= 1 ,Sev0,ngcmdeapp,Application Insights,microsoft.insights/scheduledqueryrules,Enabled
+MagicXPI_InactiveProjectAlert,Table rows >= 1 In selected dimensions,Sev0,ngcmdeapp,Application Insights,microsoft.insights/scheduledqueryrules,Enabled
+mde-ngcmdeapp-standard,Failed locations >= 1,Sev0,ngcmdeapp,Application Insights,microsoft.insights/metricalerts,Enabled
+MED No Historian Read,MED Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+MED1 High DE MDE Data Processing Time,DE Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+MED1 High KF MDE Data Processing Time,KF Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+MED2 High DE MDE Data Processing Time,DE Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+MED2 High KF MDE Data Processing Time,KF Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+Memory Usage,Available Memory Bytes <= 4000000000,Sev0,NGCXPAPRODVM%2C NGCXPAVM1 and 2 more ,Virtual machine,microsoft.insights/metricalerts,Enabled
+Memory Usage Exceeded 85 Percent on 'ngcaimlappserviceplan' App Service Plan,MemoryPercentage > 85,Sev0,ngcaimlappserviceplan,App Service plan,microsoft.insights/metricalerts,Enabled
+Memory Usage Exceeded 95 Percent on 'ngcappservice' App Service Plan,MemoryPercentage > 95,Sev0,ngcappservice,App Service plan,microsoft.insights/metricalerts,Enabled
+Memory Usage Exceeded 95 Percent on 'ngcprodappserviceplan' App Service Plan,MemoryPercentage > 95,Sev0,ngcprodappserviceplan,App Service plan,microsoft.insights/metricalerts,Enabled
+Memory Usage Exceeded 95 Percent on 'ngcwsappserviceplan' App Service Plan,MemoryPercentage > 95,Sev0,ngcwsappserviceplan,App Service plan,microsoft.insights/metricalerts,Enabled
+mesinsights-ngcmdeapp-standard,Failed locations >= 1,Sev1,ngcmdeapp,Application Insights,microsoft.insights/metricalerts,Enabled
+MESSRVPILOT - Critical Memory and Stagnant Request Alert [MESInsights - XPA],Table rows >= 2 ,Sev0,ngcmdeapp,Application Insights,microsoft.insights/scheduledqueryrules,Enabled
+MTH High DE MDE Data Processing Time,DE Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+MTH High KF MDE Data Processing Time,KF Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+MTH No Historian Read,MTH Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+NGC Resource Health Alert Rule,Previous resource status=All%2C Current resource status=All,Sev4,All resources in 'ngcrg',All,microsoft.insights/activitylogalerts,Enabled
+NGC Service Health Alert Rule,Service names=All%2C Event types=All,Sev4,MCS-US,Subscription,microsoft.insights/activitylogalerts,Enabled
+NGCDAEX CPU Utilisation,CPU >= 75,Sev2,ngcdaex,Azure Data Explorer Cluster,microsoft.insights/metricalerts,Enabled
+NGCXPAPRODVM1 - MESInsights%2CMESSRVPILOT - MYSQL[Local]  - Critical Alert for Executing Connections Above 50 or Threads Running Above 100,Table rows >= 1 ,Sev0,ngcmdeapp,Application Insights,microsoft.insights/scheduledqueryrules,Enabled
+NTL No Historian Read,NTL Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+ORL No Historian Read,ORL Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+PHX High DE MDE Data Processing Time,DE Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+PHX High KF MDE Data Processing Time,KF Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+PHX No Historian Read,PHX Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+POR High DE MDE Data Processing Time,DE Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+POR High KF MDE Data Processing Time,KF Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+POR No Historian Read,POR Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+redis - ngcdigitaltwin-ngcmdeapp,Failed locations >= 1,Sev1,ngcmdeapp,Application Insights,microsoft.insights/metricalerts,Enabled
+Redis Connection Lost,Table rows >= 1 In selected dimensions,Sev0,ngcmdeapp,Application Insights,microsoft.insights/scheduledqueryrules,Enabled
+Redis Container Instance Restarted,Table rows >= 1 In selected dimensions,Sev0,NGCLogAnalyticsWorkspace,Log Analytics workspace,microsoft.insights/scheduledqueryrules,Enabled
+RedisMaxMemory,MemoryUsage >= 1000000000,Sev0,ngcdigitaltwin,Container instances,microsoft.insights/metricalerts,Enabled
+RIC No Historian Read,RIC Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+ROT No Historian Read,ROT Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+SAV High DE MDE Data Processing Time,DE Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+SAV High KF MDE Data Processing Time,KF Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+SAV No Historian Read,SAV Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+SHI High DE MDE Data Processing Time,DE Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+SHI High KF MDE Data Processing Time,KF Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+SHI No Historian Read,SHI Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+SHO No Historian Read,SHO Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+WAK No Historian Read,WAK Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+Warning – No IFP Batch Info Found,Table rows >= 1 In selected dimensions,Sev2,uatngcfactoryeyeapitest,Application Insights,microsoft.insights/scheduledqueryrules,Enabled
+WLM High DE MDE Data Processing Time,DE Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+WLM High KF MDE Data Processing Time,KF Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+WLM No Historian Read,WLM Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+workspace-ngcmdeapp-standard,Failed locations >= 1,Sev0,ngcmdeapp,Application Insights,microsoft.insights/metricalerts,Enabled
+workspace-ngcmdeappinsights,Failed locations >= 1,Sev1,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+WWG High DE MDE Data Processing Time,DE Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+WWG High KF MDE Data Processing Time,KF Processing Delay in seconds > 300,Sev2,ngcmdeappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+WWG No Historian Read,WWG Historian Read Count <= 1,Sev0,ngconpremappinsights,Application Insights,microsoft.insights/metricalerts,Enabled
+XPI_ProjectStatus - Fails with Status "Inactive",itemCount >= 1 ,Sev0,ngcmdeapp,Application Insights,microsoft.insights/scheduledqueryrules,Enabled

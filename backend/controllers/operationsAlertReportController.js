@@ -189,6 +189,10 @@ const getAlertComplianceReport = async (req, res) => {
       // Coralogix alerts and Azure's other ('Alert X was fired/resolved')
       // style — need their latest occurrence's full body fetched, since
       // neither puts severity in the subject line.
+      // category is intentionally withheld on this cheap, subject-only pass —
+      // the Azure rule-name fallback inside deriveAlertSeverity must only be
+      // consulted after the body has actually been checked for a severity
+      // word too (see the body-fetch pass below), not before.
       report.forEach((r) => { r.severity = deriveAlertSeverity(r.subject, ''); });
       const needsSeverityBodyFetch = report.filter((r) => r.severity === null && (r.category === 'coralogix' || r.category === 'azure') && r.occurrences[0]);
       const severityCacheNow = Date.now();
@@ -210,7 +214,7 @@ const getAlertComplianceReport = async (req, res) => {
           for (let attempt = 0; attempt < 2; attempt += 1) {
             try {
               const message = await getInboxMessage(messageId);
-              const severity = deriveAlertSeverity(r.subject, plainMailText(message.body || message.preview || ''));
+              const severity = deriveAlertSeverity(r.subject, plainMailText(message.body || message.preview || ''), r.category);
               alertSeverityCache.set(messageId, { severity, expiresAt: severityCacheNow + ALERT_SEVERITY_CACHE_TTL_MS });
               r.severity = severity;
               return;
