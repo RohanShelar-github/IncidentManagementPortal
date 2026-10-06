@@ -7307,8 +7307,20 @@ function _drawDowntimeArea(data) {
 function computeSlaBreachBucket(inc) {
   var slaH = getIncidentSlaHours(inc);
   var startMs = getIncidentOpenedTimestamp(inc);
-  var endMs = inc.downtimeEnd ? new Date(inc.downtimeEnd).getTime() :
-    (inc.status === 'Closed' || inc.status === 'Resolved') ? startMs + slaH * 3600000 * 0.8 : Date.now();
+  var isClosed = inc.status === 'Closed' || inc.status === 'Resolved';
+  // getIncidentClosedTimestamp prefers the canonical closed_at_utc (an
+  // absolute instant) and only falls back to wall-clock conversion using the
+  // incident's OWN recorded timezone — unlike new Date(inc.downtimeEnd),
+  // which is timezone-naive and gets silently parsed in the VIEWER's own
+  // browser timezone instead. For an incident recorded in a timezone
+  // different from the viewer's, that mismatch inflated or deflated its
+  // computed elapsed time by the gap between the two zones — enough, for a
+  // handful of real incidents recorded in JST, to falsely push a genuinely
+  // fast (sub-1h) resolution over the 4-hour Critical SLA target.
+  var endMs = isClosed ? getIncidentClosedTimestamp(inc) : Date.now();
+  // Closed but with no parseable closed timestamp at all (should be rare) —
+  // assume on-time rather than guessing a breach from nothing.
+  if (isClosed && !Number.isFinite(endMs)) endMs = startMs + slaH * 3600000 * 0.8;
   var elapsedH = (endMs - startMs) / 3600000;
   return elapsedH > slaH ? 'breached' : 'onTime';
 }

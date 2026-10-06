@@ -70,6 +70,21 @@ test('the SLA Breach chart shares one breach-classification function with its dr
   assert.match(frontend, /computeSlaBreachBucket\(inc\) === \(\(extra && extra\.breached\) \? 'breached' : 'onTime'\)/);
 });
 
+// computeSlaBreachBucket used to end a closed incident's elapsed-time window
+// at new Date(inc.downtimeEnd) — a timezone-naive wall-clock string (per
+// that incident's OWN recorded timezone), which a browser parses in ITS OWN
+// local timezone instead. An incident recorded in a timezone different from
+// the viewer's then got its elapsed time silently inflated or deflated by
+// that gap — enough, for real JST-recorded incidents, to push a genuinely
+// sub-1-hour resolution over the 4-hour Critical SLA target, so the "50
+// Breached" drill-down list included rows whose own displayed Breach
+// Duration showed "—" (not breached) right next to their inclusion.
+test('computeSlaBreachBucket ends a closed incident\'s window via getIncidentClosedTimestamp (timezone-aware, matching every other elapsed-time calculation) instead of re-parsing the timezone-naive inc.downtimeEnd string in the viewer\'s own browser timezone', () => {
+  assert.match(frontend, /var isClosed = inc\.status === 'Closed' \|\| inc\.status === 'Resolved';/);
+  assert.match(frontend, /var endMs = isClosed \? getIncidentClosedTimestamp\(inc\) : Date\.now\(\);/);
+  assert.doesNotMatch(frontend, /var endMs = inc\.downtimeEnd \? new Date\(inc\.downtimeEnd\)\.getTime\(\) :/, 'must not re-parse the timezone-naive wall-clock string directly as the actual end-time assignment');
+});
+
 test('every remaining dashboard chart and downtime list panel gets a click handler', () => {
   const chartClickPairs = [
     ['areaBreakdownChart', /function _drawAreaBreakdown[\s\S]*?el\.onclick = function \(e\) \{/],
