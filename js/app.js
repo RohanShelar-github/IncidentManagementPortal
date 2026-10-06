@@ -7783,15 +7783,21 @@ function _drawTrend(gridC, textC, textC2, data) {
     monthBounds.push({ start: monthStart, end: monthEnd });
     labels.push(monthStart.toLocaleString('default', { month: 'short', year: '2-digit' }));
 
-    var openCnt = data.filter(function (i) {
-      var openedAt = getIncidentOpenedTimestamp(i);
-      return Number.isFinite(openedAt) && openedAt >= monthStart.getTime() && openedAt < monthEnd.getTime();
-    }).length;
+    // Bucketed by each incident's own recorded wall-clock date (i.date /
+    // i.endDT — already localized to that incident's own timezone), the
+    // same basis every other Dashboard number uses. Comparing the absolute
+    // UTC instant against a month boundary built from the VIEWER's browser
+    // timezone instead would shift an incident recorded in a different
+    // timezone across midnight into the adjacent month for some viewers but
+    // not others — e.g. an incident logged at 9:44 PM GMT reads as past
+    // midnight (next calendar day) for a viewer whose browser is set to
+    // IST, even though every other Dashboard figure correctly treats it as
+    // that GMT day.
+    var monthKey = monthStart.getFullYear() + '-' + String(monthStart.getMonth() + 1).padStart(2, '0');
+    var openCnt = data.filter(function (i) { return String(i.date || '').slice(0, 7) === monthKey; }).length;
     var closedCnt = data.filter(function (i) {
       var status = String(i.status || '').toLowerCase();
-      var closedAt = getIncidentClosedTimestamp(i);
-      return (status === 'closed' || status === 'resolved')
-        && Number.isFinite(closedAt) && closedAt >= monthStart.getTime() && closedAt < monthEnd.getTime();
+      return (status === 'closed' || status === 'resolved') && String(i.endDT || '').slice(0, 7) === monthKey;
     }).length;
 
     dOpen.push(openCnt);
