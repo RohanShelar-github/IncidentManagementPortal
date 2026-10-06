@@ -3401,7 +3401,12 @@ function setMailboxSearch(value) { mailboxSearchQuery = String(value || '').trim
 // Create Incident Button filter and the button's own render condition can
 // never silently drift apart.
 function mailboxHasCreateIncidentButton(message) {
-  return hasPermission('create_incidents') && message.mailboxSource !== 'sent' && !message.incidentCreated && !message.incidentDraft && !isResolvedOperationsEmail(message) && message.incidentButtonEligible !== false;
+  // A Coralogix/Azure alert confirmed Informational (P3) never needs an
+  // incident — but unknown/undetected severity is left alone (fail-open),
+  // so an alert type the backend can't yet classify never silently loses
+  // its button just because severity detection hasn't caught up to it.
+  var isInformational = (message.category === 'coralogix' || message.category === 'azure') && message.severity === 'P3';
+  return hasPermission('create_incidents') && message.mailboxSource !== 'sent' && !message.incidentCreated && !message.incidentDraft && !isResolvedOperationsEmail(message) && message.incidentButtonEligible !== false && !isInformational;
 }
 function mailboxVisibleMessages() {
   var messages = mailboxMessages;

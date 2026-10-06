@@ -5,6 +5,7 @@ const { deleteInboxMessage, getCachedAlertMessagesSince, getInboxAttachment, get
 const { markMailboxNotificationsRead, notifyMailboxUsers } = require('../services/notificationService');
 const { noHistorianReadIncidentDefaults, operationsIncidentDefaults } = require('../services/operationsMailClassificationService');
 const { INCIDENT_BUTTON_WINDOW_MS, markIncidentButtonWindowStarts } = require('../services/operationsAlertGroupingService');
+const { resolveAlertSeverities } = require('../services/alertSeverityService');
 
 let knownMailboxMessageIds = null;
 let mailboxPollTimer = null;
@@ -373,7 +374,20 @@ async function listMailbox(req, res) {
     } catch (error) {
       console.error('Incident-button window computation error:', error.message);
     }
-    const data = linked.map((message) => ({ ...message, incidentButtonEligible: eligibleIds ? eligibleIds.has(message.id) : true }));
+    // null = computation unavailable this time — severity stays unset for
+    // every message rather than letting a transient failure misclassify one.
+    let severityById = null;
+    try {
+      const severityItems = linked.map((message) => ({ id: message.id, from: message.from, subject: message.subject, category: message.category }));
+      severityById = await resolveAlertSeverities(severityItems);
+    } catch (error) {
+      console.error('Mailbox severity computation error:', error.message);
+    }
+    const data = linked.map((message) => ({
+      ...message,
+      incidentButtonEligible: eligibleIds ? eligibleIds.has(message.id) : true,
+      severity: severityById ? (severityById.get(message.id) || null) : null
+    }));
     res.json({ success: true, data, nextCursor: nextLink });
   } catch (error) {
     console.error('Mailbox list error:', error.message);

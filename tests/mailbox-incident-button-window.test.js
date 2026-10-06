@@ -136,8 +136,19 @@ test('the frontend only suppresses the plain "+ Create Incident" button when mai
 // ── Requirement: a list filter to find the (rare) actionable alert among ──
 // ── many suppressed repeats, instead of scrolling through all of them     ──
 
-test('mailboxHasCreateIncidentButton is the single source of truth for "does this message show the + Create Incident button" — permission, not-sent, no existing incident/draft, not a resolved notification, and window-eligible', () => {
-  assert.match(frontend, /function mailboxHasCreateIncidentButton\(message\) \{\s*\n\s*return hasPermission\('create_incidents'\) && message\.mailboxSource !== 'sent' && !message\.incidentCreated && !message\.incidentDraft && !isResolvedOperationsEmail\(message\) && message\.incidentButtonEligible !== false;\s*\n\}/);
+test('mailboxHasCreateIncidentButton is the single source of truth for "does this message show the + Create Incident button" — permission, not-sent, no existing incident/draft, not a resolved notification, window-eligible, and not a confirmed-Informational Coralogix/Azure alert', () => {
+  assert.match(frontend, /function mailboxHasCreateIncidentButton\(message\) \{/);
+  assert.match(frontend, /var isInformational = \(message\.category === 'coralogix' \|\| message\.category === 'azure'\) && message\.severity === 'P3';/);
+  assert.match(frontend, /return hasPermission\('create_incidents'\) && message\.mailboxSource !== 'sent' && !message\.incidentCreated && !message\.incidentDraft && !isResolvedOperationsEmail\(message\) && message\.incidentButtonEligible !== false && !isInformational;/);
+});
+
+test('the Informational suppression only applies to Coralogix/Azure, and only when severity is positively confirmed P3 — Jira tickets and any alert with unknown/undetected severity (null) keep showing the button, so a new alert type the backend can\'t yet classify is never silently blocked from becoming an incident', () => {
+  const bodyStart = frontend.indexOf('function mailboxHasCreateIncidentButton');
+  const bodyEnd = frontend.indexOf('\n}', bodyStart);
+  const body = frontend.slice(bodyStart, bodyEnd);
+  assert.doesNotMatch(body, /jira/i, 'jira must never be checked here — its button is governed purely by the existing rules');
+  assert.match(body, /message\.severity === 'P3'/);
+  assert.doesNotMatch(body, /message\.severity !== 'P1'/, 'must not suppress for anything-other-than-P1/P2 — only a confirmed P3 suppresses, unknown severity must stay eligible');
 });
 
 test('a new "Create Incident" read-filter option lets the user isolate just the actionable alerts among many frequently-repeating, suppressed ones', () => {
@@ -149,4 +160,39 @@ test('a new "Create Incident" read-filter option lets the user isolate just the 
 
 test('selecting the Create Incident filter is a plain client-side re-render over already-loaded messages, like Unread/Read — it does not need a fresh loadMailbox() round trip the way switching to/from Incident Sent does', () => {
   assert.match(frontend, /if \(mailboxReadFilter === 'incident_sent' \|\| previous === 'incident_sent'\) loadMailbox\(\); else renderMailboxList\(\);/);
+});
+
+// ── Requirement: suppress the Create Incident button for alerts confirmed ──
+// ── Informational (P3) — computed for the live Operations mailbox list,   ──
+// ── not just the Alert Compliance report                                 ──
+
+test('alertSeverityService resolves P1/P2/P3 per alert IDENTITY (sender + normalized subject), not per individual message — so every repeat of a 10-minute alert reuses one cached answer instead of re-fetching its body every time', () => {
+  const service = fs.readFileSync(path.join(root, 'backend', 'services', 'alertSeverityService.js'), 'utf8');
+  assert.match(service, /async function resolveAlertSeverities\(items\) \{/);
+  assert.match(service, /const fingerprint = alertFingerprint\(item\);/);
+  assert.match(service, /const severityCache = new Map\(\); \/\/ fingerprint -> \{ severity, expiresAt \}/);
+  assert.match(service, /const SEVERITY_CACHE_TTL_MS = 24 \* 60 \* 60 \* 1000;/);
+  assert.match(service, /module\.exports = \{ resolveAlertSeverities \};/);
+});
+
+test('alertSeverityService resolves non-Coralogix/Azure items straight to null with no lookup at all, since Jira tickets have no severity concept', () => {
+  const { resolveAlertSeverities } = require(path.join(root, 'backend', 'services', 'alertSeverityService.js'));
+  return resolveAlertSeverities([{ id: 'jira-1', from: 'a@b.com', subject: 'A new support issue CD-1 was reported by the customer', category: 'jira' }])
+    .then((result) => { assert.equal(result.get('jira-1'), null); });
+});
+
+test('alertSeverityService resolves cheap subject-only severity (e.g. Azure\'s numeric Severity: N) without needing alertFingerprint or any body fetch', () => {
+  const { resolveAlertSeverities } = require(path.join(root, 'backend', 'services', 'alertSeverityService.js'));
+  return resolveAlertSeverities([{ id: 'az-1', from: 'azure-noreply@microsoft.com', subject: 'Azure: Activated Severity: 0 BUR No Historian Read', category: 'azure' }])
+    .then((result) => { assert.equal(result.get('az-1'), 'P1'); });
+});
+
+test('mailboxController.listMailbox computes severity per message via resolveAlertSeverities, attaching it to every row — falling back to null (never guessing) if the computation itself fails', () => {
+  assert.match(mailboxController, /const \{ resolveAlertSeverities \} = require\('\.\.\/services\/alertSeverityService'\);/);
+  const start = mailboxController.indexOf('async function listMailbox');
+  const end = mailboxController.indexOf('async function listIncidentSentMailbox');
+  const body = mailboxController.slice(start, end);
+  assert.match(body, /const severityItems = linked\.map\(\(message\) => \(\{ id: message\.id, from: message\.from, subject: message\.subject, category: message\.category \}\)\);/);
+  assert.match(body, /severityById = await resolveAlertSeverities\(severityItems\);/);
+  assert.match(body, /severity: severityById \? \(severityById\.get\(message\.id\) \|\| null\) : null/);
 });
