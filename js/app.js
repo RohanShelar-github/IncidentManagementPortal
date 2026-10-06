@@ -7306,23 +7306,23 @@ function _drawDowntimeArea(data) {
 // with its drill-down so the chart and the drilled-down results always agree.
 function computeSlaBreachBucket(inc) {
   var slaH = getIncidentSlaHours(inc);
-  var startMs = getIncidentOpenedTimestamp(inc);
   var isClosed = inc.status === 'Closed' || inc.status === 'Resolved';
-  // getIncidentClosedTimestamp prefers the canonical closed_at_utc (an
-  // absolute instant) and only falls back to wall-clock conversion using the
-  // incident's OWN recorded timezone — unlike new Date(inc.downtimeEnd),
-  // which is timezone-naive and gets silently parsed in the VIEWER's own
-  // browser timezone instead. For an incident recorded in a timezone
-  // different from the viewer's, that mismatch inflated or deflated its
-  // computed elapsed time by the gap between the two zones — enough, for a
-  // handful of real incidents recorded in JST, to falsely push a genuinely
-  // fast (sub-1h) resolution over the 4-hour Critical SLA target.
-  var endMs = isClosed ? getIncidentClosedTimestamp(inc) : Date.now();
-  // Closed but with no parseable closed timestamp at all (should be rare) —
-  // assume on-time rather than guessing a breach from nothing.
-  if (isClosed && !Number.isFinite(endMs)) endMs = startMs + slaH * 3600000 * 0.8;
-  var elapsedH = (endMs - startMs) / 3600000;
-  return elapsedH > slaH ? 'breached' : 'onTime';
+  if (!isClosed) {
+    var elapsedH = (Date.now() - getIncidentOpenedTimestamp(inc)) / 3600000;
+    return elapsedH > slaH ? 'breached' : 'onTime';
+  }
+  // Closed incidents classify from the SAME recorded resolution duration
+  // (MTTR, else downtime — getIncResolutionMinutes) that this chart's own
+  // drill-down displays as Actual/Breach Duration. Using a re-derived
+  // opened-to-closed TIMESTAMP gap here instead used to disagree with that
+  // displayed duration whenever a ticket stayed open well past the actual
+  // recorded impact window (or was closed administratively sooner than the
+  // real recorded downtime) — e.g. a ticket closed within the hour but with
+  // 16+ hours of recorded downtime showed up as "on time", while another
+  // left open for days but with a few minutes of recorded downtime showed
+  // up as "breached", in both cases contradicting the very duration shown
+  // on that same drilled-down row.
+  return getIncResolutionMinutes(inc) > slaH * 60 ? 'breached' : 'onTime';
 }
 
 // ── SLA BREACH BY SEVERITY (canvas) ───────────────────────
