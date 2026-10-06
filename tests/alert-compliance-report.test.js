@@ -400,8 +400,8 @@ test('the controller calls deriveAlertState without hasIncident — the alert\'s
   assert.doesNotMatch(reportController, /deriveAlertState\(group, hasIncident, now\)/);
 });
 
-test('the incidentCreated summary count is based on incidentRef presence, not on r.state (which can no longer be "incident_created")', () => {
-  assert.match(reportController, /incidentCreated: report\.filter\(\(r\) => Boolean\(r\.incidentRef\)\)\.length,/);
+test('the incidentCreated summary count is based on incidentRef presence, not on r.state (which can no longer be "incident_created"), and also counts a manually-tracked incidentSubstatusRef', () => {
+  assert.match(reportController, /incidentCreated: report\.filter\(\(r\) => Boolean\(r\.incidentRef\) \|\| Boolean\(r\.incidentSubstatusRef\)\)\.length,/);
 });
 
 test('the frontend table filter treats "incident_created" as "has an incidentRef", not a literal state match, since r.state never equals it', () => {
@@ -410,8 +410,16 @@ test('the frontend table filter treats "incident_created" as "has an incidentRef
 });
 
 test('the detail modal explicitly labels an incident link "Incident Created ·  <ref>" rather than a bare ref, since the STATE badge no longer conveys it', () => {
-  const occurrences = (frontend.match(/class="badge badge-closed" style="cursor:pointer;text-decoration:none">Incident Created · ' \+ escapeMetricHtml\(row\.incidentRef\)/g) || []).length;
-  assert.equal(occurrences, 3, 'acOpenAlertDetail, acResolveAlert, and acUpdateTicketStatus must all render the explicit incident-created label');
+  // acOpenAlertDetail, acResolveAlert, acUpdateTicketStatus, and
+  // acUpdateIncidentSubstatus all build their badges via the shared
+  // acIncidentBadgeHtml(row) helper (which itself renders the explicit
+  // "Incident Created · <ref>" label), rather than each repeating the
+  // ternary — also what makes a manually-tracked incidentSubstatusRef (see
+  // acEffectiveIncidentRef) show up identically to an auto-linked one.
+  assert.match(frontend, /function acIncidentBadgeHtml\(r\) \{/);
+  assert.match(frontend, /class="badge badge-closed" style="cursor:pointer;text-decoration:none">Incident Created · ' \+ escapeMetricHtml\(ref\) \+ '<\/a>'/);
+  const occurrences = (frontend.match(/\+ acIncidentBadgeHtml\(row\);/g) || []).length;
+  assert.equal(occurrences, 4, 'acOpenAlertDetail, acResolveAlert, acUpdateTicketStatus, and acUpdateIncidentSubstatus must all render the badge via the shared helper');
 });
 
 test('an occurrence with an incident shows "Incident Created · <ref>" in place of the Firing/Resolved signal label entirely, not alongside it', () => {
@@ -618,11 +626,11 @@ test('loadAlertComplianceReport and acFilterByState both reset acCurrentPage bac
 
 // ── Requirement: STATE badge distinguishes a real incident follow-up ──────
 
-test('acStateLabel: confirmed_resolved/manually_resolved with an incidentRef show "Action Taken & Resolved"; either state without one shows the plainer "Resolved" regardless of which resolved state it is', () => {
+test('acStateLabel: confirmed_resolved/manually_resolved with an (auto-linked or manually-tracked) incident show "Action Taken & Resolved"; either state without one shows the plainer "Resolved" regardless of which resolved state it is', () => {
   assert.match(frontend, /function acStateLabel\(r\) \{/);
   const body = frontend.slice(frontend.indexOf('function acStateLabel'), frontend.indexOf('function acStateLabel') + 500);
   assert.match(body, /if \(r\.state === 'confirmed_resolved' \|\| r\.state === 'manually_resolved'\) \{/);
-  assert.match(body, /return r\.incidentRef \? 'Action Taken & Resolved' : 'Resolved';/);
+  assert.match(body, /return acEffectiveIncidentRef\(r\) \? 'Action Taken & Resolved' : 'Resolved';/);
   assert.match(body, /return ALERT_COMPLIANCE_STATE_LABELS\[r\.state\] \|\| r\.state;/);
 });
 
@@ -640,12 +648,15 @@ test('the table uses acTableStateLabel, and the detail modal + acResolveAlert\'s
 // ── for resolved alerts with no auto-linked incident, shown in the       ──
 // ── Incident column without changing the STATE badge itself             ──
 
-test('the migration adds operations_alert_incident_substatus (pending/created/not_required), and the report attaches r.incidentSubstatus to every group', () => {
+test('the migration adds operations_alert_incident_substatus (pending/created/not_required), and the report attaches r.incidentSubstatus (and a manually-tracked r.incidentSubstatusRef) to every group', () => {
   const migration = fs.readFileSync(path.join(root, 'backend', 'sql', '041_alert_incident_substatus.sql'), 'utf8');
   assert.match(migration, /CREATE TABLE IF NOT EXISTS operations_alert_incident_substatus/);
   assert.match(migration, /substatus ENUM\('pending','created','not_required'\) NOT NULL/);
-  assert.match(reportController, /SELECT fingerprint_key, substatus FROM operations_alert_incident_substatus WHERE fingerprint_key IN \(\?\)/);
-  assert.match(reportController, /report\.forEach\(\(r\) => \{ r\.incidentSubstatus = substatusByKey\.get\(r\.fingerprintKey\) \|\| null; \}\);/);
+  const refMigration = fs.readFileSync(path.join(root, 'backend', 'sql', '046_alert_incident_substatus_ref.sql'), 'utf8');
+  assert.match(refMigration, /ADD COLUMN incident_ref VARCHAR\(20\) NULL AFTER substatus/);
+  assert.match(reportController, /SELECT fingerprint_key, substatus, incident_ref FROM operations_alert_incident_substatus WHERE fingerprint_key IN \(\?\)/);
+  assert.match(reportController, /r\.incidentSubstatus = row \? row\.substatus : null;/);
+  assert.match(reportController, /r\.incidentSubstatusRef = row \? row\.incident_ref : null;/);
 });
 
 test('updateIncidentSubstatus validates fingerprintKey and restricts substatus to pending/created/not_required, and is routed under view_alert_compliance_report (any viewer can triage)', () => {
@@ -658,10 +669,34 @@ test('updateIncidentSubstatus validates fingerprintKey and restricts substatus t
 
 test('the incident sub-status section and select exist in the detail modal, hidden by default', () => {
   assert.match(html, /id="adIncidentSubstatusSection" style="display:none/);
-  assert.match(html, /id="adIncidentSubstatusSelect"/);
+  assert.match(html, /id="adIncidentSubstatusSelect" onchange="acToggleIncidentRefInput\(\)"/);
   assert.match(html, /<option value="pending">Incident Pending<\/option>/);
   assert.match(html, /<option value="created">Incident Created<\/option>/);
   assert.match(html, /<option value="not_required">Not Required<\/option>/);
+});
+
+// ── Requirement: track an incident created the normal way (the Incidents ──
+// ── tab's own Create Incident button) against its originating alert,     ──
+// ── since only the mailbox's per-alert button auto-links one            ──
+test('the Incident ID input exists next to the sub-status select, hidden until "Incident Created" is picked', () => {
+  assert.match(html, /<input type="text" id="adIncidentRefInput" placeholder="Incident ID, e\.g\. INC-123" style="display:none/);
+  assert.match(frontend, /function acToggleIncidentRefInput\(\) \{/);
+  assert.match(frontend, /input\.style\.display = \(select && select\.value === 'created'\) \? '' : 'none';/);
+});
+
+test('updateIncidentSubstatus validates a typed incidentRef looks like INC-\\d+ and actually exists in the incidents table, and clears it for any sub-status other than created', () => {
+  assert.match(reportController, /const INCIDENT_REF_PATTERN = \/\^INC-\\d\+\$\/i;/);
+  assert.match(reportController, /if \(substatus !== 'created'\) \{\s*\n\s*incidentRef = '';\s*\n\s*\} else if \(incidentRef\) \{/);
+  assert.match(reportController, /if \(!INCIDENT_REF_PATTERN\.test\(incidentRef\)\) \{/);
+  assert.match(reportController, /SELECT id FROM incidents WHERE incident_ref = \? LIMIT 1/);
+  assert.match(reportController, /INSERT INTO operations_alert_incident_substatus \(fingerprint_key, alert_fingerprint, substatus, incident_ref, updated_by\)/);
+});
+
+test('acEffectiveIncidentRef prefers the auto-linked incidentRef, falling back to a manually-tracked incidentSubstatusRef only when substatus is created, and every incident link/badge in the Alert Compliance report goes through it or acIncidentBadgeHtml', () => {
+  assert.match(frontend, /function acEffectiveIncidentRef\(r\) \{\s*\n\s*return r\.incidentRef \|\| \(r\.incidentSubstatus === 'created' \? \(r\.incidentSubstatusRef \|\| null\) : null\);\s*\n\}/);
+  assert.match(frontend, /const effectiveIncidentRef = acEffectiveIncidentRef\(r\);/);
+  assert.match(frontend, /\? '<a href="javascript:void\(0\)" onclick="event\.stopPropagation\(\);acOpenIncident\(\\'' \+ escapeMetricHtml\(effectiveIncidentRef\)/);
+  assert.match(frontend, /\['Incident', acEffectiveIncidentRef\(row\) \|\| 'None'\]/);
 });
 
 test('acShowsIncidentSubstatus is true only for confirmed_resolved/manually_resolved rows with no incidentRef, and gates both the table\'s Incident-column badge and the detail modal\'s sub-status section', () => {
@@ -670,11 +705,13 @@ test('acShowsIncidentSubstatus is true only for confirmed_resolved/manually_reso
   assert.match(frontend, /const showSubstatus = acShowsIncidentSubstatus\(row\);\s*\n\s*substatusSection\.style\.display = showSubstatus \? '' : 'none';/);
 });
 
-test('acUpdateIncidentSubstatus posts to /incident-substatus without requiring a comment, updates the row locally, and never touches row.state (the STATE badge stays "Resolved"/"Action Taken & Resolved")', () => {
+test('acUpdateIncidentSubstatus posts to /incident-substatus (including the manually-typed incidentRef) without requiring a comment, updates the row locally, and never touches row.state (the STATE badge stays "Resolved"/"Action Taken & Resolved")', () => {
   assert.match(frontend, /function acUpdateIncidentSubstatus\(\) \{/);
   assert.match(frontend, /API_BASE_URL \+ '\/operations-alerts\/incident-substatus'/);
-  assert.match(frontend, /if \(row\) row\.incidentSubstatus = substatus;/);
-  const body = frontend.slice(frontend.indexOf('function acUpdateIncidentSubstatus'), frontend.indexOf('function acUpdateIncidentSubstatus') + 1200);
+  assert.match(frontend, /body: JSON\.stringify\(\{ fingerprintKey: acActiveCommentFingerprintKey, fingerprint: acActiveCommentFingerprint, substatus: substatus, incidentRef: incidentRef \}\)/);
+  assert.match(frontend, /row\.incidentSubstatus = substatus;/);
+  assert.match(frontend, /row\.incidentSubstatusRef = result\.data\.incidentRef \|\| null;/);
+  const body = frontend.slice(frontend.indexOf('function acUpdateIncidentSubstatus'), frontend.indexOf('function acUpdateIncidentSubstatus') + 1800);
   assert.doesNotMatch(body, /row\.state = substatus;/, 'must never overwrite the alert\'s own activity state');
 });
 
@@ -714,11 +751,12 @@ test('acTableStateLabel relabels went_quiet as "Active" but otherwise delegates 
 
 test('the table row uses acTableStateLabel, while the detail modal open and acResolveAlert\'s local badge update still use the unmodified acStateLabel — so "Went Quiet — Unconfirmed" only ever appears once you open the alert', () => {
   assert.match(frontend, /tbody\.innerHTML = pageRows\.map\(function \(r\) \{\s*\n\s*const stateLabel = acTableStateLabel\(r\);/);
-  // acOpenAlertDetail's badge build and acResolveAlert's local badge
-  // refresh must be the only two remaining acStateLabel(row) call sites —
-  // acTableStateLabel is only for the table.
+  // acOpenAlertDetail's badge build, acResolveAlert's local badge refresh,
+  // and acUpdateIncidentSubstatus's local badge refresh must be the only
+  // remaining acStateLabel(row) call sites — acTableStateLabel is only for
+  // the table.
   const stateLabelCalls = frontend.match(/const stateLabel = acStateLabel\(row\);/g) || [];
-  assert.equal(stateLabelCalls.length, 2, 'expected exactly two remaining acStateLabel(row) call sites (detail modal open + acResolveAlert badge refresh)');
+  assert.equal(stateLabelCalls.length, 3, 'expected exactly three remaining acStateLabel(row) call sites (detail modal open, acResolveAlert badge refresh, acUpdateIncidentSubstatus badge refresh)');
 });
 
 // ── Requirement: closing/resolving the linked incident auto-resolves the ──

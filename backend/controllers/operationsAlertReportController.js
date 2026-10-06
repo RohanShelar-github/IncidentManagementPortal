@@ -176,11 +176,15 @@ const getAlertComplianceReport = async (req, res) => {
       // and only meaningful for confirmed_resolved/manually_resolved rows
       // with no incidentRef, which the frontend enforces when it renders it.
       const [substatusRows] = await pool.query(
-        'SELECT fingerprint_key, substatus FROM operations_alert_incident_substatus WHERE fingerprint_key IN (?)',
+        'SELECT fingerprint_key, substatus, incident_ref FROM operations_alert_incident_substatus WHERE fingerprint_key IN (?)',
         [keys]
       );
-      const substatusByKey = new Map(substatusRows.map((row) => [row.fingerprint_key, row.substatus]));
-      report.forEach((r) => { r.incidentSubstatus = substatusByKey.get(r.fingerprintKey) || null; });
+      const substatusByKey = new Map(substatusRows.map((row) => [row.fingerprint_key, row]));
+      report.forEach((r) => {
+        const row = substatusByKey.get(r.fingerprintKey);
+        r.incidentSubstatus = row ? row.substatus : null;
+        r.incidentSubstatusRef = row ? row.incident_ref : null;
+      });
 
       // Severity (P1/P2/P3), Coralogix/Azure only (never Jira tickets) — a
       // cheap subject-only check first, since Azure's "Historian Read" style
@@ -239,8 +243,10 @@ const getAlertComplianceReport = async (req, res) => {
       // alert that led to an incident still shows its real activity state
       // (e.g. went_quiet, actively_repeating) in the table; this count is
       // purely "how many alert groups have an incidentRef at all", shown
-      // only in the summary tile / detail view, never in the STATE column.
-      incidentCreated: report.filter((r) => Boolean(r.incidentRef)).length,
+      // only in the summary tile / detail view, never in the STATE column —
+      // counts a manually-tracked incident_ref (see updateIncidentSubstatus)
+      // the same as an auto-linked one.
+      incidentCreated: report.filter((r) => Boolean(r.incidentRef) || Boolean(r.incidentSubstatusRef)).length,
       manuallyResolved: report.filter((r) => r.state === 'manually_resolved').length
     };
 
@@ -411,26 +417,45 @@ const updateTicketStatus = async (req, res) => {
 // in its migration). Independent of the automatic incidentRef link — this
 // is a human's own tracking note, not something the system derives.
 const INCIDENT_SUBSTATUSES = new Set(['pending', 'created', 'not_required']);
+const INCIDENT_REF_PATTERN = /^INC-\d+$/i;
 
 const updateIncidentSubstatus = async (req, res) => {
   try {
     const key = String(req.body.fingerprintKey || '').trim().toLowerCase();
     const fingerprint = String(req.body.fingerprint || '').trim();
     const substatus = String(req.body.substatus || '').trim().toLowerCase();
+    // Optional: the real Incident ID, when the incident behind this alert
+    // was created the normal way (Incidents tab's own "Create Incident"
+    // button) rather than via the mailbox's per-alert button, which is the
+    // only flow that auto-links one. Only meaningful with substatus
+    // 'created' — cleared for 'pending'/'not_required' so a stale ID can't
+    // linger once the note no longer claims an incident exists.
+    let incidentRef = String(req.body.incidentRef || '').trim().toUpperCase();
     if (!FINGERPRINT_KEY_PATTERN.test(key)) {
       return res.status(400).json({ success: false, message: 'A valid fingerprintKey is required' });
     }
     if (!INCIDENT_SUBSTATUSES.has(substatus)) {
       return res.status(400).json({ success: false, message: 'Sub-status must be one of pending, created, not_required' });
     }
+    if (substatus !== 'created') {
+      incidentRef = '';
+    } else if (incidentRef) {
+      if (!INCIDENT_REF_PATTERN.test(incidentRef)) {
+        return res.status(400).json({ success: false, message: 'Incident ID must look like INC-123' });
+      }
+      const [existsRows] = await pool.query('SELECT id FROM incidents WHERE incident_ref = ? LIMIT 1', [incidentRef]);
+      if (!existsRows.length) {
+        return res.status(404).json({ success: false, message: 'No incident found with ID ' + incidentRef });
+      }
+    }
 
     await pool.query(
-      `INSERT INTO operations_alert_incident_substatus (fingerprint_key, alert_fingerprint, substatus, updated_by)
-       VALUES (?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE substatus = VALUES(substatus), updated_by = VALUES(updated_by), updated_at = CURRENT_TIMESTAMP`,
-      [key, fingerprint.slice(0, 1000) || null, substatus, req.user.id]
+      `INSERT INTO operations_alert_incident_substatus (fingerprint_key, alert_fingerprint, substatus, incident_ref, updated_by)
+       VALUES (?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE substatus = VALUES(substatus), incident_ref = VALUES(incident_ref), updated_by = VALUES(updated_by), updated_at = CURRENT_TIMESTAMP`,
+      [key, fingerprint.slice(0, 1000) || null, substatus, incidentRef || null, req.user.id]
     );
-    res.json({ success: true, message: 'Incident sub-status updated', data: { substatus } });
+    res.json({ success: true, message: 'Incident sub-status updated', data: { substatus, incidentRef: incidentRef || null } });
   } catch (error) {
     console.error('Update incident sub-status error:', error.message);
     res.status(500).json({ success: false, message: 'Unable to update the incident sub-status' });

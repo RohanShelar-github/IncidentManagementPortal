@@ -1461,13 +1461,14 @@
 </div>
 <div id="adIncidentSubstatusSection" style="display:none;margin-bottom:16px;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
 <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Incident Sub-Status</div>
-<div style="display:flex;gap:8px;align-items:center">
-<select id="adIncidentSubstatusSelect">
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+<select id="adIncidentSubstatusSelect" onchange="acToggleIncidentRefInput()">
 <option value="">Not set</option>
 <option value="pending">Incident Pending</option>
 <option value="created">Incident Created</option>
 <option value="not_required">Not Required</option>
 </select>
+<input type="text" id="adIncidentRefInput" placeholder="Incident ID, e.g. INC-123" style="display:none;width:160px" maxlength="20">
 <button class="btn btn-primary" onclick="acUpdateIncidentSubstatus()" style="padding:6px 14px;font-size:12px">Update Sub-Status</button>
 </div>
 </div>

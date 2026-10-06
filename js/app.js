@@ -11407,6 +11407,20 @@ function acShowsIncidentSubstatus(r) {
   return !r.incidentRef && (r.state === 'confirmed_resolved' || r.state === 'manually_resolved');
 }
 
+// The Incident ID to show/link for this alert group — either the one
+// auto-linked via the mailbox's own "+ Create Incident" button, or one a
+// human typed in manually (see acUpdateIncidentSubstatus) for an incident
+// that was instead created from the Incidents tab's own Create Incident
+// button, which has no way to link back to its originating alert on its own.
+function acEffectiveIncidentRef(r) {
+  return r.incidentRef || (r.incidentSubstatus === 'created' ? (r.incidentSubstatusRef || null) : null);
+}
+
+function acIncidentBadgeHtml(r) {
+  var ref = acEffectiveIncidentRef(r);
+  return ref ? '<a href="javascript:void(0)" onclick="acOpenIncident(\'' + escapeMetricHtml(ref) + '\')" class="badge badge-closed" style="cursor:pointer;text-decoration:none">Incident Created · ' + escapeMetricHtml(ref) + '</a>' : '';
+}
+
 // The STATE badge text for confirmed_resolved/manually_resolved only cares
 // whether an incident actually exists for the alert, not which of the two
 // resolved states it's in — "resolved" on its own doesn't say whether that
@@ -11415,7 +11429,7 @@ function acShowsIncidentSubstatus(r) {
 // just "Resolved" either way.
 function acStateLabel(r) {
   if (r.state === 'confirmed_resolved' || r.state === 'manually_resolved') {
-    return r.incidentRef ? 'Action Taken & Resolved' : 'Resolved';
+    return acEffectiveIncidentRef(r) ? 'Action Taken & Resolved' : 'Resolved';
   }
   return ALERT_COMPLIANCE_STATE_LABELS[r.state] || r.state;
 }
@@ -11617,8 +11631,9 @@ function renderAlertComplianceTable() {
     // The incident link must stop the click from bubbling up to the row's
     // own onclick — otherwise navigating to the incident would also pop
     // open this alert's detail modal right behind it.
-    const incidentCell = r.incidentRef
-      ? '<a href="javascript:void(0)" onclick="event.stopPropagation();acOpenIncident(\'' + escapeMetricHtml(r.incidentRef) + '\')" style="color:var(--accent);font-weight:600">' + escapeMetricHtml(r.incidentRef) + '</a>'
+    const effectiveIncidentRef = acEffectiveIncidentRef(r);
+    const incidentCell = effectiveIncidentRef
+      ? '<a href="javascript:void(0)" onclick="event.stopPropagation();acOpenIncident(\'' + escapeMetricHtml(effectiveIncidentRef) + '\')" style="color:var(--accent);font-weight:600">' + escapeMetricHtml(effectiveIncidentRef) + '</a>'
       : (acShowsIncidentSubstatus(r) && r.incidentSubstatus && ALERT_INCIDENT_SUBSTATUS_LABELS[r.incidentSubstatus])
         ? '<span class="badge ' + ALERT_INCIDENT_SUBSTATUS_CLASS[r.incidentSubstatus] + '" style="font-size:10px">' + escapeMetricHtml(ALERT_INCIDENT_SUBSTATUS_LABELS[r.incidentSubstatus]) + '</span>'
         : '<span style="color:var(--text-muted)">—</span>';
@@ -11843,7 +11858,7 @@ function acOpenAlertDetail(fingerprintKey, commentsOnly) {
   if (badges) {
     badges.innerHTML = '<span class="badge ' + stateClass + '">' + escapeMetricHtml(stateLabel) + '</span>'
       + '<span class="badge badge-medium">' + escapeMetricHtml(acCategoryLabel(row.category)) + '</span>'
-      + (row.incidentRef ? '<a href="javascript:void(0)" onclick="acOpenIncident(\'' + escapeMetricHtml(row.incidentRef) + '\')" class="badge badge-closed" style="cursor:pointer;text-decoration:none">Incident Created · ' + escapeMetricHtml(row.incidentRef) + '</a>' : '');
+      + acIncidentBadgeHtml(row);
   }
 
   const meta = document.getElementById('adMetaGrid');
@@ -11853,7 +11868,7 @@ function acOpenAlertDetail(fingerprintKey, commentsOnly) {
       ['First Seen', acFormatTimestamp(row.firstSeen)],
       ['Last Seen', acFormatTimestamp(row.lastSeen)],
       ['Repeat Count', String(row.occurrenceCount)],
-      ['Incident', row.incidentRef || 'None']
+      ['Incident', acEffectiveIncidentRef(row) || 'None']
     ];
     meta.innerHTML = fields.map(function (f) {
       return '<div class="detail-field"><div class="detail-field-label">' + escapeMetricHtml(f[0]) + '</div><div class="detail-field-value">' + escapeMetricHtml(f[1]) + '</div></div>';
@@ -11919,6 +11934,11 @@ function acOpenAlertDetail(fingerprintKey, commentsOnly) {
     substatusSection.style.display = showSubstatus ? '' : 'none';
     const substatusSelect = document.getElementById('adIncidentSubstatusSelect');
     if (substatusSelect && showSubstatus) substatusSelect.value = row.incidentSubstatus || '';
+    const refInput = document.getElementById('adIncidentRefInput');
+    if (refInput && showSubstatus) {
+      refInput.value = row.incidentSubstatusRef || '';
+      refInput.style.display = row.incidentSubstatus === 'created' ? '' : 'none';
+    }
   }
 
   const deleteBtn = document.getElementById('adDeleteBtn');
@@ -12076,7 +12096,7 @@ function acResolveAlert() {
         const stateClass = ALERT_COMPLIANCE_STATE_CLASS[row.state] || 'badge-progress';
         badges.innerHTML = '<span class="badge ' + stateClass + '">' + escapeMetricHtml(stateLabel) + '</span>'
           + '<span class="badge badge-medium">' + escapeMetricHtml(acCategoryLabel(row.category)) + '</span>'
-          + (row.incidentRef ? '<a href="javascript:void(0)" onclick="acOpenIncident(\'' + escapeMetricHtml(row.incidentRef) + '\')" class="badge badge-closed" style="cursor:pointer;text-decoration:none">Incident Created · ' + escapeMetricHtml(row.incidentRef) + '</a>' : '');
+          + acIncidentBadgeHtml(row);
       }
       const resolveBtn = document.getElementById('adResolveBtn');
       if (resolveBtn) resolveBtn.style.display = 'none';
@@ -12115,7 +12135,7 @@ function acUpdateTicketStatus() {
         const stateClass = ALERT_COMPLIANCE_STATE_CLASS[row.state] || 'badge-progress';
         badges.innerHTML = '<span class="badge ' + stateClass + '">' + escapeMetricHtml(stateLabel) + '</span>'
           + '<span class="badge badge-medium">' + escapeMetricHtml(acCategoryLabel(row.category)) + '</span>'
-          + (row.incidentRef ? '<a href="javascript:void(0)" onclick="acOpenIncident(\'' + escapeMetricHtml(row.incidentRef) + '\')" class="badge badge-closed" style="cursor:pointer;text-decoration:none">Incident Created · ' + escapeMetricHtml(row.incidentRef) + '</a>' : '');
+          + acIncidentBadgeHtml(row);
       }
       renderAlertComplianceTable();
       showToast('Ticket status updated', 'success');
@@ -12125,27 +12145,56 @@ function acUpdateTicketStatus() {
     });
 }
 
+// Shows the Incident ID input only while "Incident Created" is selected —
+// it's meaningless (and cleared server-side) for the other two sub-statuses.
+function acToggleIncidentRefInput() {
+  const select = document.getElementById('adIncidentSubstatusSelect');
+  const input = document.getElementById('adIncidentRefInput');
+  if (input) input.style.display = (select && select.value === 'created') ? '' : 'none';
+}
+
 // Updates the manual "is a real incident still pending?" sub-status for a
-// resolved alert with no incidentRef auto-linked. Purely a human tracking
-// note — it never changes the alert's own STATE badge (still "Resolved" /
-// "Action Taken & Resolved"), only what shows in the Incident column.
+// resolved alert with no incidentRef auto-linked. When set to "Incident
+// Created", also records the actual Incident ID a human typed in — the only
+// way to track an incident here when it was created from the Incidents
+// tab's own Create Incident button rather than the mailbox's per-alert one,
+// which is the only flow that links an incident automatically.
 function acUpdateIncidentSubstatus() {
   const select = document.getElementById('adIncidentSubstatusSelect');
   const substatus = select ? select.value : '';
   if (!acActiveCommentFingerprintKey || !substatus) return;
+  const refInput = document.getElementById('adIncidentRefInput');
+  const incidentRef = (substatus === 'created' && refInput) ? refInput.value.trim() : '';
   const token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
   if (!token) { showToast('Not authenticated. Please login first.', 'error'); return; }
   fetch(window.APP_CONFIG.API_BASE_URL + '/operations-alerts/incident-substatus', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ fingerprintKey: acActiveCommentFingerprintKey, fingerprint: acActiveCommentFingerprint, substatus: substatus })
+    body: JSON.stringify({ fingerprintKey: acActiveCommentFingerprintKey, fingerprint: acActiveCommentFingerprint, substatus: substatus, incidentRef: incidentRef })
   })
     .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
     .then(function (result) {
       if (!result.ok || !result.data.success) throw new Error(result.data.message || 'Unable to update the incident sub-status');
       const row = alertComplianceReportData.find(function (r) { return r.fingerprintKey === acActiveCommentFingerprintKey; });
-      if (row) row.incidentSubstatus = substatus;
+      if (row) {
+        const hadIncident = Boolean(acEffectiveIncidentRef(row));
+        row.incidentSubstatus = substatus;
+        row.incidentSubstatusRef = result.data.incidentRef || null;
+        const hasIncidentNow = Boolean(acEffectiveIncidentRef(row));
+        if (alertComplianceReportSummary && hadIncident !== hasIncidentNow) {
+          alertComplianceReportSummary.incidentCreated = Math.max(0, (alertComplianceReportSummary.incidentCreated || 0) + (hasIncidentNow ? 1 : -1));
+        }
+        const badges = document.getElementById('adBadges');
+        if (badges) {
+          const stateLabel = acStateLabel(row);
+          const stateClass = ALERT_COMPLIANCE_STATE_CLASS[row.state] || 'badge-progress';
+          badges.innerHTML = '<span class="badge ' + stateClass + '">' + escapeMetricHtml(stateLabel) + '</span>'
+            + '<span class="badge badge-medium">' + escapeMetricHtml(acCategoryLabel(row.category)) + '</span>'
+            + acIncidentBadgeHtml(row);
+        }
+      }
       renderAlertComplianceTable();
+      renderAlertComplianceSummary();
       showToast('Incident sub-status updated', 'success');
     })
     .catch(function (err) {
