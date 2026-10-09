@@ -1123,7 +1123,7 @@ function openMetricDrillDown(metric, customerName, reportingCategory, extra) {
   else if (metric === 'mttd') predicate = isMissedMttd;
   else if (metric === 'open') predicate = isActiveIncident;
   else if (metric === 'sla') predicate = isActiveSlaBreached;
-  else if (metric === 'resolutionAvg') predicate = function (inc) { return (inc.status === 'Closed' || inc.status === 'Resolved') && getIncResolutionMinutes(inc) > 0; };
+  else if (metric === 'resolutionAvg') predicate = function (inc) { return (inc.status === 'Closed' || inc.status === 'Resolved') && getIncDowntimeMinutes(inc) > 0 && (dashboardAvgDowntimeCategory === 'historian' ? isHistorianIncident(inc) : !isHistorianIncident(inc)); };
   else if (metric === 'downtime') predicate = function (inc) { return (inc.status === 'Closed' || inc.status === 'Resolved') && !isHistorianIncident(inc); };
   else if (metric === 'historianDowntime') predicate = function (inc) { return (inc.status === 'Closed' || inc.status === 'Resolved') && isHistorianIncident(inc); };
   else if (metric === 'slaBreachChart') predicate = function (inc) { return String(inc.severity || '') === (extra && extra.severity) && computeSlaBreachBucket(inc) === ((extra && extra.breached) ? 'breached' : 'onTime'); };
@@ -1157,7 +1157,6 @@ function openMetricDrillDown(metric, customerName, reportingCategory, extra) {
   var drilldownTitles = {
     mttr: 'Missed MTTR Incidents', mttd: 'Missed MTTD Incidents',
     open: 'Open / Active Incidents', sla: 'SLA-Breached Active Incidents',
-    resolutionAvg: 'Average Resolution — Contributing Incidents',
     downtime: 'Total Downtime — Contributing Incidents',
     historianDowntime: 'Historian Downtime — Contributing Incidents'
   };
@@ -1165,7 +1164,8 @@ function openMetricDrillDown(metric, customerName, reportingCategory, extra) {
     : metric === 'slaBreachChart' ? ((extra && extra.severity) || '') + ' — ' + ((extra && extra.breached) ? 'Breached' : 'On-time') + ' SLA'
       : metric === 'byProject' ? (extra || 'Unspecified') + ' — Contributing Incidents'
         : metric === 'byAreaOpen' ? (extra || 'Unspecified') + ' — Open / Active Incidents'
-          : null;
+          : metric === 'resolutionAvg' ? 'Average Downtime (' + (dashboardAvgDowntimeCategory === 'historian' ? 'Historian' : 'Application') + ') — Contributing Incidents'
+            : null;
   title.textContent = dynamicTitle || drilldownTitles[metric];
   var isDashboardDrivenMetric = ['open', 'sla', 'resolutionAvg', 'downtime', 'historianDowntime', 'slaBreachChart', 'dow', 'byProject', 'byAreaOpen'].indexOf(metric) !== -1;
   sub.textContent = metricIncidents.length + ' contributing incident' + (metricIncidents.length === 1 ? '' : 's')
@@ -1173,8 +1173,7 @@ function openMetricDrillDown(metric, customerName, reportingCategory, extra) {
     + ' · Select a row to view details';
   actualHeader.textContent = (metric === 'open' || metric === 'sla' || metric === 'byAreaOpen') ? 'Open Duration'
     : (metric === 'mttr' || metric === 'mttd') ? 'Actual ' + metric.toUpperCase()
-      : (metric === 'downtime' || metric === 'historianDowntime') ? 'Actual Downtime'
-        : metric === 'resolutionAvg' ? 'Actual Resolution' : 'Actual Duration';
+      : (metric === 'downtime' || metric === 'historianDowntime' || metric === 'resolutionAvg') ? 'Actual Downtime' : 'Actual Duration';
 
   if (!metricIncidents.length) {
     body.innerHTML = '<tr><td class="metric-drilldown-empty" colspan="11">No contributing incidents found.</td></tr>';
@@ -1184,7 +1183,7 @@ function openMetricDrillDown(metric, customerName, reportingCategory, extra) {
       var actualMinutes = metric === 'mttr' ? getActualMttrMinutes(inc)
         : metric === 'mttd' ? getIncidentMttdMinutes(inc)
           : isLiveMetric ? Math.max(0, (Date.now() - getIncidentOpenedTimestamp(inc)) / 60000)
-            : (metric === 'downtime' || metric === 'historianDowntime') ? getIncDowntimeMinutes(inc)
+            : (metric === 'downtime' || metric === 'historianDowntime' || metric === 'resolutionAvg') ? getIncDowntimeMinutes(inc)
               : getIncResolutionMinutes(inc);
       var incSlaHours = getIncidentSlaHours(inc);
       var hasSlaTarget = metric === 'mttd' || incSlaHours !== null;
@@ -4056,7 +4055,7 @@ const PERM_LABELS = {
   view_dashboard_total_incidents: 'Dashboard: Total Incidents',
   view_dashboard_open_active: 'Dashboard: Open / Active',
   view_dashboard_resolved: 'Dashboard: Resolved',
-  view_dashboard_avg_resolution: 'Dashboard: Avg Resolution',
+  view_dashboard_avg_resolution: 'Dashboard: Avg Downtime',
   view_dashboard_total_downtime: 'Dashboard: Total Downtime',
   view_dashboard_historian_downtime: 'Dashboard: Historian Downtime',
   view_dashboard_sla_breach: 'Dashboard: SLA Breach Rate',
@@ -6695,6 +6694,18 @@ function refreshDashboardData(options) {
     finish(null);
   }
 }
+// Which incident category the "Avg Downtime" card's own dropdown is
+// currently showing — mirrors the same Application/Historian split the
+// Total Downtime / Historian Downtime cards use (partitionHistorianIncidents),
+// so all three cards can never disagree about which incidents belong to
+// which bucket. Read directly by openMetricDrillDown's 'resolutionAvg'
+// predicate so the card and its drill-down always agree too.
+var dashboardAvgDowntimeCategory = 'application';
+function changeAvgDowntimeCategory(value) {
+  dashboardAvgDowntimeCategory = (value === 'historian') ? 'historian' : 'application';
+  updateStats();
+}
+
 function updateStats() {
   var data = getDashboardFilteredIncidents();
   var selectedCustomers = getMsValues('df_customer');
@@ -6722,17 +6733,28 @@ function updateStats() {
   if (historianDtEl) historianDtEl.textContent = historianDowntime > 0 ? minutesToHM(historianDowntime) : '0m';
   if (historianDtSub) historianDtSub.textContent = downtimeCategories.historian.length + ' Historian incident' + (downtimeCategories.historian.length !== 1 ? 's' : '');
 
-  // Avg Resolution (closed/resolved incidents with recorded database timing)
-  var withResolution = closedIncs.filter(function (i) { return getIncResolutionMinutes(i) > 0; });
-  var avgResolution = withResolution.length > 0
-    ? Math.round(withResolution.reduce(function (s, i) { return s + getIncResolutionMinutes(i); }, 0) / withResolution.length)
+  // Avg Downtime — Application vs Historian, selectable via the card's own
+  // dropdown (see dashboardAvgDowntimeCategory above). Historian is NGC-only,
+  // same as the Historian Downtime card, so its option is disabled (and the
+  // selection falls back to Application) whenever that card itself is hidden.
+  var avgDowntimeSelect = document.getElementById('avgDowntimeCategorySelect');
+  if (avgDowntimeSelect) {
+    var historianOption = avgDowntimeSelect.querySelector('option[value="historian"]');
+    if (historianOption) historianOption.disabled = !showHistorianCard;
+    if (!showHistorianCard) dashboardAvgDowntimeCategory = 'application';
+    avgDowntimeSelect.value = dashboardAvgDowntimeCategory;
+  }
+  var avgDowntimeIncidents = dashboardAvgDowntimeCategory === 'historian' ? downtimeCategories.historian : downtimeCategories.application;
+  var withDowntime = avgDowntimeIncidents.filter(function (i) { return getIncDowntimeMinutes(i) > 0; });
+  var avgDowntime = withDowntime.length > 0
+    ? Math.round(withDowntime.reduce(function (s, i) { return s + getIncDowntimeMinutes(i); }, 0) / withDowntime.length)
     : 0;
   var arEl = document.getElementById('statAvgResolution');
   var arSub = document.getElementById('statAvgResolutionSub');
-  if (arEl) arEl.textContent = avgResolution > 0 ? minutesToHM(avgResolution) : '—';
-  if (arSub) arSub.textContent = withResolution.length > 0
-    ? withResolution.length + ' closed incident' + (withResolution.length !== 1 ? 's' : '') + ' measured'
-    : 'no resolution time recorded';
+  if (arEl) arEl.textContent = avgDowntime > 0 ? minutesToHM(avgDowntime) : '—';
+  if (arSub) arSub.textContent = withDowntime.length > 0
+    ? withDowntime.length + ' ' + dashboardAvgDowntimeCategory + ' incident' + (withDowntime.length !== 1 ? 's' : '') + ' measured'
+    : 'no downtime recorded';
 
   // SLA Breach count — Historian incidents are tracked separately and are
   // excluded here the same way they already are from Missed MTTR.

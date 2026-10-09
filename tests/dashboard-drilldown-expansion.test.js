@@ -26,7 +26,7 @@ test('every remaining dashboard KPI card is wired as an accessible drill-down co
 test('openMetricDrillDown supports the new computed metrics without altering the existing 4', () => {
   assert.match(frontend, /function openMetricDrillDown\(metric, customerName, reportingCategory, extra\)/);
   assert.match(frontend, /\['mttr', 'mttd', 'open', 'sla', 'resolutionAvg', 'downtime', 'historianDowntime', 'slaBreachChart', 'dow', 'byProject', 'byAreaOpen'\]\.indexOf\(metric\) === -1/);
-  assert.match(frontend, /predicate = function \(inc\) \{ return \(inc\.status === 'Closed' \|\| inc\.status === 'Resolved'\) && getIncResolutionMinutes\(inc\) > 0; \};/);
+  assert.match(frontend, /predicate = function \(inc\) \{ return \(inc\.status === 'Closed' \|\| inc\.status === 'Resolved'\) && getIncDowntimeMinutes\(inc\) > 0 && \(dashboardAvgDowntimeCategory === 'historian' \? isHistorianIncident\(inc\) : !isHistorianIncident\(inc\)\); \};/);
   assert.match(frontend, /predicate = function \(inc\) \{ return \(inc\.status === 'Closed' \|\| inc\.status === 'Resolved'\) && !isHistorianIncident\(inc\); \};/);
   assert.match(frontend, /predicate = function \(inc\) \{ return \(inc\.status === 'Closed' \|\| inc\.status === 'Resolved'\) && isHistorianIncident\(inc\); \};/);
   assert.match(frontend, /predicate = function \(inc\) \{ var d = new Date\(inc\.date\); return !isNaN\(d\) && d\.getDay\(\) === extra; \};/);
@@ -109,4 +109,29 @@ test('the customer bar chart preserves both customer and severity when a specifi
   assert.match(impl, /var seg = null;/);
   assert.match(impl, /drillDownToIncidents\(\{ customer: b\.label, severity: seg\.sev, _label: b\.label \+ ' — ' \+ seg\.sev \+ ' \(' \+ seg\.cnt \+ ' incidents\)' \}\);/);
   assert.match(impl, /drillDownToIncidents\(\{ customer: b\.label, _label: b\.label \+ ' \(' \+ b\.total \+ ' incidents\)' \}\);/);
+});
+
+// ── Requirement: the "Avg Resolution" card now shows Avg Downtime, with a ──
+// ── dropdown to view it separately for Application vs Historian incidents ──
+test('the Avg Downtime card has its own Application/Historian dropdown, independent of the card\'s own onclick drill-down', () => {
+  assert.match(html, /id="avgDowntimeCategorySelect" onclick="event\.stopPropagation\(\)" onchange="event\.stopPropagation\(\);changeAvgDowntimeCategory\(this\.value\)"/);
+  assert.match(html, /<option value="application">Application<\/option>\s*\n<option value="historian">Historian<\/option>/);
+  assert.match(frontend, /function changeAvgDowntimeCategory\(value\) \{\s*\n\s*dashboardAvgDowntimeCategory = \(value === 'historian'\) \? 'historian' : 'application';\s*\n\s*updateStats\(\);\s*\n\}/);
+});
+
+test('updateStats computes Avg Downtime from the same downtimeCategories partition as Total/Historian Downtime (never a separate classification), and disables the Historian option (falling back to Application) whenever the Historian Downtime card itself is hidden', () => {
+  const start = frontend.indexOf('function updateStats()');
+  const end = frontend.indexOf('function ', frontend.indexOf('var dashboardMttrIncidents', start));
+  const impl = frontend.slice(start, end);
+  assert.match(impl, /var avgDowntimeIncidents = dashboardAvgDowntimeCategory === 'historian' \? downtimeCategories\.historian : downtimeCategories\.application;/);
+  assert.match(impl, /var withDowntime = avgDowntimeIncidents\.filter\(function \(i\) \{ return getIncDowntimeMinutes\(i\) > 0; \}\);/);
+  assert.match(impl, /if \(historianOption\) historianOption\.disabled = !showHistorianCard;/);
+  assert.match(impl, /if \(!showHistorianCard\) dashboardAvgDowntimeCategory = 'application';/);
+  assert.doesNotMatch(impl, /getIncResolutionMinutes/, 'Avg Downtime must no longer be based on MTTR/recorded resolution time');
+});
+
+test('the resolutionAvg drill-down shows "Actual Downtime" (via getIncDowntimeMinutes) and a category-aware title, matching the card\'s own dropdown selection', () => {
+  assert.match(frontend, /\(metric === 'downtime' \|\| metric === 'historianDowntime' \|\| metric === 'resolutionAvg'\) \? 'Actual Downtime' : 'Actual Duration';/);
+  assert.match(frontend, /\(metric === 'downtime' \|\| metric === 'historianDowntime' \|\| metric === 'resolutionAvg'\) \? getIncDowntimeMinutes\(inc\)\s*\n\s*: getIncResolutionMinutes\(inc\);/);
+  assert.match(frontend, /metric === 'resolutionAvg' \? 'Average Downtime \(' \+ \(dashboardAvgDowntimeCategory === 'historian' \? 'Historian' : 'Application'\) \+ '\) — Contributing Incidents'/);
 });

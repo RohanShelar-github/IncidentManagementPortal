@@ -404,8 +404,14 @@
 <div class="stat-value" id="statClosed">114</div>
 <div class="stat-delta" id="statClosedSub">resolved in current filter</div>
 </div>
-<div class="stat-card purple metric-kpi-card" id="dashboardCardAvgResolution" onclick="openMetricDrillDown('resolutionAvg')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View incidents with recorded resolution time">
-<div class="stat-label">Avg Resolution</div>
+<div class="stat-card purple metric-kpi-card" id="dashboardCardAvgResolution" onclick="openMetricDrillDown('resolutionAvg')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View incidents contributing to average downtime">
+<div class="stat-label" style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+<span>Avg Downtime</span>
+<select id="avgDowntimeCategorySelect" onclick="event.stopPropagation()" onchange="event.stopPropagation();changeAvgDowntimeCategory(this.value)" style="font-size:10px;padding:1px 3px;max-width:90px;background:var(--surface2);color:var(--text-muted);border:1px solid var(--border);border-radius:4px">
+<option value="application">Application</option>
+<option value="historian">Historian</option>
+</select>
+</div>
 <div class="stat-value" id="statAvgResolution">—</div>
 <div class="stat-delta" id="statAvgResolutionSub">closed incidents measured</div>
 </div>
@@ -1800,7 +1806,7 @@
 <label class="perm-check" onclick="togglePerm(this)"><input type="checkbox" value="view_dashboard_total_incidents"/> Dashboard: Total Incidents</label>
 <label class="perm-check" onclick="togglePerm(this)"><input type="checkbox" value="view_dashboard_open_active"/> Dashboard: Open / Active</label>
 <label class="perm-check" onclick="togglePerm(this)"><input type="checkbox" value="view_dashboard_resolved"/> Dashboard: Resolved</label>
-<label class="perm-check" onclick="togglePerm(this)"><input type="checkbox" value="view_dashboard_avg_resolution"/> Dashboard: Avg Resolution</label>
+<label class="perm-check" onclick="togglePerm(this)"><input type="checkbox" value="view_dashboard_avg_resolution"/> Dashboard: Avg Downtime</label>
 <label class="perm-check" onclick="togglePerm(this)"><input type="checkbox" value="view_dashboard_total_downtime"/> Dashboard: Total Downtime</label>
 <label class="perm-check" onclick="togglePerm(this)"><input type="checkbox" value="view_dashboard_historian_downtime"/> Dashboard: Historian Downtime</label>
 <label class="perm-check" onclick="togglePerm(this)"><input type="checkbox" value="view_dashboard_sla_breach"/> Dashboard: SLA Breach Rate</label>
