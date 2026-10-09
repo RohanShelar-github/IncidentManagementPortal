@@ -11620,7 +11620,35 @@ function acRowMatchesFilters(r) {
   return true;
 }
 
+// Mirrors the Incidents/Reports pages' own clear-filters icon (see
+// updateIncidentClearButton/updateReportClearButton) — shown only once a
+// filter actually differs from its default, including the Time Window
+// select (whose default is 14 days, not empty, unlike the other filters).
+function updateAcClearButton() {
+  const button = document.getElementById('acClearFiltersBtn');
+  if (!button) return;
+  const daysEl = document.getElementById('acFilterDays');
+  const hasFilter = (daysEl && daysEl.value !== '14') ||
+    ['acFilterCategory', 'acFilterSeverity', 'acFilterState', 'acFilterCustomer', 'acFilterDateFrom', 'acFilterDateTo']
+      .some(function (id) { return Boolean(document.getElementById(id)?.value); });
+  button.style.display = hasFilter ? '' : 'none';
+}
+
+function clearAlertComplianceFilters() {
+  const daysEl = document.getElementById('acFilterDays');
+  const daysChanged = Boolean(daysEl && daysEl.value !== '14');
+  if (daysEl) daysEl.value = '14';
+  ['acFilterCategory', 'acFilterSeverity', 'acFilterState', 'acFilterCustomer', 'acFilterDateFrom', 'acFilterDateTo'].forEach(function (id) {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  // The Time Window change needs a fresh server fetch (it changes what's
+  // requested, not just what's shown); the rest are purely client-side.
+  if (daysChanged) loadAlertComplianceReport();
+  else { acCurrentPage = 1; renderAlertComplianceTable(); }
+}
+
 function renderAlertComplianceTable() {
+  updateAcClearButton();
   const tbody = document.getElementById('acTableBody');
   const countEl = document.getElementById('acRowCount');
   if (!tbody) return;

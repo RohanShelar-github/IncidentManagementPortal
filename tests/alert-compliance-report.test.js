@@ -560,6 +560,30 @@ test('acRowMatchesFilters also filters by a From/To date range against the group
   assert.match(reportController, /day: group\.day,/, 'the report row must expose the IST day key the date filter relies on');
 });
 
+// ── Requirement: a clear-filters icon, mirroring the Incidents/Reports   ──
+// ── pages' own (updateIncidentClearButton/clearFilters,                 ──
+// ── updateReportClearButton/clearReportFilters) — shown only once a     ──
+// ── filter differs from its default, including Time Window (whose      ──
+// ── default is 14 days, not empty, unlike the other five filters)       ──
+test('the Alert Compliance filter bar has its own clear-filters icon, hidden by default', () => {
+  assert.match(html, /<button class="filter-clear-icon" id="acClearFiltersBtn" onclick="clearAlertComplianceFilters\(\)" style="display:none"/);
+  assert.match(html, /id="acFilterDays" onchange="loadAlertComplianceReport\(\);updateAcClearButton\(\)"/);
+});
+
+test('updateAcClearButton shows the icon when Time Window is off its 14-day default or any of the other five filters is set, and renderAlertComplianceTable always keeps it in sync', () => {
+  assert.match(frontend, /function updateAcClearButton\(\) \{/);
+  assert.match(frontend, /const hasFilter = \(daysEl && daysEl\.value !== '14'\) \|\|\s*\n\s*\['acFilterCategory', 'acFilterSeverity', 'acFilterState', 'acFilterCustomer', 'acFilterDateFrom', 'acFilterDateTo'\]/);
+  assert.match(frontend, /function renderAlertComplianceTable\(\) \{\s*\n\s*updateAcClearButton\(\);/);
+});
+
+test('clearAlertComplianceFilters resets Time Window to 14 days and all five other filters to empty, re-fetching from the server only when Time Window actually changed', () => {
+  assert.match(frontend, /function clearAlertComplianceFilters\(\) \{/);
+  const body = frontend.slice(frontend.indexOf('function clearAlertComplianceFilters'), frontend.indexOf('function clearAlertComplianceFilters') + 800);
+  assert.match(body, /const daysChanged = Boolean\(daysEl && daysEl\.value !== '14'\);/);
+  assert.match(body, /if \(daysEl\) daysEl\.value = '14';/);
+  assert.match(body, /if \(daysChanged\) loadAlertComplianceReport\(\);\s*\n\s*else \{ acCurrentPage = 1; renderAlertComplianceTable\(\); \}/);
+});
+
 test('acDeleteSelectedAlerts confirms once (via the shared acRequestDelete helper), posts all selected items in a single bulk request, and clears the selection on success', () => {
   assert.match(frontend, /function acDeleteSelectedAlerts\(\) \{/);
   assert.match(frontend, /acRequestDelete\(items, 'Remove ' \+ label \+ /);

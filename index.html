@@ -1362,7 +1362,7 @@
 <div class="filter-bar" style="margin-bottom:20px">
 <div class="filter-group">
 <div class="filter-label">Time Window</div>
-<select id="acFilterDays" onchange="loadAlertComplianceReport()">
+<select id="acFilterDays" onchange="loadAlertComplianceReport();updateAcClearButton()">
 <option value="7">Last 7 days</option>
 <option selected="" value="14">Last 14 days</option>
 <option value="30">Last 30 days</option>
@@ -1413,6 +1413,10 @@
 <div class="filter-group">
 <div class="filter-label">To Date</div>
 <input id="acFilterDateTo" onchange="acFilterChanged()" type="date"/>
+</div>
+<div class="filter-group filter-clear-group">
+<div class="filter-label" aria-hidden="true">&nbsp;</div>
+<button class="filter-clear-icon" id="acClearFiltersBtn" onclick="clearAlertComplianceFilters()" style="display:none" title="Clear filters" aria-label="Clear filters"><svg aria-hidden="true" fill="none" height="15" stroke="currentColor" stroke-linecap="round" stroke-width="2" viewBox="0 0 24 24" width="15"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
 </div>
 </div>
 <!-- Results table -->
