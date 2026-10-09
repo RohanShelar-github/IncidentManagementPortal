@@ -522,33 +522,31 @@
 </div>
 </div>
 <!-- Incident Heatmap -->
-<!-- My Incidents + Customer Health -->
-<div class="charts-grid-2" style="margin-top:16px">
-<!-- My Incidents -->
+<!-- Recent + Activity -->
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-top:16px">
 <div class="chart-card">
-<div class="chart-header" style="margin-bottom:4px">
-<div>
-<div class="chart-title">My Incidents</div>
-<div class="chart-sub" id="myIncSub">Open incidents assigned to you</div>
+<div class="chart-header">
+<div class="chart-title">Recent Incidents</div>
+<button class="btn btn-secondary btn-sm" onclick="navigate('incidents', document.querySelector('.nav-item:nth-child(5)'))">View All</button>
 </div>
-<span id="myIncBadge" style="background:rgba(247,92,124,0.15);color:var(--danger);font-family:var(--font-mono);font-size:11px;padding:3px 9px;border-radius:10px;font-weight:600"></span>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Title</th>
+<th>Severity</th>
+<th>Status</th>
+<th>Customer</th>
+</tr>
+</thead>
+<tbody id="recentTable"></tbody>
+</table>
 </div>
-<div id="myIncList" style="margin-top:8px"></div>
-</div>
-<!-- Customer Health -->
 <div class="chart-card">
-<div class="chart-header" style="margin-bottom:12px">
-<div>
-<div class="chart-title">Customer Health</div>
-<div class="chart-sub">Based on open + critical incidents</div>
+<div class="chart-header">
+<div class="chart-title">Activity Feed</div>
 </div>
-<div style="display:flex;gap:8px;font-size:10px;color:var(--text3);font-family:var(--font-mono);align-items:center">
-<span style="display:flex;align-items:center;gap:4px"><span style="width:7px;height:7px;border-radius:50%;background:var(--success);display:inline-block"></span>Healthy</span>
-<span style="display:flex;align-items:center;gap:4px"><span style="width:7px;height:7px;border-radius:50%;background:var(--warning);display:inline-block"></span>At Risk</span>
-<span style="display:flex;align-items:center;gap:4px"><span style="width:7px;height:7px;border-radius:50%;background:var(--danger);display:inline-block"></span>Critical</span>
-</div>
-</div>
-<div class="health-grid" id="healthGrid"></div>
+<div class="activity-list" id="activityFeed"></div>
 </div>
 </div>
 <!-- ─── DOWNTIME BREAKDOWN ──────────────────────────────── -->
@@ -626,31 +624,33 @@
 <div class="chart-container" style="height:200px"><canvas id="dowChart"></canvas></div>
 </div>
 </div>
-<!-- Recent + Activity -->
-<div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-top:16px">
+<!-- My Incidents + Customer Health -->
+<div class="charts-grid-2" style="margin-top:16px">
+<!-- My Incidents -->
 <div class="chart-card">
-<div class="chart-header">
-<div class="chart-title">Recent Incidents</div>
-<button class="btn btn-secondary btn-sm" onclick="navigate('incidents', document.querySelector('.nav-item:nth-child(5)'))">View All</button>
+<div class="chart-header" style="margin-bottom:4px">
+<div>
+<div class="chart-title">My Incidents</div>
+<div class="chart-sub" id="myIncSub">Open incidents assigned to you</div>
 </div>
-<table>
-<thead>
-<tr>
-<th>ID</th>
-<th>Title</th>
-<th>Severity</th>
-<th>Status</th>
-<th>Customer</th>
-</tr>
-</thead>
-<tbody id="recentTable"></tbody>
-</table>
+<span id="myIncBadge" style="background:rgba(247,92,124,0.15);color:var(--danger);font-family:var(--font-mono);font-size:11px;padding:3px 9px;border-radius:10px;font-weight:600"></span>
 </div>
+<div id="myIncList" style="margin-top:8px"></div>
+</div>
+<!-- Customer Health -->
 <div class="chart-card">
-<div class="chart-header">
-<div class="chart-title">Activity Feed</div>
+<div class="chart-header" style="margin-bottom:12px">
+<div>
+<div class="chart-title">Customer Health</div>
+<div class="chart-sub">Based on open + critical incidents</div>
 </div>
-<div class="activity-list" id="activityFeed"></div>
+<div style="display:flex;gap:8px;font-size:10px;color:var(--text3);font-family:var(--font-mono);align-items:center">
+<span style="display:flex;align-items:center;gap:4px"><span style="width:7px;height:7px;border-radius:50%;background:var(--success);display:inline-block"></span>Healthy</span>
+<span style="display:flex;align-items:center;gap:4px"><span style="width:7px;height:7px;border-radius:50%;background:var(--warning);display:inline-block"></span>At Risk</span>
+<span style="display:flex;align-items:center;gap:4px"><span style="width:7px;height:7px;border-radius:50%;background:var(--danger);display:inline-block"></span>Critical</span>
+</div>
+</div>
+<div class="health-grid" id="healthGrid"></div>
 </div>
 </div>
 <!-- ─── LIVE SLA COUNTDOWN ───────────────────────────────── -->
