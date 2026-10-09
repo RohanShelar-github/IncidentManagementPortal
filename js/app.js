@@ -7482,21 +7482,31 @@ function _drawMTTR(gridC, textC, textC2, data) {
   for (var m = 5; m >= 0; m--) {
     var d = new Date(now.getFullYear(), now.getMonth() - m, 1);
     var mo = d.toLocaleString('default', { month: 'short' });
-    var yr = d.getFullYear();
+    // Bucket by each incident's own recorded wall-clock date (i.date), not by
+    // re-parsing it via new Date(i.date) — a date-only string like
+    // "2026-06-01" is parsed as UTC midnight, and reading .getMonth() back
+    // off that converts it into the VIEWER's own browser timezone, silently
+    // shifting incidents opened right at a month boundary into the wrong
+    // bucket depending on who's viewing the chart (same bug already fixed in
+    // the Incident Trend and SLA Breach charts).
+    var monthKey = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
     labels.push(mo);
     monthDates.push(d);
 
     var monthIncs = data.filter(function (i) {
       if (i.status !== 'Closed' && i.status !== 'Resolved') return false;
-      var id = new Date(i.date);
-      return id.getMonth() === d.getMonth() && id.getFullYear() === yr;
+      return String(i.date || '').slice(0, 7) === monthKey;
     });
 
-    if (monthIncs.length === 0) { vals.push(0); continue; }
-    var totalH = monthIncs.reduce(function (sum, i) {
-      return sum + ((i.downtimeH || 0) + (i.downtimeM || 0) / 60);
-    }, 0);
-    vals.push(Math.round(totalH / monthIncs.length * 10) / 10);
+    // MTTR when recorded, else recorded downtime (getIncResolutionMinutes —
+    // the same measure the Dashboard's own Avg Downtime/Resolution figures
+    // use), and incidents with neither recorded are excluded entirely rather
+    // than counted as 0 — otherwise an unmeasured incident silently drags
+    // the average toward zero instead of just not contributing to it.
+    var withResolution = monthIncs.filter(function (i) { return getIncResolutionMinutes(i) > 0; });
+    if (withResolution.length === 0) { vals.push(0); continue; }
+    var totalMinutes = withResolution.reduce(function (sum, i) { return sum + getIncResolutionMinutes(i); }, 0);
+    vals.push(Math.round(totalMinutes / withResolution.length / 60 * 10) / 10);
   }
 
   var pad = { t: 20, r: 20, b: 48, l: 42 };
@@ -7573,7 +7583,7 @@ function _drawMTTR(gridC, textC, textC2, data) {
     var idx = findMttrTrendHit(e);
     if (idx === -1) { _hideTip(); el.style.cursor = 'default'; return; }
     el.style.cursor = 'pointer';
-    _showTip(el, '<b>' + labels[idx] + '</b><br><span style="color:#f7b94f">' + vals[idx] + 'h avg downtime</span>'
+    _showTip(el, '<b>' + labels[idx] + '</b><br><span style="color:#f7b94f">' + vals[idx] + 'h avg resolution time</span>'
       + '<br><span style="color:#666;font-size:10px">Click to filter incidents</span>', e);
   };
   el.onclick = function (e) {

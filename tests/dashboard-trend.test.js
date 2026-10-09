@@ -49,3 +49,36 @@ test('monthBounds (start/end Date objects, used only by the click-to-drill-down 
   assert.match(implementation, /monthBounds\.push\(\{ start: monthStart, end: monthEnd \}\);/);
   assert.match(implementation, /if \(best < 0 \|\| bestDist >= cW \/ \(labels\.length - 1\) \* 0\.65 \|\| !monthBounds\[best\]\) return;/);
 });
+
+// MTTR Trend used to average raw downtimeH/downtimeM across EVERY closed
+// incident that month, including ones with no downtime recorded at all
+// (0h 0m) — diluting the average toward zero rather than excluding them, and
+// never once looking at mttr_minutes even when it was recorded. Verified
+// against live data: June had 28 of 32 closed incidents with zero recorded
+// downtime, so the displayed "0.2h" buried a true 1.3h average among the
+// incidents that actually had a measured duration.
+test('MTTR Trend averages getIncResolutionMinutes (MTTR when recorded, else downtime) excluding incidents with neither recorded, instead of raw downtimeH/downtimeM diluted by unmeasured incidents', () => {
+  const start = frontend.indexOf('function _drawMTTR(');
+  const end = frontend.indexOf('function _drawAreaBreakdown(', start);
+  const implementation = frontend.slice(start, end);
+
+  assert.match(implementation, /var withResolution = monthIncs\.filter\(function \(i\) \{ return getIncResolutionMinutes\(i\) > 0; \}\);/);
+  assert.match(implementation, /if \(withResolution\.length === 0\) \{ vals\.push\(0\); continue; \}/);
+  assert.match(implementation, /var totalMinutes = withResolution\.reduce\(function \(sum, i\) \{ return sum \+ getIncResolutionMinutes\(i\); \}, 0\);/);
+  assert.match(implementation, /vals\.push\(Math\.round\(totalMinutes \/ withResolution\.length \/ 60 \* 10\) \/ 10\);/);
+  assert.doesNotMatch(implementation, /\(i\.downtimeH \|\| 0\) \+ \(i\.downtimeM \|\| 0\) \/ 60/, 'must not average raw downtime fields directly — getIncResolutionMinutes already prefers MTTR and falls back to downtime');
+});
+
+// Same wall-clock-vs-browser-timezone bug as the Incident Trend chart: a
+// date-only string like "2026-06-01" parses as UTC midnight, and reading
+// .getMonth()/.getFullYear() back off that converts it into the VIEWER's own
+// browser timezone instead of comparing the incident's own recorded date.
+test('MTTR Trend buckets by each incident\'s own recorded wall-clock date (i.date), not by converting new Date(i.date) into the viewer\'s own browser timezone', () => {
+  const start = frontend.indexOf('function _drawMTTR(');
+  const end = frontend.indexOf('function _drawAreaBreakdown(', start);
+  const implementation = frontend.slice(start, end);
+
+  assert.match(implementation, /var monthKey = d\.getFullYear\(\) \+ '-' \+ String\(d\.getMonth\(\) \+ 1\)\.padStart\(2, '0'\);/);
+  assert.match(implementation, /return String\(i\.date \|\| ''\)\.slice\(0, 7\) === monthKey;/);
+  assert.doesNotMatch(implementation, /var id = new Date\(i\.date\);/, 'must not re-parse i.date via new Date() and compare .getMonth()/.getFullYear() in the viewer\'s own browser timezone');
+});
