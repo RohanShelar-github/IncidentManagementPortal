@@ -7399,10 +7399,12 @@ function _drawSLABreach(gridC, textC, textC2, data) {
     var rH = breached[sev] > 0 ? (breached[sev] / maxV) * cH : 0;
     var y0 = pad.t + cH;
 
-    // On-time bar (green-ish)
+    // On-time bar (blue — paired against Breached's red; was green, but
+    // red/green was the only signal distinguishing the two bars, which is
+    // indistinguishable for red-green colorblind viewers)
     if (bH > 0) {
       var grad = ctx.createLinearGradient(0, y0 - bH, 0, y0);
-      grad.addColorStop(0, 'rgba(45,212,160,0.9)'); grad.addColorStop(1, 'rgba(45,212,160,0.4)');
+      grad.addColorStop(0, 'rgba(79,142,247,0.9)'); grad.addColorStop(1, 'rgba(79,142,247,0.4)');
       ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.rect(cx - barW, y0 - bH, barW, bH);
@@ -7432,7 +7434,7 @@ function _drawSLABreach(gridC, textC, textC2, data) {
 
   // Legend
   var ly = H - 6;
-  [['On-time', 'rgba(45,212,160,0.8)'], ['Breached', 'rgba(247,92,124,0.8)']].forEach(function (item, i) {
+  [['On-time', 'rgba(79,142,247,0.8)'], ['Breached', 'rgba(247,92,124,0.8)']].forEach(function (item, i) {
     var lx = W / 2 - 60 + i * 90;
     ctx.fillStyle = item[1];
     ctx.fillRect(lx, ly - 8, 10, 8);
@@ -7551,7 +7553,7 @@ function _drawMTTR(gridC, textC, textC2, data) {
   ctx.fillStyle = areaGrad; ctx.fill();
 
   // Line
-  ctx.shadowColor = '#f7b94f'; ctx.shadowBlur = 6;
+  ctx.shadowColor = '#f7b94f'; ctx.shadowBlur = 3;
   ctx.beginPath();
   pts.forEach(function (p, i) {
     if (i === 0) ctx.moveTo(p.x, p.y);
@@ -7647,8 +7649,11 @@ function _drawAreaBreakdown(gridC, textC, textC2, data) {
     ctx.fillStyle = g1;
     if (openH > 0) { ctx.fillRect(cx - bW, y0 - openH, bW, openH); barRects.push({ x: cx - bW, y: y0 - openH, w: bW, h: openH, area: area, closed: false, count: map[area].open }); }
 
+    // Closed uses blue rather than green — paired against Open's red, that
+    // was the only signal distinguishing the two bars, indistinguishable
+    // for red-green colorblind viewers.
     var g2 = ctx.createLinearGradient(0, y0 - closedH, 0, y0);
-    g2.addColorStop(0, 'rgba(45,212,160,0.9)'); g2.addColorStop(1, 'rgba(45,212,160,0.3)');
+    g2.addColorStop(0, 'rgba(79,142,247,0.9)'); g2.addColorStop(1, 'rgba(79,142,247,0.3)');
     ctx.fillStyle = g2;
     if (closedH > 0) { ctx.fillRect(cx + 2, y0 - closedH, bW, closedH); barRects.push({ x: cx + 2, y: y0 - closedH, w: bW, h: closedH, area: area, closed: true, count: map[area].closed }); }
 
@@ -7658,7 +7663,7 @@ function _drawAreaBreakdown(gridC, textC, textC2, data) {
 
   // Legend
   var ly = H - 6;
-  [['Open', 'rgba(247,92,124,0.8)'], ['Closed', 'rgba(45,212,160,0.8)']].forEach(function (item, i) {
+  [['Open', 'rgba(247,92,124,0.8)'], ['Closed', 'rgba(79,142,247,0.8)']].forEach(function (item, i) {
     var lx = W / 2 - 55 + i * 80;
     ctx.fillStyle = item[1]; ctx.fillRect(lx, ly - 8, 10, 8);
     ctx.fillStyle = textC2; ctx.font = '10px sans-serif'; ctx.textAlign = 'left';
@@ -7907,8 +7912,10 @@ function _drawTrend(gridC, textC, textC2, data) {
 
   function drawSeries(data, color, fillTop, fillBot, label, dotColor) {
     var p = getpts(data);
-    // Glow effect - draw thick blurred line first
-    ctx.shadowColor = color; ctx.shadowBlur = 8;
+    // Glow effect - draw thick blurred line first. Kept deliberately subtle
+    // (halved from the original 8/10) — a constantly-visible ops dashboard
+    // shouldn't have its lines/dots blooming enough to be visually tiring.
+    ctx.shadowColor = color; ctx.shadowBlur = 4;
     bezierLine(p, ctx);
     ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.stroke();
     ctx.shadowBlur = 0;
@@ -7923,7 +7930,7 @@ function _drawTrend(gridC, textC, textC2, data) {
     // Dots with glow — only draw if point is within chart area
     p.forEach(function (pt, i) {
       if (pt.y < pad.t - 2 || pt.y > pad.t + cH + 2) return; // skip out-of-bounds
-      ctx.shadowColor = color; ctx.shadowBlur = 10;
+      ctx.shadowColor = color; ctx.shadowBlur = 5;
       ctx.beginPath(); ctx.arc(pt.x, Math.max(pad.t, Math.min(pad.t + cH, pt.y)), 5, 0, Math.PI * 2);
       ctx.fillStyle = color; ctx.fill();
       ctx.shadowBlur = 0;
@@ -7933,8 +7940,12 @@ function _drawTrend(gridC, textC, textC2, data) {
     });
   }
 
-  // Draw closed first (behind), then open
-  drawSeries(dClosed, '#2dd4a0', 'rgba(45,212,160,0.25)', 'rgba(45,212,160,0.02)', 'Closed');
+  // Draw closed first (behind), then open. Closed uses blue (#4f8ef7, the
+  // app's own --accent) rather than green — paired against Opened's red,
+  // red/green was the only signal distinguishing the two series, which is
+  // indistinguishable for red-green colorblind viewers. Red vs blue stays
+  // distinguishable under every common form of color blindness.
+  drawSeries(dClosed, '#4f8ef7', 'rgba(79,142,247,0.25)', 'rgba(79,142,247,0.02)', 'Closed');
   drawSeries(dOpen, '#f75c7c', 'rgba(247,92,124,0.25)', 'rgba(247,92,124,0.02)', 'Opened');
 
   // Restore clip before drawing legend (legend is outside chart area)
@@ -7946,7 +7957,7 @@ function _drawTrend(gridC, textC, textC2, data) {
   // of standing out as its own control.
   var isLightMode = document.body.classList.contains('light-mode');
   var ly = H - 10;
-  [['Opened', '#f75c7c'], ['Closed', '#2dd4a0']].forEach(function (item, i) {
+  [['Opened', '#f75c7c'], ['Closed', '#4f8ef7']].forEach(function (item, i) {
     var lx = W / 2 - 55 + i * 100;
     // Pill background
     ctx.fillStyle = isLightMode ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.12)';
@@ -7955,7 +7966,7 @@ function _drawTrend(gridC, textC, textC2, data) {
     else ctx.rect(lx - 4, ly - 13, 80, 16);
     ctx.fill();
     // Dot
-    ctx.fillStyle = item[1]; ctx.shadowColor = item[1]; ctx.shadowBlur = 6;
+    ctx.fillStyle = item[1]; ctx.shadowColor = item[1]; ctx.shadowBlur = 3;
     ctx.beginPath(); ctx.arc(lx + 6, ly - 5, 4, 0, Math.PI * 2); ctx.fill();
     ctx.shadowBlur = 0;
     ctx.fillStyle = textC2; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'left';
@@ -7973,21 +7984,21 @@ function _drawTrend(gridC, textC, textC2, data) {
       // Redraw and add crosshair
       _drawTrend(gridC, textC, textC2, data);
       var px = pOpen[best].x;
-      ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = isLightMode ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.2)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
       ctx.beginPath(); ctx.moveTo(px, pad.t); ctx.lineTo(px, pad.t + cH); ctx.stroke();
       ctx.setLineDash([]);
       // Highlight dots
-      [[pOpen[best], '#f75c7c'], [pClosed[best], '#2dd4a0']].forEach(function (item) {
-        ctx.shadowColor = item[1]; ctx.shadowBlur = 16;
+      [[pOpen[best], '#f75c7c'], [pClosed[best], '#4f8ef7']].forEach(function (item) {
+        ctx.shadowColor = item[1]; ctx.shadowBlur = 8;
         ctx.beginPath(); ctx.arc(item[0].x, item[0].y, 7, 0, Math.PI * 2);
         ctx.fillStyle = item[1]; ctx.fill(); ctx.shadowBlur = 0;
         ctx.beginPath(); ctx.arc(item[0].x, item[0].y, 3, 0, Math.PI * 2);
-        ctx.fillStyle = 'white'; ctx.fill();
+        ctx.fillStyle = isLightMode ? '#ffffff' : '#0d0d1a'; ctx.fill();
       });
       _showTip(el,
         '<div style="font-weight:700;margin-bottom:4px;color:#e0e0f0">' + labels[best] + '</div>'
         + '<div style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:50%;background:#f75c7c;display:inline-block"></span><span style="color:#aaa">Opened</span><b style="margin-left:auto;padding-left:16px;color:#f75c7c">' + dOpen[best] + '</b></div>'
-        + '<div style="display:flex;align-items:center;gap:6px;margin-top:3px"><span style="width:10px;height:10px;border-radius:50%;background:#2dd4a0;display:inline-block"></span><span style="color:#aaa">Closed</span><b style="margin-left:auto;padding-left:16px;color:#2dd4a0">' + dClosed[best] + '</b></div>'
+        + '<div style="display:flex;align-items:center;gap:6px;margin-top:3px"><span style="width:10px;height:10px;border-radius:50%;background:#4f8ef7;display:inline-block"></span><span style="color:#aaa">Closed</span><b style="margin-left:auto;padding-left:16px;color:#4f8ef7">' + dClosed[best] + '</b></div>'
         + '<div style="margin-top:6px;color:#666;font-size:10px;border-top:1px solid rgba(255,255,255,0.08);padding-top:4px">Click to filter incidents opened this month</div>',
         e);
     } else {
@@ -8012,6 +8023,12 @@ function _drawTrend(gridC, textC, textC2, data) {
   el.onmouseleave = function () { _hideTip(); _drawTrend(gridC, textC, textC2, data); };
 }
 
+// Shared severity→color map for the Donut, Customer Distribution, and
+// Resolution Timeline charts — previously redeclared independently (with
+// identical values) in each of the three, risking future drift if one copy
+// were ever edited without the others.
+var SEVERITY_CHART_COLORS = { Critical: '#f75c7c', High: '#f7b94f', Medium: '#4f8ef7', Normal: '#2dd4a0' };
+
 /* ── 2. SEVERITY DONUT ─────────────────────────────────────── */
 function _drawDonut(textC, data) {
   data = data || incidents;
@@ -8022,7 +8039,7 @@ function _drawDonut(textC, data) {
   ctx.clearRect(0, 0, W, H);
 
   var sevs = ['Critical', 'High', 'Medium', 'Normal'];
-  var colors = ['#f75c7c', '#f7b94f', '#4f8ef7', '#2dd4a0'];
+  var colors = sevs.map(function (s) { return SEVERITY_CHART_COLORS[s]; });
   var vals = sevs.map(function (s) { return data.filter(function (i) { return i.severity === s; }).length; });
   var _rawTotal = vals.reduce(function (a, b) { return a + b; }, 0);
   if (!_rawTotal) {
@@ -8050,10 +8067,13 @@ function _drawDonut(textC, data) {
     angle += sweep;
   });
 
-  // Center text
+  // Center text — the big total number used to be a hardcoded near-white
+  // (#e0e0f0) regardless of theme, which would look washed-out on light
+  // mode's light background.
   ctx.fillStyle = textC; ctx.font = '11px sans-serif'; ctx.textAlign = 'center';
   ctx.fillText('Total', cx, cy - 4);
-  ctx.fillStyle = '#e0e0f0'; ctx.font = 'bold 18px sans-serif';
+  ctx.fillStyle = document.body.classList.contains('light-mode') ? '#333' : '#e0e0f0';
+  ctx.font = 'bold 18px sans-serif';
   ctx.fillText(total, cx, cy + 14);
 
   // Legend  
@@ -8119,8 +8139,9 @@ function _drawCustomer(gridC, textC, textC2, data) {
   var ctx = r.ctx, W = r.W, H = r.H;
   ctx.clearRect(0, 0, W, H);
 
-  var sevColors = { 'Critical': '#f75c7c', 'High': '#f7b94f', 'Medium': '#4f8ef7', 'Normal': '#2dd4a0' };
+  var sevColors = SEVERITY_CHART_COLORS;
   var sevOrder = ['Critical', 'High', 'Medium', 'Normal'];
+  var isLightMode = document.body.classList.contains('light-mode');
 
   var cc = {};
   data.forEach(function (i) {
@@ -8160,10 +8181,12 @@ function _drawCustomer(gridC, textC, textC2, data) {
     var stackY = pad.t + cH;
     var isMax = item.k === maxBar.k;
 
-    // Subtle column hover background
+    // Subtle column background — was a flat white-based wash regardless of
+    // theme, which is close to invisible against light mode's own light
+    // background.
     var colBg = ctx.createLinearGradient(0, pad.t, 0, pad.t + cH);
-    colBg.addColorStop(0, 'rgba(255,255,255,0.02)');
-    colBg.addColorStop(1, 'rgba(255,255,255,0)');
+    colBg.addColorStop(0, isLightMode ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.02)');
+    colBg.addColorStop(1, isLightMode ? 'rgba(0,0,0,0)' : 'rgba(255,255,255,0)');
     ctx.fillStyle = colBg;
     ctx.fillRect(x - 2, pad.t, barW + 4, cH);
 
@@ -8193,10 +8216,11 @@ function _drawCustomer(gridC, textC, textC2, data) {
       segs.push({ sev: sev, cnt: cnt, y: stackY, h: bh });
     });
 
-    // Thin white separator lines between segments
+    // Thin separator lines between segments — was a flat white regardless
+    // of theme, barely visible against light mode's own light background.
     segs.forEach(function (seg, si) {
       if (si === 0) return;
-      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.strokeStyle = isLightMode ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.15)';
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(x, seg.y + seg.h);
@@ -8218,7 +8242,7 @@ function _drawCustomer(gridC, textC, textC2, data) {
   });
 
   // Legend — horizontally centered at bottom
-  var legendItems = [['Critical', '#f75c7c'], ['High', '#f7b94f'], ['Medium', '#4f8ef7'], ['Normal', '#2dd4a0']];
+  var legendItems = sevOrder.map(function (s) { return [s, sevColors[s]]; });
   ctx.font = '10px sans-serif';
   var totalW = legendItems.reduce(function (s, l) { return s + ctx.measureText(l[0]).width + 24; }, 0);
   var lx = (W - totalW) / 2, ly = H - 5;
@@ -8295,7 +8319,7 @@ function _drawResolution(gridC, textC, textC2, data) {
   var r = _fitCanvas(el, 220);
   var ctx = r.ctx, W = r.W, H = r.H;
   ctx.clearRect(0, 0, W, H);
-  var severityColors = { Critical: '#f75c7c', High: '#f7b94f', Medium: '#4f8ef7', Normal: '#2dd4a0' };
+  var severityColors = SEVERITY_CHART_COLORS;
   var resolutionGroups = ['Critical', 'High', 'Medium', 'Normal'].map(function (severity) {
     var recorded = data.filter(function (incident) {
       return incident.severity === severity
