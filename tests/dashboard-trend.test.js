@@ -16,7 +16,7 @@ test('Incident Trend uses database-backed monthly opened and closed event counts
   assert.match(implementation, /for \(var monthOffset = 7; monthOffset >= 0; monthOffset--\)/);
   assert.match(implementation, /status === 'closed' \|\| status === 'resolved'/);
   assert.match(implementation, /\['Opened', '#f75c7c'\]/);
-  assert.match(implementation, /ctx\.fillStyle = textC2; ctx\.font = '11px sans-serif'; ctx\.textAlign = 'left';/);
+  assert.match(implementation, /ctx\.fillStyle = textC2; ctx\.font = 'bold 11px sans-serif'; ctx\.textAlign = 'left';/);
   assert.match(implementation, /_drawTrend\(gridC, textC, textC2, data\)/);
   assert.doesNotMatch(implementation, /Simulate cumulative growth|Math\.sin\(|Math\.cos\(|\bweekInc\b|\bbase\s*=/);
 });
@@ -40,6 +40,21 @@ test('Incident Trend buckets by each incident\'s own recorded wall-clock date (i
   assert.match(implementation, /return \(status === 'closed' \|\| status === 'resolved'\) && String\(i\.endDT \|\| ''\)\.slice\(0, 7\) === monthKey;/);
   assert.doesNotMatch(implementation, /getIncidentOpenedTimestamp\(i\)/, 'must not re-derive opened via a UTC instant compared against a browser-local month boundary');
   assert.doesNotMatch(implementation, /getIncidentClosedTimestamp\(i\)/, 'must not re-derive closed via a UTC instant compared against a browser-local month boundary');
+});
+
+// The legend pill background used to be a flat rgba(255,255,255,0.06)
+// regardless of theme. On dark mode's own near-black chart-card background
+// that 6% white tint barely registered, so the "Opened"/"Closed" pills (and
+// the text sitting on them) blended into the card instead of reading as
+// distinct, legible legend chips.
+test('Incident Trend\'s legend pill background is theme-aware (a visible white tint in dark mode, not the same barely-there 0.06 opacity used for both themes), and its text is bold for legibility', () => {
+  const start = frontend.indexOf('function _drawTrend(');
+  const end = frontend.indexOf('/* ── 2. SEVERITY DONUT', start);
+  const implementation = frontend.slice(start, end);
+
+  assert.match(implementation, /var isLightMode = document\.body\.classList\.contains\('light-mode'\);/);
+  assert.match(implementation, /ctx\.fillStyle = isLightMode \? 'rgba\(0,0,0,0\.04\)' : 'rgba\(255,255,255,0\.12\)';/);
+  assert.doesNotMatch(implementation, /ctx\.fillStyle = 'rgba\(255,255,255,0\.06\)';/, 'must not use the old flat, theme-blind pill background');
 });
 
 test('monthBounds (start/end Date objects, used only by the click-to-drill-down handler) are unchanged by the wall-clock bucketing fix', () => {

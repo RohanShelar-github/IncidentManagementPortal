@@ -7939,12 +7939,17 @@ function _drawTrend(gridC, textC, textC2, data) {
 
   // Restore clip before drawing legend (legend is outside chart area)
   ctx.restore();
-  // Stylish legend pills
+  // Stylish legend pills. The pill background used to be a flat
+  // rgba(255,255,255,0.06) regardless of theme — on the dark theme's own
+  // near-black chart-card background that 6% white tint barely registers,
+  // so the pill (and the text sitting on it) blended into the card instead
+  // of standing out as its own control.
+  var isLightMode = document.body.classList.contains('light-mode');
   var ly = H - 10;
   [['Opened', '#f75c7c'], ['Closed', '#2dd4a0']].forEach(function (item, i) {
     var lx = W / 2 - 55 + i * 100;
     // Pill background
-    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.fillStyle = isLightMode ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.12)';
     ctx.beginPath();
     if (ctx.roundRect) ctx.roundRect(lx - 4, ly - 13, 80, 16, 8);
     else ctx.rect(lx - 4, ly - 13, 80, 16);
@@ -7953,7 +7958,7 @@ function _drawTrend(gridC, textC, textC2, data) {
     ctx.fillStyle = item[1]; ctx.shadowColor = item[1]; ctx.shadowBlur = 6;
     ctx.beginPath(); ctx.arc(lx + 6, ly - 5, 4, 0, Math.PI * 2); ctx.fill();
     ctx.shadowBlur = 0;
-    ctx.fillStyle = textC2; ctx.font = '11px sans-serif'; ctx.textAlign = 'left';
+    ctx.fillStyle = textC2; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'left';
     ctx.fillText(item[0], lx + 14, ly);
   });
 
