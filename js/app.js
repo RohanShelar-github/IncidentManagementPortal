@@ -1117,7 +1117,7 @@ function openMetricDrillDown(metric, customerName, reportingCategory, extra) {
     showToast('Access denied: you cannot view this metric', 'error');
     return;
   }
-  if (['mttr', 'mttd', 'open', 'sla', 'resolutionAvg', 'downtime', 'historianDowntime', 'slaBreachChart', 'dow', 'byProject', 'byAreaOpen'].indexOf(metric) === -1) return;
+  if (['mttr', 'mttd', 'open', 'sla', 'resolutionAvg', 'downtime', 'historianDowntime', 'c360Critical', 'c360Downtime', 'slaBreachChart', 'dow', 'byProject', 'byAreaOpen'].indexOf(metric) === -1) return;
   var predicate;
   if (metric === 'mttr') predicate = isMissedMttr;
   else if (metric === 'mttd') predicate = isMissedMttd;
@@ -1126,6 +1126,12 @@ function openMetricDrillDown(metric, customerName, reportingCategory, extra) {
   else if (metric === 'resolutionAvg') predicate = function (inc) { return (inc.status === 'Closed' || inc.status === 'Resolved') && getIncDowntimeMinutes(inc) > 0 && (dashboardAvgDowntimeCategory === 'historian' ? isHistorianIncident(inc) : !isHistorianIncident(inc)); };
   else if (metric === 'downtime') predicate = function (inc) { return (inc.status === 'Closed' || inc.status === 'Resolved') && !isHistorianIncident(inc); };
   else if (metric === 'historianDowntime') predicate = function (inc) { return (inc.status === 'Closed' || inc.status === 'Resolved') && isHistorianIncident(inc); };
+  // Customer 360's own "Critical Incidents"/"Total Downtime" cards — unlike
+  // the Dashboard's downtime metrics, these match buildC360Metrics exactly
+  // (no closed/resolved restriction), so the drill-down list's count always
+  // agrees with the number shown on the card it was clicked from.
+  else if (metric === 'c360Critical') predicate = function (inc) { return inc.severity === 'Critical'; };
+  else if (metric === 'c360Downtime') predicate = function (inc) { return getIncDowntimeMinutes(inc) > 0; };
   else if (metric === 'slaBreachChart') predicate = function (inc) { return String(inc.severity || '') === (extra && extra.severity) && computeSlaBreachBucket(inc) === ((extra && extra.breached) ? 'breached' : 'onTime'); };
   else if (metric === 'dow') predicate = function (inc) { var d = new Date(inc.date); return !isNaN(d) && d.getDay() === extra; };
   else if (metric === 'byAreaOpen') predicate = function (inc) { return isActiveIncident(inc) && (inc.area || 'Unspecified') === extra; };
@@ -1158,7 +1164,9 @@ function openMetricDrillDown(metric, customerName, reportingCategory, extra) {
     mttr: 'Missed MTTR Incidents', mttd: 'Missed MTTD Incidents',
     open: 'Open / Active Incidents', sla: 'SLA-Breached Active Incidents',
     downtime: 'Total Downtime — Contributing Incidents',
-    historianDowntime: 'Historian Downtime — Contributing Incidents'
+    historianDowntime: 'Historian Downtime — Contributing Incidents',
+    c360Critical: 'Critical Incidents — Contributing',
+    c360Downtime: 'Total Downtime — Contributing Incidents'
   };
   var dynamicTitle = metric === 'dow' ? 'Incidents Opened on ' + (DOW_NAMES[extra] || 'Selected Day')
     : metric === 'slaBreachChart' ? ((extra && extra.severity) || '') + ' — ' + ((extra && extra.breached) ? 'Breached' : 'On-time') + ' SLA'
@@ -1173,7 +1181,7 @@ function openMetricDrillDown(metric, customerName, reportingCategory, extra) {
     + ' · Select a row to view details';
   actualHeader.textContent = (metric === 'open' || metric === 'sla' || metric === 'byAreaOpen') ? 'Open Duration'
     : (metric === 'mttr' || metric === 'mttd') ? 'Actual ' + metric.toUpperCase()
-      : (metric === 'downtime' || metric === 'historianDowntime' || metric === 'resolutionAvg') ? 'Actual Downtime' : 'Actual Duration';
+      : (metric === 'downtime' || metric === 'historianDowntime' || metric === 'resolutionAvg' || metric === 'c360Downtime') ? 'Actual Downtime' : 'Actual Duration';
 
   if (!metricIncidents.length) {
     body.innerHTML = '<tr><td class="metric-drilldown-empty" colspan="11">No contributing incidents found.</td></tr>';
@@ -1183,7 +1191,7 @@ function openMetricDrillDown(metric, customerName, reportingCategory, extra) {
       var actualMinutes = metric === 'mttr' ? getActualMttrMinutes(inc)
         : metric === 'mttd' ? getIncidentMttdMinutes(inc)
           : isLiveMetric ? Math.max(0, (Date.now() - getIncidentOpenedTimestamp(inc)) / 60000)
-            : (metric === 'downtime' || metric === 'historianDowntime' || metric === 'resolutionAvg') ? getIncDowntimeMinutes(inc)
+            : (metric === 'downtime' || metric === 'historianDowntime' || metric === 'resolutionAvg' || metric === 'c360Downtime') ? getIncDowntimeMinutes(inc)
               : getIncResolutionMinutes(inc);
       var incSlaHours = getIncidentSlaHours(inc);
       var hasSlaTarget = metric === 'mttd' || incSlaHours !== null;
@@ -1869,13 +1877,16 @@ function renderC360MetricSection(statsRowId, metricsRowId, values, category) {
   var metricsRow = document.getElementById(metricsRowId);
   if (metricsRow) {
     var metrics = [
-      { label: 'Total Downtime', value: values.totalDT ? minutesToHM(values.totalDT) : '—', color: 'var(--warning)' },
+      { metric: 'c360Downtime', label: 'Total Downtime', value: values.totalDT ? minutesToHM(values.totalDT) : '—', color: 'var(--warning)' },
       { label: 'Avg MTTR', value: values.avgMTTR ? minutesToHM(values.avgMTTR) : '—', color: 'var(--accent)' },
-      { label: 'Critical Incidents', value: values.critical, color: values.critical ? 'var(--danger)' : 'var(--success)' },
+      { metric: 'c360Critical', label: 'Critical Incidents', value: values.critical, color: values.critical ? 'var(--danger)' : 'var(--success)' },
       { label: 'Resolution Rate', value: values.resolutionRate + '%', color: values.resolutionRate >= 80 ? 'var(--success)' : 'var(--warning)' }
     ];
     metricsRow.innerHTML = metrics.map(function (metric) {
-      return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px 18px">'
+      var drillDown = metric.metric
+        ? ' class="metric-kpi-card" role="button" tabindex="0" title="View contributing incidents" onclick="openMetricDrillDown(\'' + metric.metric + '\',document.getElementById(\'c360CustName\').textContent,\'' + category + '\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();this.click()}"'
+        : '';
+      return '<div' + drillDown + ' style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px 18px">'
         + '<div style="font-size:24px;font-weight:800;color:' + metric.color + '">' + metric.value + '</div>'
         + '<div style="font-size:12px;color:var(--text-muted);margin-top:4px">' + metric.label + '</div></div>';
     }).join('');
@@ -1948,9 +1959,11 @@ function renderC360Full(custName) {
     var r2 = { ctx: trendEl.getContext('2d'), W: trendEl.width, H: trendEl.height };
     var ctx2 = r2.ctx; var W2 = r2.W; var H2 = r2.H;
     ctx2.clearRect(0, 0, W2, H2);
-    var now2 = new Date(); var labels2 = []; var vals2 = [];
+    var now2 = new Date(); var labels2 = []; var vals2 = []; var monthBounds2 = [];
     for (var mm = 5; mm >= 0; mm--) {
       var d2 = new Date(now2.getFullYear(), now2.getMonth() - mm, 1);
+      var d2End = new Date(now2.getFullYear(), now2.getMonth() - mm + 1, 1);
+      monthBounds2.push({ start: d2, end: d2End });
       labels2.push(d2.toLocaleString('default', { month: 'short' }));
       vals2.push(custIncs.filter(function (i) {
         var id2 = new Date(i.date);
@@ -1978,6 +1991,33 @@ function renderC360Full(custName) {
       ctx2.fillStyle = textC; ctx2.font = 'bold 9px sans-serif'; ctx2.textAlign = 'center';
       if (p.y - 10 > pad2.t) ctx2.fillText(vals2[i], p.x, p.y - 6);
     });
+
+    // Click/hover to drill into that month's incidents for this customer —
+    // mirrors the Dashboard's own Incident Trend chart.
+    function findC360TrendHit(e) {
+      var rect = trendEl.getBoundingClientRect();
+      var mx = (e.clientX - rect.left) * (W2 / rect.width);
+      var best = -1, bestDist = 9999;
+      pts2.forEach(function (pt, i) { var d = Math.abs(pt.x - mx); if (d < bestDist) { bestDist = d; best = i; } });
+      return (best >= 0 && bestDist < cW2 / (labels2.length - 1) * 0.65) ? best : -1;
+    }
+    trendEl.style.cursor = 'pointer';
+    trendEl.onmousemove = function (e) {
+      var idx = findC360TrendHit(e);
+      if (idx === -1) { _hideTip(); trendEl.style.cursor = 'default'; return; }
+      trendEl.style.cursor = 'pointer';
+      _showTip(trendEl, '<b>' + labels2[idx] + '</b><br><span>' + vals2[idx] + ' incident' + (vals2[idx] === 1 ? '' : 's') + '</span>'
+        + '<br><span style="color:#666;font-size:10px">Click to filter incidents</span>', e);
+    };
+    trendEl.onclick = function (e) {
+      var idx = findC360TrendHit(e);
+      if (idx === -1 || !monthBounds2[idx]) return;
+      var bounds = monthBounds2[idx];
+      var monthEndInclusive = new Date(bounds.end.getTime() - 86400000);
+      function toYMD(dt) { return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0'); }
+      drillDownToIncidents({ customer: custName, from: toYMD(bounds.start), to: toYMD(monthEndInclusive), _label: custName + ' — ' + labels2[idx] });
+    };
+    trendEl.onmouseleave = _hideTip;
   }
 
   // ── Area breakdown chart ──
@@ -1995,6 +2035,7 @@ function renderC360Full(custName) {
       var pad3 = { t: 10, r: 10, b: 30, l: 28 }; var cW3 = W3 - pad3.l - pad3.r; var cH3 = H3 - pad3.t - pad3.b;
       var maxA = Math.max.apply(null, areaKeys.map(function (k) { return areaMap[k]; }));
       var bW3 = Math.min(cW3 / areaKeys.length * 0.6, 40);
+      var areaBarRects3 = [];
       areaKeys.forEach(function (area, i) {
         var bH3 = (areaMap[area] / maxA) * cH3;
         var x3 = pad3.l + (i / (areaKeys.length - 1 || 1)) * cW3;
@@ -2004,15 +2045,46 @@ function renderC360Full(custName) {
         g3.addColorStop(0, col3); g3.addColorStop(1, col3.replace('rgb', 'rgba').replace(')', ',0.3)'));
         ctx3.fillStyle = g3;
         if (bH3 > 0) ctx3.fillRect(x3 - bW3 / 2, y0 - bH3, bW3, bH3);
+        areaBarRects3.push({ x: x3 - bW3 / 2, w: bW3, area: area, count: areaMap[area] });
         var dark3 = !document.body.classList.contains('light-mode');
         ctx3.fillStyle = dark3 ? '#8890b0' : '#666'; ctx3.font = '9px sans-serif'; ctx3.textAlign = 'center';
         ctx3.fillText(area.substring(0, 6), x3, H3 - 4);
         if (areaMap[area] > 0) { ctx3.fillStyle = col3; ctx3.font = 'bold 9px sans-serif'; ctx3.fillText(areaMap[area], x3, y0 - bH3 - 4); }
       });
+
+      // Click/hover to drill into that area's incidents for this customer —
+      // mirrors the Dashboard's own Area Breakdown chart. Hit-test spans the
+      // full plot height (not just the bar's own height) so short bars
+      // (low counts) are just as easy to click as tall ones.
+      function findC360AreaHit(e) {
+        var rect = areaEl.getBoundingClientRect();
+        var mx = (e.clientX - rect.left) * (W3 / rect.width);
+        var my = (e.clientY - rect.top) * (H3 / rect.height);
+        for (var bi = 0; bi < areaBarRects3.length; bi++) {
+          var b = areaBarRects3[bi];
+          if (mx >= b.x - 2 && mx <= b.x + b.w + 2 && my >= pad3.t && my <= pad3.t + cH3) return b;
+        }
+        return null;
+      }
+      areaEl.style.cursor = 'pointer';
+      areaEl.onmousemove = function (e) {
+        var hit = findC360AreaHit(e);
+        if (!hit) { _hideTip(); areaEl.style.cursor = 'default'; return; }
+        areaEl.style.cursor = 'pointer';
+        _showTip(areaEl, '<b>' + hit.area + '</b><br><span>' + hit.count + ' incident' + (hit.count === 1 ? '' : 's') + '</span>'
+          + '<br><span style="color:#666;font-size:10px">Click to filter incidents</span>', e);
+      };
+      areaEl.onclick = function (e) {
+        var hit = findC360AreaHit(e);
+        if (!hit) return;
+        drillDownToIncidents({ customer: custName, area: hit.area, _label: custName + ' — ' + hit.area });
+      };
+      areaEl.onmouseleave = _hideTip;
     } else {
       var dark4 = !document.body.classList.contains('light-mode');
       ctx3.fillStyle = dark4 ? '#8890b0' : '#666'; ctx3.font = '12px sans-serif'; ctx3.textAlign = 'center'; ctx3.textBaseline = 'middle';
       ctx3.fillText('No data', W3 / 2, H3 / 2);
+      areaEl.style.cursor = 'default'; areaEl.onmousemove = null; areaEl.onclick = null; areaEl.onmouseleave = _hideTip;
     }
   }
 
