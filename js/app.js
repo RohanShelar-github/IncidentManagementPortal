@@ -8861,11 +8861,6 @@ function generatePDFReport() {
     parts.push('<div class="chart-box"><div class="chart-title">Top Customers by Incidents</div>' + makeBarChart(custBars, 'Customers', 380, 180) + '</div>');
     parts.push('</div>');
 
-    // Incident log table
-    parts.push('<div class="sec">📋 Incident Log</div>');
-    parts.push('<table><thead><tr><th>ID</th><th>Title</th><th>Customer</th><th>Severity</th><th>Area</th><th>Status</th><th>Engineer</th><th>Date</th><th>Downtime</th><th>Resolved By</th><th>SF Case</th></tr></thead>');
-    parts.push('<tbody>' + rows + '</tbody></table>');
-
     // Downtime section
     if (closedData.length) {
       parts.push('<div class="sec">⏱ Downtime Analysis</div>');
@@ -8881,6 +8876,11 @@ function generatePDFReport() {
       parts.push('<table><thead><tr><th>Area</th><th>Downtime</th></tr></thead><tbody>' + (areaDTrows || '<tr><td colspan="2" style="color:#aaa">No area data</td></tr>') + '</tbody></table></div>');
       parts.push('</div>');
     }
+
+    // Incident log table
+    parts.push('<div class="sec">📋 Incident Log</div>');
+    parts.push('<table><thead><tr><th>ID</th><th>Title</th><th>Customer</th><th>Severity</th><th>Area</th><th>Status</th><th>Engineer</th><th>Date</th><th>Downtime</th><th>Resolved By</th><th>SF Case</th></tr></thead>');
+    parts.push('<tbody>' + rows + '</tbody></table>');
 
     parts.push('</div>');
     parts.push('<div class="ftr">Magic Cloud Incident Management Portal &nbsp;&middot;&nbsp; Confidential &nbsp;&middot;&nbsp; ' + now + '</div>');
