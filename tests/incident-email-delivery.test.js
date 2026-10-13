@@ -238,6 +238,23 @@ test('new mailbox emails create permission-scoped bell notifications and mailbox
   assert.match(frontend, /n\.type === 'mailbox'/);
 });
 
+// incident_email_messages dedupes real duplicate inserts via a unique
+// constraint on graph_message_id (INSERT IGNORE silently no-ops), but the
+// activity_logs audit entry right after it used to run unconditionally
+// regardless of whether that insert actually happened — so an
+// already-recorded email that the poll's own in-memory "seen" tracking
+// re-detected as new (its baseline resets on every server restart) produced
+// a fresh, duplicate "Email reply received" audit log entry every time,
+// even though no new row was ever added to incident_email_messages.
+test('pollMailboxForNotifications only logs the critical_email_received audit entry when the email was actually newly recorded, not every time the poll re-detects an already-known message', () => {
+  const mailboxController = fs.readFileSync('backend/controllers/mailboxController.js', 'utf8');
+  const start = mailboxController.indexOf('async function pollMailboxForNotifications()');
+  const end = mailboxController.indexOf('function startMailboxNotificationPolling', start);
+  const impl = mailboxController.slice(start, end);
+  assert.match(impl, /const \[emailMessageResult\] = await pool\.query\('INSERT IGNORE INTO incident_email_messages/);
+  assert.match(impl, /if \(emailMessageResult\.affectedRows > 0\) \{\s*\n\s*await pool\.query\('INSERT INTO activity_logs \(incident_id, action_type, detail\) VALUES \(\?, \?, \?\)', \[threads\[0\]\.incident_id, 'critical_email_received', `Email reply received: \$\{message\.subject\}`\]\);\s*\n\s*\}/);
+});
+
 test('mailbox converts bounded inline signature images into safe preview data URLs', () => {
   const mailService = fs.readFileSync('backend/services/emailService.js', 'utf8');
   assert.match(mailService, /attachments`\)/);

@@ -586,8 +586,17 @@ async function pollMailboxForNotifications() {
         if (message.conversationId) {
           const [threads] = await pool.query('SELECT id, incident_id FROM incident_email_threads WHERE conversation_id = ? LIMIT 1', [message.conversationId]);
           if (threads.length) {
-            await pool.query('INSERT IGNORE INTO incident_email_messages (thread_id, incident_id, direction, action_type, graph_message_id, internet_message_id, subject, sender, body_preview, status, occurred_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [threads[0].id, threads[0].incident_id, 'inbound', 'reply_received', message.id, message.internetMessageId || null, message.subject, message.from, message.preview, 'received', message.receivedAt || new Date()]);
-            await pool.query('INSERT INTO activity_logs (incident_id, action_type, detail) VALUES (?, ?, ?)', [threads[0].incident_id, 'critical_email_received', `Email reply received: ${message.subject}`]);
+            const [emailMessageResult] = await pool.query('INSERT IGNORE INTO incident_email_messages (thread_id, incident_id, direction, action_type, graph_message_id, internet_message_id, subject, sender, body_preview, status, occurred_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [threads[0].id, threads[0].incident_id, 'inbound', 'reply_received', message.id, message.internetMessageId || null, message.subject, message.from, message.preview, 'received', message.receivedAt || new Date()]);
+            // INSERT IGNORE silently no-ops when this graph_message_id was
+            // already recorded (unique constraint) — the poll's own
+            // "new since last check" detection isn't reliable on its own
+            // (its in-memory baseline resets on every server restart, so an
+            // already-processed message can be re-encountered as "new"
+            // again), so only log the audit entry when a row was genuinely
+            // inserted for the first time, never for an already-seen email.
+            if (emailMessageResult.affectedRows > 0) {
+              await pool.query('INSERT INTO activity_logs (incident_id, action_type, detail) VALUES (?, ?, ?)', [threads[0].incident_id, 'critical_email_received', `Email reply received: ${message.subject}`]);
+            }
           }
         }
       }
