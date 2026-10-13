@@ -8746,21 +8746,21 @@ function generatePDFReport() {
         // Centered, horizontal labels collide once there are more than a
         // handful of bars — each column is only bW wide, but a centered
         // label's own text width is unrelated to bW and routinely spills
-        // into its neighbors. Rotated and right-aligned to its own tick
-        // (the same technique the live dashboard's Customer Distribution
-        // chart already uses), each label occupies its own diagonal lane
-        // instead of a fixed horizontal one, so neighboring labels can no
-        // longer overlap regardless of how many bars there are.
-        //
-        // A positive rotation here (not negative) is what swings the far
-        // end of the label UP and to the left, back toward the bars, within
-        // the reserved bottomMargin band — a negative angle swings it
-        // further DOWN instead, past the bottom of the chart entirely,
-        // which is what made labels spill outside the card.
+        // into its neighbors. End-anchoring and rotating upward (tried
+        // previously) kept each label within the margin, but put its FIRST
+        // character — the part a reader's eye lands on first, reading
+        // left-to-right — floating unattached in open space, with only its
+        // LAST character pinned under its own bar, making it unclear which
+        // label belonged to which bar. Anchoring at the FIRST character
+        // instead, right at the bar's own tick, and cascading the rest of
+        // the label down-and-right from there (the standard Excel/Chart.js
+        // rotated-category-label convention) means the reader's eye meets
+        // each label exactly where its own bar is, with the rest of the text
+        // trailing away into the open margin below.
         const lbl = b.label.length > 10 ? b.label.substring(0, 10) + '…' : b.label;
         const lx = (x + bW / 2).toFixed(0);
-        const ly = H - 8;
-        xLabels += `<text x="${lx}" y="${ly}" text-anchor="end" fill="#666" font-size="8" transform="rotate(35 ${lx} ${ly})">${lbl}</text>`;
+        const ly = 10 + (H - bottomMargin) + 10;
+        xLabels += `<text x="${lx}" y="${ly}" fill="#666" font-size="8" transform="rotate(40 ${lx} ${ly})">${lbl}</text>`;
       });
       return `<svg width="100%" viewBox="0 0 ${W} ${H}" style="overflow:visible">${yLabels}${rects}${xLabels}</svg>`;
     }

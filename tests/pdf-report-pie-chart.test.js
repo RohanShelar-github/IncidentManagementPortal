@@ -48,26 +48,28 @@ test('makePieChart still shows "No data" when every slice is zero, unaffected by
 // each bar's own column is narrow, but a centered label's text width has no
 // relation to that column width, so neighboring labels routinely spilled
 // into each other and became illegible ("InfrastNGC - MNGC - AHistoria...").
-test('makeBarChart rotates x-axis labels (right-aligned to their own tick) instead of centering them horizontally, so neighboring labels occupy separate diagonal lanes and can no longer overlap', () => {
-  const impl = slice('function makeBarChart(', '// ── Build chart data');
-  assert.match(impl, /const lbl = b\.label\.length > 10 \? b\.label\.substring\(0, 10\) \+ '…' : b\.label;/);
-  assert.match(impl, /const lx = \(x \+ bW \/ 2\)\.toFixed\(0\);/);
-  assert.match(impl, /xLabels \+= `<text x="\$\{lx\}" y="\$\{ly\}" text-anchor="end" fill="#666" font-size="8" transform="rotate\(35 \$\{lx\} \$\{ly\}\)">\$\{lbl\}<\/text>`;/);
-  assert.doesNotMatch(impl, /text-anchor="middle" fill="#666" font-size="\d+">\$\{lbl\}/, 'must not still center-align the x-axis label text');
-});
-
-// A negative rotation angle (the first attempt at this fix) swings the far
-// end of a text-anchor="end" label DOWNWARD from its own anchor rather than
-// upward — confirmed by rotating the point formula by hand — so with the
-// anchor placed close to the chart's own bottom edge, the label spilled
-// below the chart card entirely instead of staying within the reserved
-// label margin. A positive angle swings it upward instead, back toward the
-// bars but still within the (now-widened) bottom margin.
-test('the x-axis label rotation angle is positive (swings labels up toward the bars, within the reserved bottom margin) not negative (which spills them below the chart card)', () => {
+//
+// Two rotation schemes were tried and rejected before this one:
+//  1. Negative rotation, end-anchored: the far end of the label swings
+//     DOWNWARD from the anchor (confirmed by hand-rotating the point
+//     formula), spilling labels below the chart card entirely.
+//  2. Positive rotation, end-anchored: fixed the overflow (swings upward,
+//     back toward the bars) but put each label's FIRST character — what a
+//     reader's eye lands on first — floating in open space, with only the
+//     LAST character pinned under its own bar, making it unclear which
+//     label belonged to which bar.
+// Anchoring at the label's FIRST character instead, right at its own bar's
+// tick, and cascading the rest of the text down-and-right from there (the
+// standard Excel/Chart.js rotated-category-label convention) keeps both
+// properties at once: no overflow, and an unambiguous label-to-bar link.
+test('makeBarChart anchors each x-axis label at its own tick (first character, not centered or end-anchored) and rotates it down-and-right into the reserved margin, so it stays both legible and unambiguously linked to its own bar', () => {
   const impl = slice('function makeBarChart(', '// ── Build chart data');
   assert.match(impl, /const bottomMargin = 60;/);
   assert.match(impl, /const y = 10 \+ \(H - bottomMargin\) \* \(1 - i \/ steps\);/);
   assert.match(impl, /const bH = \(\(b\.value \/ max\) \* \(H - bottomMargin\)\);/);
-  assert.match(impl, /const ly = H - 8;/);
-  assert.doesNotMatch(impl, /rotate\(-\d+ /, 'must not use a negative rotation angle for the x-axis labels');
+  assert.match(impl, /const lbl = b\.label\.length > 10 \? b\.label\.substring\(0, 10\) \+ '…' : b\.label;/);
+  assert.match(impl, /const lx = \(x \+ bW \/ 2\)\.toFixed\(0\);/);
+  assert.match(impl, /const ly = 10 \+ \(H - bottomMargin\) \+ 10;/);
+  assert.match(impl, /xLabels \+= `<text x="\$\{lx\}" y="\$\{ly\}" fill="#666" font-size="8" transform="rotate\(40 \$\{lx\} \$\{ly\}\)">\$\{lbl\}<\/text>`;/);
+  assert.doesNotMatch(impl, /text-anchor="(middle|end)" fill="#666" font-size="8"/, 'must use the default start-anchor, not center or end, so the first character pins to the bar\'s own tick');
 });
