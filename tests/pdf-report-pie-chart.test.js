@@ -42,3 +42,16 @@ test('makePieChart still shows "No data" when every slice is zero, unaffected by
   const impl = slice('function makePieChart(', 'function makeBarChart(');
   assert.match(impl, /if \(!total\) return '<div style="text-align:center;color:#aaa;font-size:12px;padding:20px">No data<\/div>';/);
 });
+
+// Centered, horizontal x-axis labels collided once a bar chart (Incidents by
+// Area, Top Customers by Incidents) had more than a handful of categories —
+// each bar's own column is narrow, but a centered label's text width has no
+// relation to that column width, so neighboring labels routinely spilled
+// into each other and became illegible ("InfrastNGC - MNGC - AHistoria...").
+test('makeBarChart rotates x-axis labels (right-aligned to their own tick) instead of centering them horizontally, so neighboring labels occupy separate diagonal lanes and can no longer overlap', () => {
+  const impl = slice('function makeBarChart(', '// ── Build chart data');
+  assert.match(impl, /const lbl = b\.label\.length > 10 \? b\.label\.substring\(0, 10\) \+ '…' : b\.label;/);
+  assert.match(impl, /const lx = \(x \+ bW \/ 2\)\.toFixed\(0\);/);
+  assert.match(impl, /xLabels \+= `<text x="\$\{lx\}" y="\$\{H - 4\}" text-anchor="end" fill="#666" font-size="10" transform="rotate\(-40 \$\{lx\} \$\{H - 4\}\)">\$\{lbl\}<\/text>`;/);
+  assert.doesNotMatch(impl, /text-anchor="middle" fill="#666" font-size="10">\$\{lbl\}/, 'must not still center-align the x-axis label text');
+});

@@ -8739,8 +8739,17 @@ function generatePDFReport() {
         const y = 10 + (H - 50) - bH;
         rects += `<rect x="${x}" y="${y.toFixed(1)}" width="${bW}" height="${bH.toFixed(1)}" rx="3" fill="${b.color}"/>`;
         if (b.value > 0) rects += `<text x="${(x + bW / 2).toFixed(0)}" y="${(y - 4).toFixed(0)}" text-anchor="middle" fill="${b.color}" font-size="11" font-weight="700">${b.value}</text>`;
-        const lbl = b.label.length > 8 ? b.label.substring(0, 8) + '…' : b.label;
-        xLabels += `<text x="${(x + bW / 2).toFixed(0)}" y="${H - 4}" text-anchor="middle" fill="#666" font-size="10">${lbl}</text>`;
+        // Centered, horizontal labels collide once there are more than a
+        // handful of bars — each column is only bW wide, but a centered
+        // label's own text width is unrelated to bW and routinely spills
+        // into its neighbors. Rotated and right-aligned to its own tick
+        // (the same technique the live dashboard's Customer Distribution
+        // chart already uses), each label occupies its own diagonal lane
+        // instead of a fixed horizontal one, so neighboring labels can no
+        // longer overlap regardless of how many bars there are.
+        const lbl = b.label.length > 10 ? b.label.substring(0, 10) + '…' : b.label;
+        const lx = (x + bW / 2).toFixed(0);
+        xLabels += `<text x="${lx}" y="${H - 4}" text-anchor="end" fill="#666" font-size="10" transform="rotate(-40 ${lx} ${H - 4})">${lbl}</text>`;
       });
       return `<svg width="100%" viewBox="0 0 ${W} ${H}" style="overflow:visible">${yLabels}${rects}${xLabels}</svg>`;
     }
