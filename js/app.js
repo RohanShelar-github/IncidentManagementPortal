@@ -8749,7 +8749,7 @@ function generatePDFReport() {
         // longer overlap regardless of how many bars there are.
         const lbl = b.label.length > 10 ? b.label.substring(0, 10) + '…' : b.label;
         const lx = (x + bW / 2).toFixed(0);
-        xLabels += `<text x="${lx}" y="${H - 4}" text-anchor="end" fill="#666" font-size="10" transform="rotate(-40 ${lx} ${H - 4})">${lbl}</text>`;
+        xLabels += `<text x="${lx}" y="${H - 4}" text-anchor="end" fill="#666" font-size="8" transform="rotate(-40 ${lx} ${H - 4})">${lbl}</text>`;
       });
       return `<svg width="100%" viewBox="0 0 ${W} ${H}" style="overflow:visible">${yLabels}${rects}${xLabels}</svg>`;
     }

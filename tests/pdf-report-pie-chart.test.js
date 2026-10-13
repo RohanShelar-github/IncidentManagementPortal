@@ -52,6 +52,6 @@ test('makeBarChart rotates x-axis labels (right-aligned to their own tick) inste
   const impl = slice('function makeBarChart(', '// ── Build chart data');
   assert.match(impl, /const lbl = b\.label\.length > 10 \? b\.label\.substring\(0, 10\) \+ '…' : b\.label;/);
   assert.match(impl, /const lx = \(x \+ bW \/ 2\)\.toFixed\(0\);/);
-  assert.match(impl, /xLabels \+= `<text x="\$\{lx\}" y="\$\{H - 4\}" text-anchor="end" fill="#666" font-size="10" transform="rotate\(-40 \$\{lx\} \$\{H - 4\}\)">\$\{lbl\}<\/text>`;/);
-  assert.doesNotMatch(impl, /text-anchor="middle" fill="#666" font-size="10">\$\{lbl\}/, 'must not still center-align the x-axis label text');
+  assert.match(impl, /xLabels \+= `<text x="\$\{lx\}" y="\$\{H - 4\}" text-anchor="end" fill="#666" font-size="8" transform="rotate\(-40 \$\{lx\} \$\{H - 4\}\)">\$\{lbl\}<\/text>`;/);
+  assert.doesNotMatch(impl, /text-anchor="middle" fill="#666" font-size="\d+">\$\{lbl\}/, 'must not still center-align the x-axis label text');
 });
