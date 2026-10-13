@@ -104,6 +104,15 @@ function groupMessagesIntoAlerts(messages) {
     const dayFingerprint = message.category === 'jira' ? fingerprint : (fingerprint + '::' + day);
     const resolved = isResolvedVariant(message.subject);
     const receivedAt = message.receivedAt || null;
+    // A customer-raised ticket's displayed subject must never show a
+    // "Re:"/"Fwd:" reply prefix — stripped unconditionally here rather than
+    // only preferring whichever message looks like the original, since for a
+    // ticket whose creation email has already aged out of the report's own
+    // time window, EVERY occurrence still in the window is itself a reply,
+    // leaving nothing original to prefer.
+    const displaySubject = message.category === 'jira'
+      ? String(message.subject || '').trim().replace(/^(?:(?:re|fw|fwd)\s*:\s*)+/i, '')
+      : normalizeAlertSubject(message.subject);
     let group = groups.get(dayFingerprint);
     if (!group) {
       group = {
@@ -112,7 +121,7 @@ function groupMessagesIntoAlerts(messages) {
         day,
         category: message.category || 'other',
         sender: String(message.from || '').trim(),
-        sampleSubject: normalizeAlertSubject(message.subject),
+        sampleSubject: displaySubject,
         firstSeen: receivedAt,
         lastSeen: receivedAt,
         occurrenceCount: 0,

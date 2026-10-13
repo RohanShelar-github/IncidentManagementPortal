@@ -382,6 +382,39 @@ test('Jira grouping ignores sender, since the same ticket thread is replied to b
   assert.doesNotMatch(groups[0].fingerprint, /@/, 'the jira fingerprint must not embed any sender address');
 });
 
+// Microsoft Graph fetches the inbox newest-first (see
+// fetchRecentAlertMessages), so a long-running ticket's most recent reply is
+// typically the FIRST message processed for its group — reversed order from
+// the other Jira tests above, which (being in chronological order) never
+// actually exercised this.
+test('a Jira ticket\'s displayed subject is always the clean original, never a "Re:"/"Fwd:" reply — even when the reply is processed before the original (as Graph\'s own newest-first fetch order would produce)', () => {
+  const messages = [
+    { id: 'm2', from: 'rohan_shelar@magicsoftware.com', subject: 'Re: A new support issue CD-170 was reported by the customer', category: 'jira', jiraIssueKey: 'CD-170', receivedAt: '2026-09-23T13:02:00Z' },
+    { id: 'm1', from: 'automation@example.atlassian.net', subject: 'A new support issue CD-170 was reported by the customer', category: 'jira', jiraIssueKey: 'CD-170', receivedAt: '2026-09-22T17:13:00Z' }
+  ];
+  const groups = grouping.groupMessagesIntoAlerts(messages);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].sampleSubject, 'A new support issue CD-170 was reported by the customer');
+});
+
+test('a Jira ticket whose creation email has aged out of the report window — every remaining occurrence is itself a reply — still shows a clean subject with no "Re:" prefix, since there is nothing original left to prefer', () => {
+  const messages = [
+    { id: 'n2', from: 'rohan_shelar@magicsoftware.com', subject: 'Re: A new support issue TOR-284 was reported by the customer', category: 'jira', jiraIssueKey: 'TOR-284', receivedAt: '2026-10-13T09:34:50Z' },
+    { id: 'n1', from: 'babai_chatterjee@magicsoftware.com', subject: 'Re: A new support issue TOR-284 was reported by the customer', category: 'jira', jiraIssueKey: 'TOR-284', receivedAt: '2026-10-05T10:34:41Z' }
+  ];
+  const groups = grouping.groupMessagesIntoAlerts(messages);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].sampleSubject, 'A new support issue TOR-284 was reported by the customer');
+});
+
+test('Fw:/FWD: reply prefixes on a Jira ticket subject are stripped the same way as Re:, including multiple stacked prefixes', () => {
+  const messages = [
+    { id: 'p1', from: 'a@example.com', subject: 'Fwd: Re: A new support issue CD-171 was reported by the customer', category: 'jira', jiraIssueKey: 'CD-171', receivedAt: '2026-09-23T04:00:00Z' }
+  ];
+  const groups = grouping.groupMessagesIntoAlerts(messages);
+  assert.equal(groups[0].sampleSubject, 'A new support issue CD-171 was reported by the customer');
+});
+
 test('the frontend category filter and display labels recognize Customer Raised Tickets (jira)', () => {
   assert.match(html, /<option value="jira">Customer Raised Tickets<\/option>/);
   assert.match(frontend, /jira: 'Customer Raised Tickets'/);
