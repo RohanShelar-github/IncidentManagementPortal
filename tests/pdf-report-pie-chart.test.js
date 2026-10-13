@@ -52,6 +52,22 @@ test('makeBarChart rotates x-axis labels (right-aligned to their own tick) inste
   const impl = slice('function makeBarChart(', '// ── Build chart data');
   assert.match(impl, /const lbl = b\.label\.length > 10 \? b\.label\.substring\(0, 10\) \+ '…' : b\.label;/);
   assert.match(impl, /const lx = \(x \+ bW \/ 2\)\.toFixed\(0\);/);
-  assert.match(impl, /xLabels \+= `<text x="\$\{lx\}" y="\$\{H - 4\}" text-anchor="end" fill="#666" font-size="8" transform="rotate\(-40 \$\{lx\} \$\{H - 4\}\)">\$\{lbl\}<\/text>`;/);
+  assert.match(impl, /xLabels \+= `<text x="\$\{lx\}" y="\$\{ly\}" text-anchor="end" fill="#666" font-size="8" transform="rotate\(35 \$\{lx\} \$\{ly\}\)">\$\{lbl\}<\/text>`;/);
   assert.doesNotMatch(impl, /text-anchor="middle" fill="#666" font-size="\d+">\$\{lbl\}/, 'must not still center-align the x-axis label text');
+});
+
+// A negative rotation angle (the first attempt at this fix) swings the far
+// end of a text-anchor="end" label DOWNWARD from its own anchor rather than
+// upward — confirmed by rotating the point formula by hand — so with the
+// anchor placed close to the chart's own bottom edge, the label spilled
+// below the chart card entirely instead of staying within the reserved
+// label margin. A positive angle swings it upward instead, back toward the
+// bars but still within the (now-widened) bottom margin.
+test('the x-axis label rotation angle is positive (swings labels up toward the bars, within the reserved bottom margin) not negative (which spills them below the chart card)', () => {
+  const impl = slice('function makeBarChart(', '// ── Build chart data');
+  assert.match(impl, /const bottomMargin = 60;/);
+  assert.match(impl, /const y = 10 \+ \(H - bottomMargin\) \* \(1 - i \/ steps\);/);
+  assert.match(impl, /const bH = \(\(b\.value \/ max\) \* \(H - bottomMargin\)\);/);
+  assert.match(impl, /const ly = H - 8;/);
+  assert.doesNotMatch(impl, /rotate\(-\d+ /, 'must not use a negative rotation angle for the x-axis labels');
 });

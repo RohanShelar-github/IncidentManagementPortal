@@ -8725,18 +8725,22 @@ function generatePDFReport() {
       // bars = [{label, value, color}]
       const max = Math.max(...bars.map(b => b.value), 1);
       const bW = Math.floor((W - 60) / bars.length) - 8;
+      // Bottom margin reserved for the rotated x-axis labels — widened from
+      // 50 to 60 to give the diagonal text enough room to swing upward from
+      // its own tick without reaching back up into the bars themselves.
+      const bottomMargin = 60;
       let rects = '', xLabels = '', yLabels = '';
       const steps = 4;
       for (let i = 0; i <= steps; i++) {
-        const y = 10 + (H - 50) * (1 - i / steps);
+        const y = 10 + (H - bottomMargin) * (1 - i / steps);
         const val = Math.round(max * i / steps);
         yLabels += `<line x1="40" y1="${y.toFixed(0)}" x2="${W}" y2="${y.toFixed(0)}" stroke="#eee" stroke-width="1"/>`;
         yLabels += `<text x="36" y="${(y + 4).toFixed(0)}" text-anchor="end" fill="#aaa" font-size="10">${val}</text>`;
       }
       bars.forEach((b, i) => {
-        const bH = ((b.value / max) * (H - 50));
+        const bH = ((b.value / max) * (H - bottomMargin));
         const x = 44 + i * (bW + 8);
-        const y = 10 + (H - 50) - bH;
+        const y = 10 + (H - bottomMargin) - bH;
         rects += `<rect x="${x}" y="${y.toFixed(1)}" width="${bW}" height="${bH.toFixed(1)}" rx="3" fill="${b.color}"/>`;
         if (b.value > 0) rects += `<text x="${(x + bW / 2).toFixed(0)}" y="${(y - 4).toFixed(0)}" text-anchor="middle" fill="${b.color}" font-size="11" font-weight="700">${b.value}</text>`;
         // Centered, horizontal labels collide once there are more than a
@@ -8747,9 +8751,16 @@ function generatePDFReport() {
         // chart already uses), each label occupies its own diagonal lane
         // instead of a fixed horizontal one, so neighboring labels can no
         // longer overlap regardless of how many bars there are.
+        //
+        // A positive rotation here (not negative) is what swings the far
+        // end of the label UP and to the left, back toward the bars, within
+        // the reserved bottomMargin band — a negative angle swings it
+        // further DOWN instead, past the bottom of the chart entirely,
+        // which is what made labels spill outside the card.
         const lbl = b.label.length > 10 ? b.label.substring(0, 10) + '…' : b.label;
         const lx = (x + bW / 2).toFixed(0);
-        xLabels += `<text x="${lx}" y="${H - 4}" text-anchor="end" fill="#666" font-size="8" transform="rotate(-40 ${lx} ${H - 4})">${lbl}</text>`;
+        const ly = H - 8;
+        xLabels += `<text x="${lx}" y="${ly}" text-anchor="end" fill="#666" font-size="8" transform="rotate(35 ${lx} ${ly})">${lbl}</text>`;
       });
       return `<svg width="100%" viewBox="0 0 ${W} ${H}" style="overflow:visible">${yLabels}${rects}${xLabels}</svg>`;
     }
