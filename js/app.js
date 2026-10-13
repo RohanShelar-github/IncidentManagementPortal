@@ -8690,19 +8690,32 @@ function generatePDFReport() {
       if (!total) return '<div style="text-align:center;color:#aaa;font-size:12px;padding:20px">No data</div>';
       const cx = W / 2, cy = (H - 30) / 2 + 10, r = Math.min(cx, cy) - 28;
       let angle = -Math.PI / 2, paths = '', legend = '';
-      slices.forEach(s => {
-        if (!s.value) return;
-        const sweep = (s.value / total) * Math.PI * 2;
-        const x1 = cx + r * Math.cos(angle), y1 = cy + r * Math.sin(angle);
-        const x2 = cx + r * Math.cos(angle + sweep), y2 = cy + r * Math.sin(angle + sweep);
-        const large = sweep > Math.PI ? 1 : 0;
-        // label position
-        const midA = angle + sweep / 2, lx = cx + (r * 0.65) * Math.cos(midA), ly = cy + (r * 0.65) * Math.sin(midA);
-        paths += `<path d="M${cx},${cy} L${x1.toFixed(1)},${y1.toFixed(1)} A${r},${r} 0 ${large},1 ${x2.toFixed(1)},${y2.toFixed(1)} Z" fill="${s.color}" stroke="white" stroke-width="2"/>`;
-        if (s.value / total > 0.04) paths += `<text x="${lx.toFixed(1)}" y="${(ly + 4).toFixed(1)}" text-anchor="middle" fill="white" font-size="11" font-weight="700">${Math.round(s.value / total * 100)}%</text>`;
-        legend += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><div style="width:10px;height:10px;border-radius:2px;background:${s.color};flex-shrink:0"></div><div style="font-size:11px;color:#444">${s.label} (${s.value})</div></div>`;
-        angle += sweep;
-      });
+      const nonZeroSlices = slices.filter(s => s.value > 0);
+      if (nonZeroSlices.length === 1) {
+        // A single category holding 100% of the data degenerates the arc-path
+        // math below: a full 360° sweep's start and end points are
+        // mathematically identical, and an SVG <path> arc command with
+        // coincident start/end points renders nothing at all — a plain
+        // filled circle is the only way to draw a whole, undivided pie.
+        const only = nonZeroSlices[0];
+        paths = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${only.color}" stroke="white" stroke-width="2"/>`
+          + `<text x="${cx}" y="${(cy + 4).toFixed(1)}" text-anchor="middle" fill="white" font-size="11" font-weight="700">100%</text>`;
+        legend = `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><div style="width:10px;height:10px;border-radius:2px;background:${only.color};flex-shrink:0"></div><div style="font-size:11px;color:#444">${only.label} (${only.value})</div></div>`;
+      } else {
+        slices.forEach(s => {
+          if (!s.value) return;
+          const sweep = (s.value / total) * Math.PI * 2;
+          const x1 = cx + r * Math.cos(angle), y1 = cy + r * Math.sin(angle);
+          const x2 = cx + r * Math.cos(angle + sweep), y2 = cy + r * Math.sin(angle + sweep);
+          const large = sweep > Math.PI ? 1 : 0;
+          // label position
+          const midA = angle + sweep / 2, lx = cx + (r * 0.65) * Math.cos(midA), ly = cy + (r * 0.65) * Math.sin(midA);
+          paths += `<path d="M${cx},${cy} L${x1.toFixed(1)},${y1.toFixed(1)} A${r},${r} 0 ${large},1 ${x2.toFixed(1)},${y2.toFixed(1)} Z" fill="${s.color}" stroke="white" stroke-width="2"/>`;
+          if (s.value / total > 0.04) paths += `<text x="${lx.toFixed(1)}" y="${(ly + 4).toFixed(1)}" text-anchor="middle" fill="white" font-size="11" font-weight="700">${Math.round(s.value / total * 100)}%</text>`;
+          legend += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><div style="width:10px;height:10px;border-radius:2px;background:${s.color};flex-shrink:0"></div><div style="font-size:11px;color:#444">${s.label} (${s.value})</div></div>`;
+          angle += sweep;
+        });
+      }
       return `<div style="display:flex;align-items:center;gap:16px">
         <svg width="${W}" height="${H - 10}" viewBox="0 0 ${W} ${H - 10}">${paths}</svg>
         <div>${legend}</div></div>`;
