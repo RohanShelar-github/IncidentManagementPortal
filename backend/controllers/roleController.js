@@ -8,7 +8,8 @@ const PERMISSIONS = [
   'view_incidents', 'create_incidents', 'edit_incidents', 'close_incidents', 'delete_incidents',
   'view_reports', 'export_reports', 'view_customer360', 'view_mailbox', 'send_mailbox',
   'delete_mailbox', 'view_drafts', 'delete_drafts', 'manage_users', 'manage_roles',
-  'assign_roles', 'manage_data', 'manage_customer_csm', 'view_alert_compliance_report', 'delete_alert_compliance_alerts'
+  'assign_roles', 'manage_data', 'manage_customer_csm', 'view_alert_compliance_report', 'delete_alert_compliance_alerts',
+  'customize_dashboard_layout'
 ];
 
 function requireAdmin(req, res) {

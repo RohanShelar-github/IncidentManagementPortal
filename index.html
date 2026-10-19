@@ -388,23 +388,37 @@
 </div>
 </div>
 </div>
-<div class="stats-grid">
-<div class="stat-card blue metric-kpi-card" id="dashboardCardTotalIncidents" onclick="drillDownToIncidents({ _label: 'All Filtered Incidents' })" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View all incidents in the current filter">
+<div id="dashboardLayoutControls" style="display:none;align-items:center;gap:8px;margin-bottom:14px">
+<button class="btn btn-secondary btn-sm" id="btnEditDashboardLayout" onclick="toggleDashboardLayoutEditMode()">✥ Edit Layout</button>
+<button class="btn btn-primary btn-sm" id="btnSaveDashboardLayout" onclick="saveDashboardLayout()" style="display:none">Save Layout</button>
+<button class="btn btn-secondary btn-sm" id="btnCancelDashboardLayout" onclick="cancelDashboardLayoutEdit()" style="display:none">Cancel</button>
+<span id="dashboardLayoutHint" style="display:none;font-size:11px;color:var(--text-muted)">Drag any card by its handle, then Save Layout — this applies to every user.</span>
+</div>
+<!-- Temporarily hidden from the Dashboard; MTTR data remains available
+     elsewhere. Deliberately excluded from the admin-customizable layout
+     below (#dashboardCardsFlow) since it's never shown either way. -->
+<div id="dashboardAvgMttrCard" class="stat-card" style="display:none;border-color:rgba(79,142,247,0.3);background:linear-gradient(135deg,rgba(79,142,247,0.08),rgba(79,142,247,0.02))">
+<div class="stat-label" style="color:var(--accent)">Avg MTTR</div>
+<div class="stat-value" id="statAvgMTTR" style="color:var(--accent)">—</div>
+<div class="stat-delta" id="statAvgMTTRSub">mean time to resolve</div>
+</div>
+<div id="dashboardCardsFlow">
+<div class="stat-card blue metric-kpi-card lc-tile" data-card-id="statTotalIncidents" id="dashboardCardTotalIncidents" onclick="drillDownToIncidents({ _label: 'All Filtered Incidents' })" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View all incidents in the current filter">
 <div class="stat-label">Total Incidents</div>
 <div class="stat-value" id="statTotal">148</div>
 <div class="stat-delta" id="statTotalSub">incidents in current filter</div>
 </div>
-<div class="stat-card red metric-kpi-card" id="dashboardCardOpenActive" onclick="openMetricDrillDown('open')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View open and active incidents">
+<div class="stat-card red metric-kpi-card lc-tile" data-card-id="statOpenActive" id="dashboardCardOpenActive" onclick="openMetricDrillDown('open')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View open and active incidents">
 <div class="stat-label">Open / Active</div>
 <div class="stat-value" id="statOpen">34</div>
 <div class="stat-delta" id="statOpenSub">critical open</div>
 </div>
-<div class="stat-card green metric-kpi-card" id="dashboardCardResolved" onclick="drillDownToIncidents({ statuses: ['Closed','Resolved'], _label: 'Resolved Incidents' })" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View resolved incidents">
+<div class="stat-card green metric-kpi-card lc-tile" data-card-id="statResolved" id="dashboardCardResolved" onclick="drillDownToIncidents({ statuses: ['Closed','Resolved'], _label: 'Resolved Incidents' })" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View resolved incidents">
 <div class="stat-label">Resolved</div>
 <div class="stat-value" id="statClosed">114</div>
 <div class="stat-delta" id="statClosedSub">resolved in current filter</div>
 </div>
-<div class="stat-card purple metric-kpi-card" id="dashboardCardAvgResolution" onclick="openMetricDrillDown('resolutionAvg')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View incidents contributing to average downtime">
+<div class="stat-card purple metric-kpi-card lc-tile" data-card-id="statAvgDowntime" id="dashboardCardAvgResolution" onclick="openMetricDrillDown('resolutionAvg')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View incidents contributing to average downtime">
 <div class="stat-label" style="display:flex;align-items:center;justify-content:space-between;gap:6px">
 <span>Avg Downtime</span>
 <select id="avgDowntimeCategorySelect" onclick="event.stopPropagation()" onchange="event.stopPropagation();changeAvgDowntimeCategory(this.value)" style="font-size:10px;padding:1px 3px;max-width:90px;background:var(--surface2);color:var(--text-muted);border:1px solid var(--border);border-radius:4px">
@@ -415,45 +429,37 @@
 <div class="stat-value" id="statAvgResolution">—</div>
 <div class="stat-delta" id="statAvgResolutionSub">closed incidents measured</div>
 </div>
-<div class="stat-card metric-kpi-card" id="dashboardCardTotalDowntime" onclick="openMetricDrillDown('downtime')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View application incidents contributing to total downtime" style="border-color:rgba(247,185,79,0.3);background:linear-gradient(135deg,rgba(247,185,79,0.08),rgba(247,185,79,0.02))">
+<div class="stat-card metric-kpi-card lc-tile" data-card-id="statTotalDowntime" id="dashboardCardTotalDowntime" onclick="openMetricDrillDown('downtime')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View application incidents contributing to total downtime" style="border-color:rgba(247,185,79,0.3);background:linear-gradient(135deg,rgba(247,185,79,0.08),rgba(247,185,79,0.02))">
 <div class="stat-label" style="color:var(--warning)">Total Downtime</div>
 <div class="stat-value" id="statDowntime" style="color:var(--warning)">—</div>
 <div class="stat-delta" id="statDowntimeSub" style="font-size:11px;color:var(--text-muted)">application incidents only</div>
 </div>
-<div class="stat-card metric-kpi-card" id="statHistorianDowntimeCard" onclick="openMetricDrillDown('historianDowntime')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View Historian incidents contributing to downtime" style="border-color:rgba(155,89,182,0.3);background:linear-gradient(135deg,rgba(155,89,182,0.08),rgba(155,89,182,0.02))">
+<div class="stat-card metric-kpi-card lc-tile" data-card-id="statHistorianDowntime" id="statHistorianDowntimeCard" onclick="openMetricDrillDown('historianDowntime')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View Historian incidents contributing to downtime" style="border-color:rgba(155,89,182,0.3);background:linear-gradient(135deg,rgba(155,89,182,0.08),rgba(155,89,182,0.02))">
 <div class="stat-label" style="color:#b78ae5">Historian Downtime</div>
 <div class="stat-value" id="statHistorianDowntime" style="color:#b78ae5">—</div>
 <div class="stat-delta" id="statHistorianDowntimeSub" style="font-size:11px;color:var(--text-muted)">Historian incidents only</div>
 </div>
-<div class="stat-card metric-kpi-card" id="dashboardCardSlaBreach" onclick="openMetricDrillDown('sla')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View active SLA-breached incidents" style="border-color:rgba(247,92,124,0.3);background:linear-gradient(135deg,rgba(247,92,124,0.08),rgba(247,92,124,0.02))">
+<div class="stat-card metric-kpi-card lc-tile" data-card-id="statSlaBreachRate" id="dashboardCardSlaBreach" onclick="openMetricDrillDown('sla')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View active SLA-breached incidents" style="border-color:rgba(247,92,124,0.3);background:linear-gradient(135deg,rgba(247,92,124,0.08),rgba(247,92,124,0.02))">
 <div class="stat-label" style="color:var(--danger)">SLA Breach Rate</div>
 <div class="stat-value" id="statSLABreach" style="color:var(--danger)">—</div>
 <div class="stat-delta" id="statSLABreachSub">of incidents breached SLA</div>
 </div>
-<div class="stat-card metric-kpi-card" id="dashboardCardMissedMttr" onclick="openMetricDrillDown('mttr')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View contributing incidents" style="border-color:rgba(247,92,124,0.3);background:linear-gradient(135deg,rgba(247,92,124,0.08),rgba(247,92,124,0.02))">
+<div class="stat-card metric-kpi-card lc-tile" data-card-id="statMissedMttr" id="dashboardCardMissedMttr" onclick="openMetricDrillDown('mttr')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View contributing incidents" style="border-color:rgba(247,92,124,0.3);background:linear-gradient(135deg,rgba(247,92,124,0.08),rgba(247,92,124,0.02))">
 <div class="stat-label" style="color:var(--danger)">Missed MTTR Count</div>
-<div class="stat-value" id="statMissedMttr" style="color:var(--danger)">—</div>
+<div class="stat-value" id="statMissedMttr">—</div>
 <div class="stat-delta" id="statMissedMttrSub">resolved incidents exceeded target</div>
 </div>
-<div class="stat-card metric-kpi-card" id="dashboardCardMissedMttd" onclick="openMetricDrillDown('mttd')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View contributing incidents" style="border-color:rgba(247,92,124,0.3);background:linear-gradient(135deg,rgba(247,92,124,0.08),rgba(247,92,124,0.02))">
+<div class="stat-card metric-kpi-card lc-tile" data-card-id="statMissedMttd" id="dashboardCardMissedMttd" onclick="openMetricDrillDown('mttd')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View contributing incidents" style="border-color:rgba(247,92,124,0.3);background:linear-gradient(135deg,rgba(247,92,124,0.08),rgba(247,92,124,0.02))">
 <div class="stat-label" style="color:var(--danger)">Missed MTTD Count</div>
-<div class="stat-value" id="statMissedMttd" style="color:var(--danger)">—</div>
+<div class="stat-value" id="statMissedMttd">—</div>
 <div class="stat-delta" id="statMissedMttdSub">incidents exceeded the 15m target</div>
 </div>
-<!-- Temporarily hidden from the Dashboard; MTTR data remains available elsewhere. -->
-<div id="dashboardAvgMttrCard" class="stat-card" style="display:none;border-color:rgba(79,142,247,0.3);background:linear-gradient(135deg,rgba(79,142,247,0.08),rgba(79,142,247,0.02))">
-<div class="stat-label" style="color:var(--accent)">Avg MTTR</div>
-<div class="stat-value" id="statAvgMTTR" style="color:var(--accent)">—</div>
-<div class="stat-delta" id="statAvgMTTRSub">mean time to resolve</div>
-</div>
-<div class="stat-card metric-kpi-card" id="dashboardCardResolutionRate" onclick="drillDownToIncidents({ statuses: ['Closed','Resolved'], _label: 'Resolved Incidents' })" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View resolved incidents" style="border-color:rgba(45,212,160,0.3);background:linear-gradient(135deg,rgba(45,212,160,0.08),rgba(45,212,160,0.02))">
+<div class="stat-card metric-kpi-card lc-tile" data-card-id="statResolutionRate" id="dashboardCardResolutionRate" onclick="drillDownToIncidents({ statuses: ['Closed','Resolved'], _label: 'Resolved Incidents' })" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View resolved incidents" style="border-color:rgba(45,212,160,0.3);background:linear-gradient(135deg,rgba(45,212,160,0.08),rgba(45,212,160,0.02))">
 <div class="stat-label" style="color:#2dd4a0">Resolution Rate</div>
 <div class="stat-value" id="statResRate" style="color:#2dd4a0">—</div>
 <div class="stat-delta" id="statResRateSub">incidents fully resolved</div>
 </div>
-</div>
-<div class="charts-grid">
-<div class="chart-card">
+<div class="chart-card lc-wide" data-card-id="chartIncidentTrend">
 <div class="chart-header">
 <div>
 <div class="chart-title">Incident Trend</div>
@@ -464,7 +470,7 @@
 <canvas id="trendChart"></canvas>
 </div>
 </div>
-<div class="chart-card">
+<div class="chart-card lc-narrow" data-card-id="chartBySeverity">
 <div class="chart-header">
 <div>
 <div class="chart-title">By Severity</div>
@@ -475,9 +481,7 @@
 <canvas id="severityChart"></canvas>
 </div>
 </div>
-</div>
-<div class="charts-grid-2" style="grid-template-columns:2fr 1fr">
-<div class="chart-card">
+<div class="chart-card lc-wide" data-card-id="chartCustomerDistribution">
 <div class="chart-header">
 <div>
 <div class="chart-title">Customer Distribution</div>
@@ -488,7 +492,7 @@
 <canvas id="customerChart"></canvas>
 </div>
 </div>
-<div class="chart-card">
+<div class="chart-card lc-narrow" data-card-id="chartResolutionTimeline">
 <div class="chart-header">
 <div>
 <div class="chart-title">Resolution Timeline</div>
@@ -499,10 +503,7 @@
 <canvas id="resolutionChart"></canvas>
 </div>
 </div>
-</div>
-<!-- ─── TOP ENGINEERS + RECURRING INCIDENTS ───────────────── -->
-<div class="charts-grid" style="grid-template-columns:1fr 1fr">
-<div class="chart-card">
+<div class="chart-card lc-half" data-card-id="chartTopEngineers">
 <div class="chart-header">
 <div>
 <div class="chart-title">👷 Top Engineers</div>
@@ -511,7 +512,7 @@
 </div>
 <div id="engineerLeaderboard" style="margin-top:4px"></div>
 </div>
-<div class="chart-card">
+<div class="chart-card lc-half" data-card-id="chartRecurringIncidents">
 <div class="chart-header">
 <div>
 <div class="chart-title">🔁 Recurring Incidents</div>
@@ -520,11 +521,7 @@
 </div>
 <div id="recurringList" style="margin-top:4px;max-height:220px;overflow-y:auto"></div>
 </div>
-</div>
-<!-- ─── DOWNTIME BREAKDOWN ──────────────────────────────── -->
-<div class="charts-grid" id="downtimeSection" style="grid-template-columns:1fr 1fr 1fr;margin-top:16px">
-<!-- Customer downtime -->
-<div class="chart-card">
+<div class="chart-card lc-third" data-card-id="chartDowntimeByCustomer">
 <div class="chart-header">
 <div>
 <div class="chart-title">Downtime by Customer</div>
@@ -533,8 +530,7 @@
 </div>
 <div id="downtimeCustomerList" style="padding:4px 0;overflow-y:auto;max-height:220px"></div>
 </div>
-<!-- Application downtime -->
-<div class="chart-card">
+<div class="chart-card lc-third" data-card-id="chartDowntimeByApplication">
 <div class="chart-header">
 <div>
 <div class="chart-title">Downtime by Application</div>
@@ -543,8 +539,7 @@
 </div>
 <div id="downtimeAppList" style="padding:4px 0;overflow-y:auto;max-height:220px"></div>
 </div>
-<!-- Area downtime -->
-<div class="chart-card">
+<div class="chart-card lc-third" data-card-id="chartDowntimeByArea">
 <div class="chart-header">
 <div>
 <div class="chart-title">Downtime by Area</div>
@@ -553,11 +548,7 @@
 </div>
 <div id="downtimeAreaList" style="padding:4px 0;overflow-y:auto;max-height:220px"></div>
 </div>
-</div>
-<!-- Incident Heatmap -->
-<!-- Recent + Activity -->
-<div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-top:20px">
-<div class="chart-card">
+<div class="chart-card lc-wide" data-card-id="chartRecentIncidents">
 <div class="chart-header">
 <div class="chart-title">Recent Incidents</div>
 <button class="btn btn-secondary btn-sm" onclick="navigate('incidents', document.querySelector('.nav-item:nth-child(5)'))">View All</button>
@@ -575,16 +566,13 @@
 <tbody id="recentTable"></tbody>
 </table>
 </div>
-<div class="chart-card">
+<div class="chart-card lc-narrow" data-card-id="chartActivityFeed">
 <div class="chart-header">
 <div class="chart-title">Activity Feed</div>
 </div>
 <div class="activity-list" id="activityFeed"></div>
 </div>
-</div>
-<!-- ─── SLA BREACH + MTTR TREND ─────────────────────────── -->
-<div class="charts-grid" style="grid-template-columns:1fr 1fr;margin-top:16px">
-<div class="chart-card">
+<div class="chart-card lc-half" data-card-id="chartSlaBreachBySeverity">
 <div class="chart-header">
 <div>
 <div class="chart-title">SLA Breach by Severity</div>
@@ -593,7 +581,7 @@
 </div>
 <div class="chart-container" style="height:200px"><canvas id="slaBreachChart"></canvas></div>
 </div>
-<div class="chart-card">
+<div class="chart-card lc-half" data-card-id="chartMttrTrend">
 <div class="chart-header">
 <div>
 <div class="chart-title">MTTR Trend</div>
@@ -602,10 +590,7 @@
 </div>
 <div class="chart-container" style="height:200px"><canvas id="mttrTrendChart"></canvas></div>
 </div>
-</div>
-<!-- ─── AREA BREAKDOWN + DAY OF WEEK ─────────────────────── -->
-<div class="charts-grid" style="grid-template-columns:1fr 1fr;margin-top:16px">
-<div class="chart-card">
+<div class="chart-card lc-half" data-card-id="chartAreaBreakdown">
 <div class="chart-header">
 <div>
 <div class="chart-title">Area Breakdown</div>
@@ -614,7 +599,7 @@
 </div>
 <div class="chart-container" style="height:200px"><canvas id="areaBreakdownChart"></canvas></div>
 </div>
-<div class="chart-card">
+<div class="chart-card lc-half" data-card-id="chartIncidentsByDayOfWeek">
 <div class="chart-header">
 <div>
 <div class="chart-title">Incidents by Day of Week</div>
@@ -623,11 +608,7 @@
 </div>
 <div class="chart-container" style="height:200px"><canvas id="dowChart"></canvas></div>
 </div>
-</div>
-<!-- My Incidents + Customer Health -->
-<div class="charts-grid-2" style="margin-top:16px">
-<!-- My Incidents -->
-<div class="chart-card">
+<div class="chart-card lc-half" data-card-id="chartMyIncidents">
 <div class="chart-header" style="margin-bottom:4px">
 <div>
 <div class="chart-title">My Incidents</div>
@@ -637,8 +618,7 @@
 </div>
 <div id="myIncList" style="margin-top:8px"></div>
 </div>
-<!-- Customer Health -->
-<div class="chart-card">
+<div class="chart-card lc-half" data-card-id="chartCustomerHealth">
 <div class="chart-header" style="margin-bottom:12px">
 <div>
 <div class="chart-title">Customer Health</div>
@@ -652,9 +632,7 @@
 </div>
 <div class="health-grid" id="healthGrid"></div>
 </div>
-</div>
-<!-- ─── LIVE SLA COUNTDOWN ───────────────────────────────── -->
-<div class="chart-card" style="margin-top:16px">
+<div class="chart-card lc-full" data-card-id="chartLiveSlaCountdown">
 <div class="chart-header">
 <div>
 <div class="chart-title">🕐 Live SLA Countdown</div>
@@ -1880,6 +1858,9 @@
             </label>
 <label class="perm-check" onclick="togglePerm(this)">
 <input type="checkbox" value="delete_alert_compliance_alerts"/> Delete Alert Compliance Alerts
+            </label>
+<label class="perm-check" onclick="togglePerm(this)">
+<input type="checkbox" value="customize_dashboard_layout"/> Customize Dashboard Layout
             </label>
 </div>
 </div>

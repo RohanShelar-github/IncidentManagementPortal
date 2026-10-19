@@ -996,6 +996,63 @@
     border-radius: 12px;
     padding: 20px;
   }
+
+  /* ─── DASHBOARD CARD LAYOUT (admin-customizable order) ──── */
+  /* Every Dashboard card — stat tiles and chart cards alike — lives in one
+     flex-wrap flow instead of several fixed-ratio grid rows, so an admin can
+     freely drag any card to any position. Each card's CURRENT visual width
+     is preserved as a fixed flex-basis (no resizing), decoupling size from
+     position. */
+  #dashboardCardsFlow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  #dashboardCardsFlow > .lc-tile { flex: 1 1 220px; }
+  #dashboardCardsFlow > .lc-full { flex-basis: 100%; }
+  #dashboardCardsFlow > .lc-wide { flex: 1 1 calc(66.666% - 8px); }
+  #dashboardCardsFlow > .lc-narrow { flex: 1 1 calc(33.333% - 8px); }
+  #dashboardCardsFlow > .lc-half { flex: 1 1 calc(50% - 8px); }
+  #dashboardCardsFlow > .lc-third { flex: 1 1 calc(33.333% - 11px); }
+
+  #dashboardCardsFlow.layout-edit-mode > [data-card-id] {
+    cursor: grab;
+    outline: 2px dashed var(--accent);
+    outline-offset: 3px;
+    position: relative;
+    user-select: none;
+  }
+  #dashboardCardsFlow.layout-edit-mode > [data-card-id]::before {
+    content: '\2725 drag';
+    position: absolute;
+    top: -11px;
+    left: 10px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .3px;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 6px;
+    pointer-events: none;
+    z-index: 2;
+  }
+  #dashboardCardsFlow.layout-edit-mode > [data-card-id].lc-dragging {
+    opacity: .4;
+  }
+  #dashboardCardsFlow.layout-edit-mode > [data-card-id].lc-drop-before {
+    box-shadow: -3px 0 0 0 var(--accent);
+  }
+  #dashboardCardsFlow.layout-edit-mode > [data-card-id].lc-drop-after {
+    box-shadow: 3px 0 0 0 var(--accent);
+  }
+
+  @media (max-width: 900px) {
+    #dashboardCardsFlow > [data-card-id] { flex-basis: 100% !important; }
+  }
+
   .home-feature-card {
     transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
   }

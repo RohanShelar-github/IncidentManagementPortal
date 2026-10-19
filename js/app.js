@@ -2389,6 +2389,164 @@ function clearDashFilters() {
   applyDashFilters();
 }
 
+// ─── ADMIN DASHBOARD LAYOUT CUSTOMIZATION ──────────────────────────────────
+// Every card in #dashboardCardsFlow carries a stable data-card-id. An admin
+// (gated by the customize_dashboard_layout permission) can drag any card to
+// any position — reordering only, each card keeps its existing size/width —
+// and Save persists the order globally via /api/dashboard-layout for every
+// user to load. Native HTML5 drag-and-drop; no external library, consistent
+// with the rest of this vanilla-JS app.
+var dashboardLayoutEditModeActive = false;
+var dashboardLayoutSavedOrder = null; // last-known-good order, restored on Cancel
+var dashboardLayoutDraggedId = null;
+
+function initDashboardLayoutControls() {
+  var bar = document.getElementById('dashboardLayoutControls');
+  if (bar) bar.style.display = hasPermission('customize_dashboard_layout') ? 'flex' : 'none';
+}
+
+function applyDashboardCardOrder(order) {
+  var flow = document.getElementById('dashboardCardsFlow');
+  if (!flow || !Array.isArray(order)) return;
+  order.forEach(function (cardId) {
+    var el = flow.querySelector('[data-card-id="' + cardId + '"]');
+    if (el) flow.appendChild(el);
+  });
+}
+
+// Fetches and applies the globally-saved card order — called on every
+// Dashboard load/refresh. Never while an admin is mid-edit, so a background
+// refresh can't yank cards out from under an in-progress drag.
+function loadDashboardLayout() {
+  initDashboardLayoutControls();
+  if (dashboardLayoutEditModeActive) return;
+  var token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) return;
+  fetch(window.APP_CONFIG.API_BASE_URL + '/dashboard-layout', {
+    headers: { Authorization: 'Bearer ' + token }
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (result) {
+      if (!result || !result.success || !Array.isArray(result.data) || !result.data.length) return;
+      dashboardLayoutSavedOrder = result.data.slice();
+      applyDashboardCardOrder(result.data);
+    })
+    .catch(function () { /* no saved layout yet, or offline — keep default order */ });
+}
+
+function toggleDashboardLayoutEditMode() {
+  if (!hasPermission('customize_dashboard_layout')) { showToast('Your role cannot customize the dashboard layout.', 'error'); return; }
+  var flow = document.getElementById('dashboardCardsFlow');
+  if (!flow) return;
+  if (!dashboardLayoutSavedOrder) {
+    dashboardLayoutSavedOrder = Array.prototype.map.call(flow.querySelectorAll('[data-card-id]'), function (el) { return el.getAttribute('data-card-id'); });
+  }
+  dashboardLayoutEditModeActive = true;
+  flow.classList.add('layout-edit-mode');
+  Array.prototype.forEach.call(flow.querySelectorAll('[data-card-id]'), function (el) {
+    el.draggable = true;
+    el.addEventListener('dragstart', handleDashboardCardDragStart);
+    el.addEventListener('dragover', handleDashboardCardDragOver);
+    el.addEventListener('dragleave', handleDashboardCardDragLeave);
+    el.addEventListener('drop', handleDashboardCardDrop);
+    el.addEventListener('dragend', handleDashboardCardDragEnd);
+  });
+  document.getElementById('btnEditDashboardLayout').style.display = 'none';
+  document.getElementById('btnSaveDashboardLayout').style.display = '';
+  document.getElementById('btnCancelDashboardLayout').style.display = '';
+  document.getElementById('dashboardLayoutHint').style.display = '';
+}
+
+function exitDashboardLayoutEditMode() {
+  var flow = document.getElementById('dashboardCardsFlow');
+  if (!flow) return;
+  dashboardLayoutEditModeActive = false;
+  flow.classList.remove('layout-edit-mode');
+  Array.prototype.forEach.call(flow.querySelectorAll('[data-card-id]'), function (el) {
+    el.draggable = false;
+    el.removeEventListener('dragstart', handleDashboardCardDragStart);
+    el.removeEventListener('dragover', handleDashboardCardDragOver);
+    el.removeEventListener('dragleave', handleDashboardCardDragLeave);
+    el.removeEventListener('drop', handleDashboardCardDrop);
+    el.removeEventListener('dragend', handleDashboardCardDragEnd);
+    el.classList.remove('lc-dragging', 'lc-drop-before', 'lc-drop-after');
+  });
+  document.getElementById('btnEditDashboardLayout').style.display = '';
+  document.getElementById('btnSaveDashboardLayout').style.display = 'none';
+  document.getElementById('btnCancelDashboardLayout').style.display = 'none';
+  document.getElementById('dashboardLayoutHint').style.display = 'none';
+}
+
+function handleDashboardCardDragStart(e) {
+  dashboardLayoutDraggedId = this.getAttribute('data-card-id');
+  this.classList.add('lc-dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  try { e.dataTransfer.setData('text/plain', dashboardLayoutDraggedId); } catch (err) { /* Safari/older browsers */ }
+}
+
+function handleDashboardCardDragOver(e) {
+  e.preventDefault();
+  if (this.getAttribute('data-card-id') === dashboardLayoutDraggedId) return;
+  var rect = this.getBoundingClientRect();
+  var before = (e.clientX - rect.left) < rect.width / 2;
+  this.classList.toggle('lc-drop-before', before);
+  this.classList.toggle('lc-drop-after', !before);
+}
+
+function handleDashboardCardDragLeave() {
+  this.classList.remove('lc-drop-before', 'lc-drop-after');
+}
+
+function handleDashboardCardDrop(e) {
+  e.preventDefault();
+  this.classList.remove('lc-drop-before', 'lc-drop-after');
+  var draggedId = dashboardLayoutDraggedId;
+  var targetId = this.getAttribute('data-card-id');
+  if (!draggedId || draggedId === targetId) return;
+  var flow = document.getElementById('dashboardCardsFlow');
+  var draggedEl = flow && flow.querySelector('[data-card-id="' + draggedId + '"]');
+  if (!draggedEl) return;
+  var rect = this.getBoundingClientRect();
+  var before = (e.clientX - rect.left) < rect.width / 2;
+  if (before) flow.insertBefore(draggedEl, this);
+  else flow.insertBefore(draggedEl, this.nextSibling);
+}
+
+function handleDashboardCardDragEnd() {
+  this.classList.remove('lc-dragging');
+  var flow = document.getElementById('dashboardCardsFlow');
+  if (flow) Array.prototype.forEach.call(flow.querySelectorAll('[data-card-id]'), function (el) { el.classList.remove('lc-drop-before', 'lc-drop-after'); });
+  dashboardLayoutDraggedId = null;
+}
+
+function saveDashboardLayout() {
+  var flow = document.getElementById('dashboardCardsFlow');
+  if (!flow) return;
+  var order = Array.prototype.map.call(flow.querySelectorAll('[data-card-id]'), function (el) { return el.getAttribute('data-card-id'); });
+  var token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  if (!token) { showToast('Not authenticated. Please login first.', 'error'); return; }
+  fetch(window.APP_CONFIG.API_BASE_URL + '/dashboard-layout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ order: order })
+  })
+    .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+    .then(function (result) {
+      if (!result.ok || !result.data.success) throw new Error(result.data.message || 'Unable to save the dashboard layout');
+      dashboardLayoutSavedOrder = order;
+      exitDashboardLayoutEditMode();
+      showToast('Dashboard layout saved for all users', 'success');
+    })
+    .catch(function (err) {
+      showToast(err.message || 'Unable to save the dashboard layout', 'error');
+    });
+}
+
+function cancelDashboardLayoutEdit() {
+  if (dashboardLayoutSavedOrder) applyDashboardCardOrder(dashboardLayoutSavedOrder);
+  exitDashboardLayoutEditMode();
+}
+
 // ─── GLOBAL SEARCH ────────────────────────────────────────
 function runGlobalSearch(q) {
   var res = document.getElementById('gsearchResults');
@@ -4154,13 +4312,14 @@ const PERM_LABELS = {
   manage_customer_csm: 'Manage Customer CSM',
   view_alert_compliance_report: 'View Alert Compliance Report',
   delete_alert_compliance_alerts: 'Delete Alert Compliance Alerts',
+  customize_dashboard_layout: 'Customize Dashboard Layout',
 };
 
 let roles = [
   {
     key: 'admin', name: 'Admin', icon: '🛡', color: 'purple', system: true,
     desc: 'Full access to all portal features including user and role management.',
-    perms: ['view_dashboard', ...DASHBOARD_CARD_PERMISSIONS, 'view_incidents', 'create_incidents', 'edit_incidents', 'close_incidents', 'delete_incidents', 'view_reports', 'export_reports', 'view_customer360', 'view_mailbox', 'send_mailbox', 'delete_mailbox', 'view_drafts', 'delete_drafts', 'manage_users', 'manage_roles', 'assign_roles', 'manage_data', 'manage_customer_csm', 'view_alert_compliance_report', 'delete_alert_compliance_alerts']
+    perms: ['view_dashboard', ...DASHBOARD_CARD_PERMISSIONS, 'view_incidents', 'create_incidents', 'edit_incidents', 'close_incidents', 'delete_incidents', 'view_reports', 'export_reports', 'view_customer360', 'view_mailbox', 'send_mailbox', 'delete_mailbox', 'view_drafts', 'delete_drafts', 'manage_users', 'manage_roles', 'assign_roles', 'manage_data', 'manage_customer_csm', 'view_alert_compliance_report', 'delete_alert_compliance_alerts', 'customize_dashboard_layout']
   },
   {
     key: 'cso', name: 'CSO', icon: '🌐', color: 'green', system: false,
@@ -6588,6 +6747,7 @@ function renderDashboardWidgets() {
   renderHealthGrid();
   updateStatusBar();
   applyDashFilters();
+  loadDashboardLayout();
 }
 
 function setDashboardRefreshState(isLoading, errorMessage) {
