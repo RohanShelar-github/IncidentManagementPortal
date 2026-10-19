@@ -181,7 +181,7 @@ test('index.html has balanced <div> tags overall, and #page-dashboard closes bef
 // ── original .stats-grid's auto-fill grid did. Dragging cards into a new
 // ── order routinely produces incomplete last rows, so this was reliably
 // ── triggered by the very feature it ships with.
-test('stat tiles do not grow to fill leftover space in an incomplete last row (flex-grow:0, not 1), and share a min-height so they look uniform regardless of which row a drag puts them in', () => {
-  assert.match(css, /#dashboardCardsFlow > \.lc-tile \{ flex: 0 1 220px; min-height: 150px; \}/);
+test('stat tiles do not grow to fill leftover space in an incomplete last row (flex-grow:0, not 1), and opt out of row-based height-stretching (align-self:flex-start + a shared min-height) so every tile is the same height regardless of which row a drag puts it in', () => {
+  assert.match(css, /#dashboardCardsFlow > \.lc-tile \{ flex: 0 1 220px; min-height: 170px; align-self: flex-start; \}/);
   assert.doesNotMatch(css, /#dashboardCardsFlow > \.lc-tile \{ flex: 1 1 220px/);
 });
