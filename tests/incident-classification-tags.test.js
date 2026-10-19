@@ -220,3 +220,26 @@ test('neither exportIncidentPDF (individual report) nor generatePDFReport (bulk 
   assert.doesNotMatch(functionBody('exportIncidentPDF'), /inc\.tag\b|inc\.tagId\b/, 'the individual incident report must not include the classification tag');
   assert.doesNotMatch(functionBody('generatePDFReport'), /i\.tag\b|i\.tagId\b|inc\.tag\b|inc\.tagId\b/, 'the bulk report must not include the classification tag');
 });
+
+// ── Bug: editing only the customer silently kept the OLD stale tag ───────
+//
+// f_tag_id/dp_f_tag_id are pre-filled with the incident's CURRENT tag when
+// editing (see editIncident/openDetailPanel above), not reset — so changing
+// only the customer without also remembering to touch the Tag dropdown
+// submitted that stale value as an explicit tag_id, which updateIncident
+// correctly treats as a deliberate manual override and honors verbatim.
+// Result: an incident created under an Internal-tag customer (MIS Cloud/
+// Matrix/Demo) whose customer was later corrected to a real one (e.g. NGC,
+// Christie Digital) silently kept the Internal tag forever, since nothing
+// ever re-evaluated it — confirmed against 4 real incidents live. Fixed by
+// resetting the tag field back to Auto whenever the customer field changes,
+// in both edit surfaces; a genuine manual override still works, it just has
+// to be re-picked after changing the customer, not before.
+test('changing the customer resets the Tag field back to Auto (blank) in both the Create/Edit modal (f_customer -> f_tag_id) and the detail panel quick-edit (dp_f_customer -> dp_f_tag_id)', () => {
+  const start = frontend.indexOf('function populateCustomerDropdowns()');
+  const end = frontend.indexOf('\nfunction ', start + 1);
+  const impl = frontend.slice(start, end);
+  assert.match(impl, /if \(id === 'f_customer'\) sel\.onchange = function \(\) \{\s*\n\s*if \(!editingId\) applyCreateCustomerTimezone\(this\.value\);/);
+  assert.match(impl, /var ftag = document\.getElementById\('f_tag_id'\); if \(ftag\) ftag\.value = '';/);
+  assert.match(impl, /if \(id === 'dp_f_customer'\) sel\.onchange = function \(\) \{\s*\n\s*var dpTag = document\.getElementById\('dp_f_tag_id'\); if \(dpTag\) dpTag\.value = '';/);
+});

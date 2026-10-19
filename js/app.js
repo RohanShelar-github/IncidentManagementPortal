@@ -7093,6 +7093,17 @@ function populateCustomerDropdowns() {
     if (cur && customers.indexOf(cur) >= 0) sel.value = cur;
     if (id === 'f_customer') sel.onchange = function () {
       if (!editingId) applyCreateCustomerTimezone(this.value);
+      // The Tag field is pre-filled with the incident's CURRENT tag when
+      // editing, not reset — changing only the customer without also
+      // remembering to touch Tag silently submitted that stale value as if
+      // it were a deliberate manual override, keeping the old customer's
+      // auto-classification (e.g. Internal) forever even after the customer
+      // was corrected. Reset to Auto on every customer change instead; a
+      // real manual override still works, just has to be re-picked after.
+      var ftag = document.getElementById('f_tag_id'); if (ftag) ftag.value = '';
+    };
+    if (id === 'dp_f_customer') sel.onchange = function () {
+      var dpTag = document.getElementById('dp_f_tag_id'); if (dpTag) dpTag.value = '';
     };
   });
 }
