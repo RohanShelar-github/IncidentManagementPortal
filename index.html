@@ -446,12 +446,12 @@
 </div>
 <div class="stat-card metric-kpi-card lc-tile" data-card-id="statMissedMttr" id="dashboardCardMissedMttr" onclick="openMetricDrillDown('mttr')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View contributing incidents" style="border-color:rgba(247,92,124,0.3);background:linear-gradient(135deg,rgba(247,92,124,0.08),rgba(247,92,124,0.02))">
 <div class="stat-label" style="color:var(--danger)">Missed MTTR Count</div>
-<div class="stat-value" id="statMissedMttr">—</div>
+<div class="stat-value" id="statMissedMttr" style="color:var(--danger)">—</div>
 <div class="stat-delta" id="statMissedMttrSub">resolved incidents exceeded target</div>
 </div>
 <div class="stat-card metric-kpi-card lc-tile" data-card-id="statMissedMttd" id="dashboardCardMissedMttd" onclick="openMetricDrillDown('mttd')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View contributing incidents" style="border-color:rgba(247,92,124,0.3);background:linear-gradient(135deg,rgba(247,92,124,0.08),rgba(247,92,124,0.02))">
 <div class="stat-label" style="color:var(--danger)">Missed MTTD Count</div>
-<div class="stat-value" id="statMissedMttd">—</div>
+<div class="stat-value" id="statMissedMttd" style="color:var(--danger)">—</div>
 <div class="stat-delta" id="statMissedMttdSub">incidents exceeded the 15m target</div>
 </div>
 <div class="stat-card metric-kpi-card lc-tile" data-card-id="statResolutionRate" id="dashboardCardResolutionRate" onclick="drillDownToIncidents({ statuses: ['Closed','Resolved'], _label: 'Resolved Incidents' })" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}" role="button" tabindex="0" title="View resolved incidents" style="border-color:rgba(45,212,160,0.3);background:linear-gradient(135deg,rgba(45,212,160,0.08),rgba(45,212,160,0.02))">
