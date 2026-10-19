@@ -1009,7 +1009,14 @@
     gap: 16px;
     margin-bottom: 24px;
   }
-  #dashboardCardsFlow > .lc-tile { flex: 1 1 220px; }
+  /* flex-grow:0 (not 1) deliberately — stat tiles must stay a uniform size
+     regardless of how many land in the row, matching the original
+     .stats-grid's repeat(auto-fill, minmax(220px,1fr)) behavior (auto-fill
+     leaves unfilled grid tracks empty rather than stretching existing items
+     into them). A grow value here would stretch whichever tiles happen to
+     be alone in an incomplete last row — exactly what repositioning tiles
+     via drag-and-drop produces routinely. */
+  #dashboardCardsFlow > .lc-tile { flex: 0 1 220px; }
   #dashboardCardsFlow > .lc-full { flex-basis: 100%; }
   #dashboardCardsFlow > .lc-wide { flex: 1 1 calc(66.666% - 8px); }
   #dashboardCardsFlow > .lc-narrow { flex: 1 1 calc(33.333% - 8px); }

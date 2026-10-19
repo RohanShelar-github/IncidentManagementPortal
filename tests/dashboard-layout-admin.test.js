@@ -12,6 +12,7 @@ const dashboardLayoutController = fs.readFileSync('backend/controllers/dashboard
 const dashboardLayoutRoutes = fs.readFileSync('backend/routes/dashboardLayoutRoutes.js', 'utf8');
 const migrationPermission = fs.readFileSync('backend/sql/047_customize_dashboard_layout_permission.sql', 'utf8');
 const migrationSettings = fs.readFileSync('backend/sql/048_app_settings.sql', 'utf8');
+const css = fs.readFileSync('css/styles.css', 'utf8');
 
 function slice(fnStart, fnEnd) {
   const start = frontend.indexOf(fnStart);
@@ -150,4 +151,37 @@ test('cancelDashboardLayoutEdit re-applies the last-saved order (discarding in-p
   const impl = frontend.slice(start, start + 300);
   assert.match(impl, /if \(dashboardLayoutSavedOrder\) applyDashboardCardOrder\(dashboardLayoutSavedOrder\);/);
   assert.match(impl, /exitDashboardLayoutEditMode\(\);/);
+});
+
+// ── Regression: wrapping all cards in #dashboardCardsFlow added a new
+// ── nesting level, so the closing </div> count at the end of the Dashboard
+// ── page had to grow by one too (chart-card -> #dashboardCardsFlow ->
+// ── #page-dashboard). Missing that extra closing tag left every later page
+// ── in the document (#page-mailbox, #page-incidents, #page-drafts, ...)
+// ── nested INSIDE the still-open #page-dashboard — invisible, since .page
+// ── is display:none unless .active, and a hidden ancestor overrides its own
+// ── .active descendant's display:block.
+test('index.html has balanced <div> tags overall, and #page-dashboard closes before #page-mailbox begins (no later page is nested inside it)', () => {
+  const opens = (html.match(/<div\b/g) || []).length;
+  const closes = (html.match(/<\/div>/g) || []).length;
+  assert.equal(opens, closes, 'every <div> in the file must have a matching closing tag');
+
+  const start = html.indexOf('<div class="page" id="page-dashboard">');
+  const mailboxStart = html.indexOf('<div class="page" id="page-mailbox">');
+  assert.ok(start > -1 && mailboxStart > start);
+  const region = html.slice(start, mailboxStart);
+  const regionOpens = (region.match(/<div\b/g) || []).length;
+  const regionCloses = (region.match(/<\/div>/g) || []).length;
+  assert.equal(regionOpens, regionCloses, '#page-dashboard itself must be closed before #page-mailbox begins');
+});
+
+// ── Regression: flex-grow:1 on stat tiles stretched whichever tiles ended
+// ── up alone in an incomplete last row (e.g. 3 leftover tiles filling a
+// ── full row's width each) instead of staying a uniform size like the
+// ── original .stats-grid's auto-fill grid did. Dragging cards into a new
+// ── order routinely produces incomplete last rows, so this was reliably
+// ── triggered by the very feature it ships with.
+test('stat tiles do not grow to fill leftover space in an incomplete last row (flex-grow:0, not 1)', () => {
+  assert.match(css, /#dashboardCardsFlow > \.lc-tile \{ flex: 0 1 220px; \}/);
+  assert.doesNotMatch(css, /#dashboardCardsFlow > \.lc-tile \{ flex: 1 1 220px; \}/);
 });
