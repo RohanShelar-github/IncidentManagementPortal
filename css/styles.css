@@ -1015,8 +1015,15 @@
      leaves unfilled grid tracks empty rather than stretching existing items
      into them). A grow value here would stretch whichever tiles happen to
      be alone in an incomplete last row — exactly what repositioning tiles
-     via drag-and-drop produces routinely. */
-  #dashboardCardsFlow > .lc-tile { flex: 0 1 220px; }
+     via drag-and-drop produces routinely.
+     min-height is needed because flexbox only stretches items to match the
+     tallest SIBLING IN THE SAME ROW — "Avg Downtime" (which has an extra
+     dropdown + a 2-line sub-label) is taller than a plain tile, so whichever
+     tiles happen to land in its row get stretched to match it while tiles a
+     row apart stay short, making tile height depend on drag order instead of
+     being consistent. A shared min-height makes every tile the same height
+     regardless of which row it's dragged into. */
+  #dashboardCardsFlow > .lc-tile { flex: 0 1 220px; min-height: 150px; }
   #dashboardCardsFlow > .lc-full { flex-basis: 100%; }
   #dashboardCardsFlow > .lc-wide { flex: 1 1 calc(66.666% - 8px); }
   #dashboardCardsFlow > .lc-narrow { flex: 1 1 calc(33.333% - 8px); }
