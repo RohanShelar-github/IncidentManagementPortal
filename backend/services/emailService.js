@@ -400,6 +400,10 @@ async function graphInboxJsonRequest(path, method, body) {
 function mailboxCategoryGraphFilter(category) {
   if (category === 'coralogix') return "from/emailAddress/address eq 'alerts@coralogix.com'";
   if (category === 'azure') return "from/emailAddress/address eq 'azure-noreply@microsoft.com'";
+  // The alert name substring sits between the quote characters in both
+  // subject variants ("... was fired" / "... was resolved") and contains no
+  // apostrophe itself, so it is safe to use directly as an OData literal.
+  if (category === 'ngcPlantsMonitoring') return "from/emailAddress/address eq 'azure-noreply@microsoft.com' and contains(subject,'NGC Monitoring - KF LIMAB Caliper Average Not Found')";
   // Reply/forward prefixes are normal for Customer Raised Tickets, so an
   // exact startswith filter would undercount and hide active conversations.
   if (category === 'jira') return "contains(subject,'was reported by the customer')";
@@ -427,7 +431,7 @@ async function listMailboxFolderMessages(folder, limit = 50, category = 'all', c
   // found — otherwise a category that's rarer than others right now (e.g.
   // Azure alerts buried under a flood of Coralogix ones) would show "no
   // messages found" even though plenty exist further back.
-  const needsClientSideScan = folder === 'inbox' && (selectedCategory === 'coralogix' || selectedCategory === 'azure');
+  const needsClientSideScan = folder === 'inbox' && (selectedCategory === 'coralogix' || selectedCategory === 'azure' || selectedCategory === 'ngcPlantsMonitoring');
   if (needsClientSideScan) {
     const matched = [];
     let scanCursor = cursor;
@@ -596,7 +600,7 @@ async function countUnreadMailboxMessages(category) {
 }
 
 async function getOperationsMailboxCounts() {
-  const categories = ['coralogix', 'azure', 'jira'];
+  const categories = ['coralogix', 'azure', 'ngcPlantsMonitoring', 'jira'];
   const values = await Promise.all(categories.map(async (category) => [category, await countUnreadMailboxMessages(category)]));
   return Object.fromEntries(values);
 }

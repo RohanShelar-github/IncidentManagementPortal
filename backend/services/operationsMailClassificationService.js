@@ -6,9 +6,26 @@ const OPERATIONS_MAIL_CATEGORIES = Object.freeze({
   all: { key: 'all', label: 'All Incoming' },
   coralogix: { key: 'coralogix', label: 'Coralogix Alerts', sender: 'alerts@coralogix.com' },
   azure: { key: 'azure', label: 'Azure Alerts', sender: 'azure-noreply@microsoft.com' },
+  ngcPlantsMonitoring: { key: 'ngcPlantsMonitoring', label: 'NGC Plants Monitoring', sender: 'azure-noreply@microsoft.com' },
   jira: { key: 'jira', label: 'Customer Raised Tickets' },
   sent: { key: 'sent', label: 'Sent Items' }
 });
+
+// The exact alert name text NGC Plants Monitoring subjects carry between the
+// two quoted-and-fixed subject variants ("... was fired" / "... was
+// resolved"). Kept as one constant so the Graph $filter (emailService.js)
+// and this subject-match regex can never drift apart.
+const NGC_PLANTS_MONITORING_ALERT_NAME = 'NGC Monitoring - KF LIMAB Caliper Average Not Found';
+// Accepts straight (') and curly (’ ‘) apostrophes since Azure/Outlook can
+// render either around the alert name.
+const NGC_PLANTS_MONITORING_SUBJECT = /^Alert\s+[’'‘]NGC Monitoring - KF LIMAB Caliper Average Not Found[’'‘]\s+was\s+(fired|resolved)\s*$/i;
+
+function ngcPlantsMonitoringAlertState(subject) {
+  // Replies/forwards keep the original subject with a prefix chain.
+  const value = String(subject || '').trim().replace(/^(?:(?:re|fw|fwd)\s*:\s*)+/i, '');
+  const match = value.match(NGC_PLANTS_MONITORING_SUBJECT);
+  return match ? match[1].toLowerCase() : null;
+}
 
 function jiraSubjectPrefix() {
   return String(process.env.JIRA_CUSTOMER_TICKET_SUBJECT_PREFIX || 'A new support issue ').trim();
@@ -76,6 +93,7 @@ function noHistorianReadIncidentDefaults() {
 function classifyOperationsMessage(message) {
   const sender = String(message?.from || message?.fromAddress || '').trim().toLowerCase();
   const subject = String(message?.subject || '');
+  if (sender === OPERATIONS_MAIL_CATEGORIES.azure.sender && ngcPlantsMonitoringAlertState(subject)) return { category: 'ngcPlantsMonitoring', jiraIssueKey: '' };
   if (sender === OPERATIONS_MAIL_CATEGORIES.coralogix.sender) return { category: 'coralogix', jiraIssueKey: '' };
   if (sender === OPERATIONS_MAIL_CATEGORIES.azure.sender) return { category: 'azure', jiraIssueKey: '' };
   if (isJiraCustomerTicketSubject(subject)) return { category: 'jira', jiraIssueKey: extractJiraIssueKey(subject) };
@@ -87,4 +105,4 @@ function normalizedOperationsCategory(value) {
   return Object.prototype.hasOwnProperty.call(OPERATIONS_MAIL_CATEGORIES, key) ? key : 'all';
 }
 
-module.exports = { OPERATIONS_MAIL_CATEGORIES, classifyOperationsMessage, extractJiraIssueKey, isJiraCustomerTicketSubject, jiraSubjectPrefix, noHistorianReadIncidentDefaults, normalizedOperationsCategory, operationsIncidentDefaults, subjectContains };
+module.exports = { OPERATIONS_MAIL_CATEGORIES, NGC_PLANTS_MONITORING_ALERT_NAME, classifyOperationsMessage, extractJiraIssueKey, isJiraCustomerTicketSubject, jiraSubjectPrefix, ngcPlantsMonitoringAlertState, noHistorianReadIncidentDefaults, normalizedOperationsCategory, operationsIncidentDefaults, subjectContains };

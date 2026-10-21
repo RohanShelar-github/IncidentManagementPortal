@@ -3408,6 +3408,34 @@ function noHistorianReplyRecipientPreset(message) {
   return historianMailRecipientPreset({ customer: 'NGC', project: 'Historian', area: 'Historian' });
 }
 
+// "Notify Customer" prefill for NGC Plants Monitoring alerts — only offered
+// on a "fired" alert (a "resolved" one needs no customer notification). The
+// body is prefilled with the same branded card styling incident emails use
+// (see emailService.js incidentEmail()) so this customer-facing notice looks
+// consistent with the rest of the portal's outgoing mail.
+function ngcPlantsMonitoringNotifyPreset(message) {
+  if (!message || message.category !== 'ngcPlantsMonitoring' || isResolvedOperationsEmail(message)) return null;
+  return {
+    to: 'matthewp@nationalgypsum.com,billb@nationalgypsum.com,dimpalp@nationalgypsum.com',
+    cc: 'Rohan_Vikhe@magicsoftware.com,jaiprakash_prajapati@magicsoftware.com,Mayur_Jaipurkar@magicsoftware.com',
+    subject: 'NGC Monitoring - KF LIMAB Caliper Average Not Found',
+    bodyHtml: '<div style="max-width:640px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a">'
+      + '<div style="background:#172554;padding:20px 24px;color:#fff">'
+      + '<div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;opacity:.8">AOC 24×7 Incident Management</div>'
+      + '<h1 style="font-size:20px;margin:8px 0 0">NGC Plants Monitoring Alert</h1>'
+      + '</div>'
+      + '<div style="padding:22px 24px">'
+      + '<div style="font-size:15px;font-weight:700;margin-bottom:14px">NGC Monitoring - KF LIMAB Caliper Average Not Found</div>'
+      + '<div style="background:#f8fafc;border-left:4px solid #3b82f6;padding:14px 16px;font-size:13px;line-height:1.7">'
+      + '<div>Hi Team,</div><div>&nbsp;</div>'
+      + '<div>The KF LIMAB Caliper Average tag is currently not receiving any data from the following plants:</div>'
+      + '<ul style="margin:8px 0 10px 18px;padding:0"><li>BAL2</li><li>MED2</li><li>RIC</li><li>SAV</li><li>WLM</li></ul>'
+      + '<div>The alarm is configured to trigger when the production line is running and no new data is received from the KF LIMAB Caliper Average tag for 120 minutes.</div>'
+      + '<div>&nbsp;</div><div>Thanks</div>'
+      + '</div></div></div>'
+  };
+}
+
 function mailboxRecipientSuggestionEntries(inputs) {
   var directory = new Map();
   var add = function (email, name) {
@@ -3473,20 +3501,21 @@ function showMailboxReply(message, detail, initialMode) {
   var heading = document.createElement('div'); heading.className = 'mailbox-compose-head'; var label = document.createElement('div'); label.className = 'mailbox-reply-label'; label.textContent = 'Compose from AOC mailbox'; var mode = { value: initialMode || 'reply' }; heading.append(label);
   var sentItem = mailboxMessageFolder(message) === 'sent';
   var historianRecipients = initialMode === 'forward' ? null : noHistorianReplyRecipientPreset(message);
-  var to = document.createElement('input'); to.type = 'email'; to.className = 'mailbox-compose-input'; to.placeholder = 'To'; to.value = sentItem ? (message.to || '') : (message.from || ''); if (historianRecipients) to.value = historianRecipients.to; var cc = document.createElement('input'); cc.type = 'text'; cc.className = 'mailbox-compose-input'; cc.placeholder = 'CC (comma-separated, optional)';
+  var ngcPreset = initialMode === 'forward' ? null : ngcPlantsMonitoringNotifyPreset(message);
+  var to = document.createElement('input'); to.type = 'email'; to.className = 'mailbox-compose-input'; to.placeholder = 'To'; to.value = sentItem ? (message.to || '') : (message.from || ''); if (historianRecipients) to.value = historianRecipients.to; if (ngcPreset) to.value = ngcPreset.to; var cc = document.createElement('input'); cc.type = 'text'; cc.className = 'mailbox-compose-input'; cc.placeholder = 'CC (comma-separated, optional)';
   // Set Reply All recipients before the chip widget is attached. Previously
   // they were assigned afterwards, and the empty widget state overwrote them.
-  cc.value = historianRecipients ? historianRecipients.cc : (initialMode === 'replyAll' ? (sentItem ? (message.cc || '') : (message.replyAllCc || message.to || message.cc || '')) : '');
-  var bcc = document.createElement('input'); bcc.type = 'text'; bcc.className = 'mailbox-compose-input'; bcc.placeholder = 'BCC (comma-separated, optional)'; var subject = document.createElement('input'); subject.type = 'text'; subject.className = 'mailbox-compose-input'; subject.placeholder = 'Subject'; subject.value = message.subject && /^re:/i.test(message.subject) ? message.subject : 'Re: ' + (message.subject || '');
-  var recipientHelp = document.createElement('div'); recipientHelp.className = 'mailbox-recipient-help'; recipientHelp.textContent = historianRecipients ? 'Historian incident recipients were prefilled. You may edit To, CC, or subject.' : 'Reply recipients are taken from the original message.';
-  function updateMode() { var forward = mode.value === 'forward'; to.readOnly = false; to.disabled = false; to.setAttribute('aria-disabled', 'false'); to.title = forward ? 'Enter the recipient(s) for this forwarded email.' : 'You may edit the reply recipient(s).'; recipientHelp.textContent = historianRecipients ? 'Historian incident recipients were prefilled. You may edit To, CC, or subject.' : (forward ? 'Enter the recipient(s) for this forwarded email.' : (sentItem ? (mode.value === 'replyAll' ? 'Original To and CC recipients are included. You may edit To, subject, or CC.' : 'Original recipients are included. You may edit To or subject.') : (mode.value === 'replyAll' ? 'Reply-all recipients are included in CC. You may edit To, subject, or CC.' : 'Reply recipients are taken from the original message. You may edit To or subject.'))); }
+  cc.value = ngcPreset ? ngcPreset.cc : historianRecipients ? historianRecipients.cc : (initialMode === 'replyAll' ? (sentItem ? (message.cc || '') : (message.replyAllCc || message.to || message.cc || '')) : '');
+  var bcc = document.createElement('input'); bcc.type = 'text'; bcc.className = 'mailbox-compose-input'; bcc.placeholder = 'BCC (comma-separated, optional)'; var subject = document.createElement('input'); subject.type = 'text'; subject.className = 'mailbox-compose-input'; subject.placeholder = 'Subject'; subject.value = ngcPreset ? ngcPreset.subject : (message.subject && /^re:/i.test(message.subject) ? message.subject : 'Re: ' + (message.subject || ''));
+  var recipientHelp = document.createElement('div'); recipientHelp.className = 'mailbox-recipient-help'; recipientHelp.textContent = ngcPreset ? 'Customer notification recipients and message were prefilled. You may edit To, CC, subject, or the message.' : historianRecipients ? 'Historian incident recipients were prefilled. You may edit To, CC, or subject.' : 'Reply recipients are taken from the original message.';
+  function updateMode() { var forward = mode.value === 'forward'; to.readOnly = false; to.disabled = false; to.setAttribute('aria-disabled', 'false'); to.title = forward ? 'Enter the recipient(s) for this forwarded email.' : 'You may edit the reply recipient(s).'; recipientHelp.textContent = ngcPreset ? 'Customer notification recipients and message were prefilled. You may edit To, CC, subject, or the message.' : historianRecipients ? 'Historian incident recipients were prefilled. You may edit To, CC, or subject.' : (forward ? 'Enter the recipient(s) for this forwarded email.' : (sentItem ? (mode.value === 'replyAll' ? 'Original To and CC recipients are included. You may edit To, subject, or CC.' : 'Original recipients are included. You may edit To or subject.') : (mode.value === 'replyAll' ? 'Reply-all recipients are included in CC. You may edit To, subject, or CC.' : 'Reply recipients are taken from the original message. You may edit To or subject.'))); }
   cc.addEventListener('input', function () { cc.dataset.manuallyChanged = 'true'; });
   var toolbar = document.createElement('div'); toolbar.className = 'mailbox-compose-toolbar'; [['bold','B','Bold'],['italic','I','Italic'],['underline','U','Underline'],['insertUnorderedList','• List','Bulleted list'],['insertOrderedList','1. List','Numbered list'],['createLink','↗ Link','Insert link'],['addSignature','Signature','Add saved signature'],['removeFormat','Tx','Clear formatting']].forEach(function (entry) { var button = document.createElement('button'); button.type = 'button'; button.className = 'mailbox-tool'; button.textContent = entry[1]; button.title = entry[2]; button.onclick = function () { if (entry[0] === 'addSignature') { appendMailboxSignature(editor); return; } var value = entry[0] === 'createLink' ? window.prompt('Paste the link URL') : null; if (entry[0] !== 'createLink' || value) document.execCommand(entry[0], false, value); editor.focus(); }; toolbar.appendChild(button); });
   var editor = document.createElement('div'); editor.className = 'mailbox-rich-editor'; editor.contentEditable = 'true'; editor.setAttribute('role', 'textbox'); editor.setAttribute('aria-label', 'Email message'); editor.dataset.placeholder = 'Write your message…'; configureMailboxComposeImageEditor(editor, 'mailboxReplyEditor'); addMailboxComposeImageTools(toolbar, editor);
   var attachments = document.createElement('div'); attachments.className = 'mailbox-compose-attachments'; var fileInput = document.createElement('input'); fileInput.type = 'file'; fileInput.multiple = true; fileInput.id = 'mailboxReplyFiles'; var fileLabel = document.createElement('label'); fileLabel.className = 'mailbox-attach-button'; fileLabel.htmlFor = fileInput.id; fileLabel.textContent = 'Attach files'; var fileNames = document.createElement('span'); fileNames.className = 'mailbox-file-names'; fileNames.textContent = 'Up to 10 files, 2.5 MB each'; fileInput.onchange = function () { fileNames.textContent = fileInput.files.length ? Array.from(fileInput.files).map(function (file) { return file.name; }).join(', ') : 'Up to 10 files, 2.5 MB each'; }; attachments.append(fileInput, fileLabel, fileNames);
   var actions = document.createElement('div'); actions.className = 'mailbox-reply-actions'; var cancel = document.createElement('button'); cancel.className = 'btn btn-secondary btn-sm'; cancel.textContent = 'Discard'; cancel.onclick = function () { form.remove(); }; var send = document.createElement('button'); send.className = 'btn btn-primary btn-sm'; send.textContent = 'Send'; send.onclick = function () { var html = editor.innerHTML.trim(); if (!editor.textContent.trim() && !editor.querySelector('img')) { showToast('Please enter a message.', 'error'); return; } send.disabled = true; send.textContent = 'Preparing…'; mailboxFilesToPayload(fileInput.files).then(function (attachmentsPayload) { send.textContent = 'Sending…'; return fetch(window.APP_CONFIG.API_BASE_URL + mailboxMessagePath(message, '/reply'), { method: 'POST', headers: { Authorization: 'Bearer ' + mailboxToken(), 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: mode.value, to: to.value.trim(), cc: cc.value.trim(), bcc: bcc.value.trim(), subject: subject.value.trim(), html: html, attachments: attachmentsPayload }) }).then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to send email'); return data; }); }); }).then(function () { showToast('Email sent from the AOC mailbox.', 'success'); form.remove(); if (mailboxActiveView === 'sent') loadMailbox(); if (document.body.classList.contains('mail-popout-mode')) setTimeout(function () { window.close(); }, 1200); }).catch(function (error) { send.disabled = false; send.textContent = 'Send'; showToast(error.message, 'error'); }); }; actions.append(cancel, send);
   var recipientInputs = [to, cc]; var toControl = attachMailboxRecipientSuggestions(to, 'To', recipientInputs); var ccControl = attachMailboxRecipientSuggestions(cc, 'CC', recipientInputs); loadRecipientDirectory();
-  form.append(heading, toControl, ccControl, bcc, subject, recipientHelp, toolbar, editor, attachments, actions); detail.querySelector('.mailbox-detail-body-wrap').before(form); var composerObserver = new MutationObserver(function () { if (!form.isConnected) { if (bodyWrap) bodyWrap.style.display = ''; composerObserver.disconnect(); } }); composerObserver.observe(detail, { childList: true }); updateMode(); toControl._render(); ccControl._render(); editor.focus();
+  form.append(heading, toControl, ccControl, bcc, subject, recipientHelp, toolbar, editor, attachments, actions); detail.querySelector('.mailbox-detail-body-wrap').before(form); var composerObserver = new MutationObserver(function () { if (!form.isConnected) { if (bodyWrap) bodyWrap.style.display = ''; composerObserver.disconnect(); } }); composerObserver.observe(detail, { childList: true }); updateMode(); toControl._render(); ccControl._render(); if (ngcPreset) editor.innerHTML = ngcPreset.bodyHtml; editor.focus();
 }
 function deleteMailboxMessage(message, detail) {
   fetch(window.APP_CONFIG.API_BASE_URL + mailboxMessagePath(message), { method: 'DELETE', headers: { Authorization: 'Bearer ' + mailboxToken() } })
@@ -3585,7 +3614,7 @@ function ensureOperationsMailboxUi() {
     var signature = document.createElement('button'); signature.className = 'operations-view'; signature.type = 'button'; signature.textContent = '✍ Signature'; signature.onclick = openMailboxSignatureManager; sidebar.appendChild(signature);
     function group(label) { var item = document.createElement('div'); item.className = 'operations-nav-group'; item.textContent = label; sidebar.appendChild(item); }
     function view(key, label, emphasis) { var button = document.createElement('button'); button.type = 'button'; button.className = 'operations-view' + (emphasis ? ' operations-customer' : ''); button.dataset.mailboxView = key; button.onclick = function () { setMailboxView(key); }; var text = document.createElement('span'); text.textContent = label; var count = document.createElement('span'); count.className = 'operations-count'; count.id = 'operationsCount' + key.charAt(0).toUpperCase() + key.slice(1); button.append(text, count); sidebar.appendChild(button); }
-    group('Incoming'); view('all', 'All Incoming'); view('coralogix', 'Coralogix Alerts'); view('azure', 'Azure Alerts'); view('jira', 'Customer Raised Tickets', true); group('Mail'); view('sent', 'Sent Items');
+    group('Incoming'); view('all', 'All Incoming'); view('coralogix', 'Coralogix Alerts'); view('azure', 'Azure Alerts'); view('ngcPlantsMonitoring', 'NGC Plants Monitoring'); view('jira', 'Customer Raised Tickets', true); group('Mail'); view('sent', 'Sent Items');
     layout.insertBefore(sidebar, layout.firstChild);
   }
   var listCard = layout.querySelector('.mailbox-list-card');
@@ -3603,9 +3632,9 @@ function isResolvedOperationsEmail(message) {
   return /\b(?:resolved|deactivated)\b/i.test(String(message && message.subject || ''));
 }
 
-function operationsViewLabel(view) { return ({ all: 'All Incoming', coralogix: 'Coralogix Alerts', azure: 'Azure Alerts', jira: 'Customer Raised Tickets', sent: 'Sent Items' })[view] || 'All Incoming'; }
+function operationsViewLabel(view) { return ({ all: 'All Incoming', coralogix: 'Coralogix Alerts', azure: 'Azure Alerts', ngcPlantsMonitoring: 'NGC Plants Monitoring', jira: 'Customer Raised Tickets', sent: 'Sent Items' })[view] || 'All Incoming'; }
 function mailboxReadFilterLabel(filter) { return ({ all: 'All', unread: 'Unread', read: 'Read', incident_sent: 'Incident Sent', incident_eligible: 'Create Incident' })[filter] || 'All'; }
-function setMailboxView(view) { mailboxActiveView = ['all', 'coralogix', 'azure', 'jira', 'sent'].indexOf(view) > -1 ? view : 'all'; if (mailboxActiveView === 'sent') mailboxReadFilter = 'all'; mailboxSearchQuery = ''; var search = document.getElementById('mailboxSearch'); if (search) search.value = ''; selectedMailboxId = null; selectedMailboxMessageIds.clear(); var detail = document.getElementById('mailboxDetail'); if (detail) detail.innerHTML = '<div class="mailbox-empty">Select an email to read it here.</div>'; ensureOperationsMailboxUi(); loadMailbox(); }
+function setMailboxView(view) { mailboxActiveView = ['all', 'coralogix', 'azure', 'ngcPlantsMonitoring', 'jira', 'sent'].indexOf(view) > -1 ? view : 'all'; if (mailboxActiveView === 'sent') mailboxReadFilter = 'all'; mailboxSearchQuery = ''; var search = document.getElementById('mailboxSearch'); if (search) search.value = ''; selectedMailboxId = null; selectedMailboxMessageIds.clear(); var detail = document.getElementById('mailboxDetail'); if (detail) detail.innerHTML = '<div class="mailbox-empty">Select an email to read it here.</div>'; ensureOperationsMailboxUi(); loadMailbox(); }
 function setMailboxReadFilter(filter) { var previous = mailboxReadFilter; mailboxReadFilter = ['all', 'unread', 'read', 'incident_sent', 'incident_eligible'].indexOf(filter) > -1 ? filter : 'all'; selectedMailboxId = null; selectedMailboxMessageIds.clear(); var detail = document.getElementById('mailboxDetail'); if (detail) detail.innerHTML = '<div class="mailbox-empty">Select an email to read it here.</div>'; ensureOperationsMailboxUi(); if (mailboxReadFilter === 'incident_sent' || previous === 'incident_sent') loadMailbox(); else renderMailboxList(); }
 function ensureMailboxReadFilterUi(layout) {
   var head = layout && layout.querySelector('.mailbox-list-head'); if (!head) return;
@@ -3630,6 +3659,9 @@ function setMailboxSearch(value) { mailboxSearchQuery = String(value || '').trim
 // Create Incident Button filter and the button's own render condition can
 // never silently drift apart.
 function mailboxHasCreateIncidentButton(message) {
+  // NGC Plants Monitoring alerts are email-notification only — no incident
+  // is ever created from this category, unconditionally (not just P3).
+  if (message.category === 'ngcPlantsMonitoring') return false;
   // A Coralogix/Azure alert confirmed Informational (P3) never needs an
   // incident — but unknown/undetected severity is left alone (fail-open),
   // so an alert type the backend can't yet classify never silently loses
@@ -3650,7 +3682,7 @@ function mailboxVisibleMessages() {
 function loadOperationsCounts() {
   fetch(window.APP_CONFIG.API_BASE_URL + '/mailbox/operations-counts', { headers: { Authorization: 'Bearer ' + mailboxToken() } })
     .then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(); return data.data || {}; }); })
-    .then(function (counts) { ['coralogix', 'azure', 'jira'].forEach(function (key) { var item = document.getElementById('operationsCount' + key.charAt(0).toUpperCase() + key.slice(1)); if (item) item.textContent = Number(counts[key] || 0) || ''; }); })
+    .then(function (counts) { ['coralogix', 'azure', 'ngcPlantsMonitoring', 'jira'].forEach(function (key) { var item = document.getElementById('operationsCount' + key.charAt(0).toUpperCase() + key.slice(1)); if (item) item.textContent = Number(counts[key] || 0) || ''; }); })
     .catch(function () { /* the list remains usable when counts cannot be loaded */ });
 }
 
@@ -4097,6 +4129,7 @@ function openMailboxMessage(id) {
       head.append(subject, meta); if (detailIncidentNotice) head.appendChild(detailIncidentNotice);
       var actions = document.createElement('div'); actions.className = 'mailbox-message-actions';
       if (hasMailboxPermission('send_mailbox')) actions.append(mailboxActionButton('Reply', '↩', function () { showMailboxReply(message, detail, 'reply'); }), mailboxActionButton('Reply all', '↩↩', function () { showMailboxReply(message, detail, 'replyAll'); }), mailboxActionButton('Forward', '↪', function () { showMailboxReply(message, detail, 'forward'); }));
+      if (hasMailboxPermission('send_mailbox') && ngcPlantsMonitoringNotifyPreset(message)) { var notifyCustomer = document.createElement('button'); notifyCustomer.type = 'button'; notifyCustomer.className = 'btn btn-primary btn-sm mailbox-notify-customer'; notifyCustomer.textContent = 'Notify Customer'; notifyCustomer.onclick = function () { showMailboxReply(message, detail, 'reply'); }; actions.appendChild(notifyCustomer); }
       if (mailboxActiveView !== 'sent' && message.isRead) actions.appendChild(mailboxActionButton('Mark as unread', '○', function () { setMailboxMessageReadStateInUi(message, false); }));
       if (hasMailboxPermission('delete_mailbox')) actions.appendChild(mailboxActionButton('Move to Deleted Items', '⌫', function () { deleteMailboxMessage(message, detail); }, true));
       if (actions.childElementCount) head.appendChild(actions);
