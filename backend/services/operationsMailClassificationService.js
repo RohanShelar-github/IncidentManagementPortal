@@ -6,7 +6,7 @@ const OPERATIONS_MAIL_CATEGORIES = Object.freeze({
   all: { key: 'all', label: 'All Incoming' },
   coralogix: { key: 'coralogix', label: 'Coralogix Alerts', sender: 'alerts@coralogix.com' },
   azure: { key: 'azure', label: 'Azure Alerts', sender: 'azure-noreply@microsoft.com' },
-  ngcPlantsMonitoring: { key: 'ngcPlantsMonitoring', label: 'NGC Plants Monitoring', sender: 'azure-noreply@microsoft.com' },
+  ngcplantsmonitoring: { key: 'ngcplantsmonitoring', label: 'NGC Plants Monitoring', sender: 'azure-noreply@microsoft.com' },
   jira: { key: 'jira', label: 'Customer Raised Tickets' },
   sent: { key: 'sent', label: 'Sent Items' }
 });
@@ -93,7 +93,7 @@ function noHistorianReadIncidentDefaults() {
 function classifyOperationsMessage(message) {
   const sender = String(message?.from || message?.fromAddress || '').trim().toLowerCase();
   const subject = String(message?.subject || '');
-  if (sender === OPERATIONS_MAIL_CATEGORIES.azure.sender && ngcPlantsMonitoringAlertState(subject)) return { category: 'ngcPlantsMonitoring', jiraIssueKey: '' };
+  if (sender === OPERATIONS_MAIL_CATEGORIES.azure.sender && ngcPlantsMonitoringAlertState(subject)) return { category: 'ngcplantsmonitoring', jiraIssueKey: '' };
   if (sender === OPERATIONS_MAIL_CATEGORIES.coralogix.sender) return { category: 'coralogix', jiraIssueKey: '' };
   if (sender === OPERATIONS_MAIL_CATEGORIES.azure.sender) return { category: 'azure', jiraIssueKey: '' };
   if (isJiraCustomerTicketSubject(subject)) return { category: 'jira', jiraIssueKey: extractJiraIssueKey(subject) };

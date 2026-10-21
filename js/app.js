@@ -3414,7 +3414,7 @@ function noHistorianReplyRecipientPreset(message) {
 // (see emailService.js incidentEmail()) so this customer-facing notice looks
 // consistent with the rest of the portal's outgoing mail.
 function ngcPlantsMonitoringNotifyPreset(message) {
-  if (!message || message.category !== 'ngcPlantsMonitoring' || isResolvedOperationsEmail(message)) return null;
+  if (!message || message.category !== 'ngcplantsmonitoring' || isResolvedOperationsEmail(message)) return null;
   return {
     to: 'matthewp@nationalgypsum.com,billb@nationalgypsum.com,dimpalp@nationalgypsum.com',
     cc: 'Rohan_Vikhe@magicsoftware.com,jaiprakash_prajapati@magicsoftware.com,Mayur_Jaipurkar@magicsoftware.com',
@@ -3614,7 +3614,7 @@ function ensureOperationsMailboxUi() {
     var signature = document.createElement('button'); signature.className = 'operations-view'; signature.type = 'button'; signature.textContent = '✍ Signature'; signature.onclick = openMailboxSignatureManager; sidebar.appendChild(signature);
     function group(label) { var item = document.createElement('div'); item.className = 'operations-nav-group'; item.textContent = label; sidebar.appendChild(item); }
     function view(key, label, emphasis) { var button = document.createElement('button'); button.type = 'button'; button.className = 'operations-view' + (emphasis ? ' operations-customer' : ''); button.dataset.mailboxView = key; button.onclick = function () { setMailboxView(key); }; var text = document.createElement('span'); text.textContent = label; var count = document.createElement('span'); count.className = 'operations-count'; count.id = 'operationsCount' + key.charAt(0).toUpperCase() + key.slice(1); button.append(text, count); sidebar.appendChild(button); }
-    group('Incoming'); view('all', 'All Incoming'); view('coralogix', 'Coralogix Alerts'); view('azure', 'Azure Alerts'); view('ngcPlantsMonitoring', 'NGC Plants Monitoring'); view('jira', 'Customer Raised Tickets', true); group('Mail'); view('sent', 'Sent Items');
+    group('Incoming'); view('all', 'All Incoming'); view('coralogix', 'Coralogix Alerts'); view('azure', 'Azure Alerts'); view('ngcplantsmonitoring', 'NGC Plants Monitoring'); view('jira', 'Customer Raised Tickets', true); group('Mail'); view('sent', 'Sent Items');
     layout.insertBefore(sidebar, layout.firstChild);
   }
   var listCard = layout.querySelector('.mailbox-list-card');
@@ -3632,9 +3632,9 @@ function isResolvedOperationsEmail(message) {
   return /\b(?:resolved|deactivated)\b/i.test(String(message && message.subject || ''));
 }
 
-function operationsViewLabel(view) { return ({ all: 'All Incoming', coralogix: 'Coralogix Alerts', azure: 'Azure Alerts', ngcPlantsMonitoring: 'NGC Plants Monitoring', jira: 'Customer Raised Tickets', sent: 'Sent Items' })[view] || 'All Incoming'; }
+function operationsViewLabel(view) { return ({ all: 'All Incoming', coralogix: 'Coralogix Alerts', azure: 'Azure Alerts', ngcplantsmonitoring: 'NGC Plants Monitoring', jira: 'Customer Raised Tickets', sent: 'Sent Items' })[view] || 'All Incoming'; }
 function mailboxReadFilterLabel(filter) { return ({ all: 'All', unread: 'Unread', read: 'Read', incident_sent: 'Incident Sent', incident_eligible: 'Create Incident' })[filter] || 'All'; }
-function setMailboxView(view) { mailboxActiveView = ['all', 'coralogix', 'azure', 'ngcPlantsMonitoring', 'jira', 'sent'].indexOf(view) > -1 ? view : 'all'; if (mailboxActiveView === 'sent') mailboxReadFilter = 'all'; mailboxSearchQuery = ''; var search = document.getElementById('mailboxSearch'); if (search) search.value = ''; selectedMailboxId = null; selectedMailboxMessageIds.clear(); var detail = document.getElementById('mailboxDetail'); if (detail) detail.innerHTML = '<div class="mailbox-empty">Select an email to read it here.</div>'; ensureOperationsMailboxUi(); loadMailbox(); }
+function setMailboxView(view) { mailboxActiveView = ['all', 'coralogix', 'azure', 'ngcplantsmonitoring', 'jira', 'sent'].indexOf(view) > -1 ? view : 'all'; if (mailboxActiveView === 'sent') mailboxReadFilter = 'all'; mailboxSearchQuery = ''; var search = document.getElementById('mailboxSearch'); if (search) search.value = ''; selectedMailboxId = null; selectedMailboxMessageIds.clear(); var detail = document.getElementById('mailboxDetail'); if (detail) detail.innerHTML = '<div class="mailbox-empty">Select an email to read it here.</div>'; ensureOperationsMailboxUi(); loadMailbox(); }
 function setMailboxReadFilter(filter) { var previous = mailboxReadFilter; mailboxReadFilter = ['all', 'unread', 'read', 'incident_sent', 'incident_eligible'].indexOf(filter) > -1 ? filter : 'all'; selectedMailboxId = null; selectedMailboxMessageIds.clear(); var detail = document.getElementById('mailboxDetail'); if (detail) detail.innerHTML = '<div class="mailbox-empty">Select an email to read it here.</div>'; ensureOperationsMailboxUi(); if (mailboxReadFilter === 'incident_sent' || previous === 'incident_sent') loadMailbox(); else renderMailboxList(); }
 function ensureMailboxReadFilterUi(layout) {
   var head = layout && layout.querySelector('.mailbox-list-head'); if (!head) return;
@@ -3661,7 +3661,7 @@ function setMailboxSearch(value) { mailboxSearchQuery = String(value || '').trim
 function mailboxHasCreateIncidentButton(message) {
   // NGC Plants Monitoring alerts are email-notification only — no incident
   // is ever created from this category, unconditionally (not just P3).
-  if (message.category === 'ngcPlantsMonitoring') return false;
+  if (message.category === 'ngcplantsmonitoring') return false;
   // A Coralogix/Azure alert confirmed Informational (P3) never needs an
   // incident — but unknown/undetected severity is left alone (fail-open),
   // so an alert type the backend can't yet classify never silently loses
@@ -3682,7 +3682,7 @@ function mailboxVisibleMessages() {
 function loadOperationsCounts() {
   fetch(window.APP_CONFIG.API_BASE_URL + '/mailbox/operations-counts', { headers: { Authorization: 'Bearer ' + mailboxToken() } })
     .then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(); return data.data || {}; }); })
-    .then(function (counts) { ['coralogix', 'azure', 'ngcPlantsMonitoring', 'jira'].forEach(function (key) { var item = document.getElementById('operationsCount' + key.charAt(0).toUpperCase() + key.slice(1)); if (item) item.textContent = Number(counts[key] || 0) || ''; }); })
+    .then(function (counts) { ['coralogix', 'azure', 'ngcplantsmonitoring', 'jira'].forEach(function (key) { var item = document.getElementById('operationsCount' + key.charAt(0).toUpperCase() + key.slice(1)); if (item) item.textContent = Number(counts[key] || 0) || ''; }); })
     .catch(function () { /* the list remains usable when counts cannot be loaded */ });
 }
 
