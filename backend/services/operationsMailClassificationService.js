@@ -27,6 +27,25 @@ function ngcPlantsMonitoringAlertState(subject) {
   return match ? match[1].toLowerCase() : null;
 }
 
+// Azure alert types that exist in the mailbox but are not yet production
+// ready. They must be fully invisible to the app — excluded from every
+// mailbox view (including All Incoming) and from Alert Compliance — until
+// they're confirmed ready. Matched on the distinctive alert-name substring
+// only (not the full "Alert '...' was fired/resolved" wrapper), so straight
+// vs curly quotes and hyphen vs en-dash never matter; kept as one constant so
+// the Graph $filter (emailService.js) and this containment check share the
+// same source of truth.
+const IGNORED_AZURE_ALERT_NAME_FRAGMENTS = [
+  'Product code not found, last product code found',
+  'Effective Unprocessed Blob Count'
+];
+
+function isIgnoredOperationsAlert(sender, subject) {
+  if (String(sender || '').trim().toLowerCase() !== OPERATIONS_MAIL_CATEGORIES.azure.sender) return false;
+  const value = String(subject || '').toLowerCase();
+  return IGNORED_AZURE_ALERT_NAME_FRAGMENTS.some((fragment) => value.includes(fragment.toLowerCase()));
+}
+
 function jiraSubjectPrefix() {
   return String(process.env.JIRA_CUSTOMER_TICKET_SUBJECT_PREFIX || 'A new support issue ').trim();
 }
@@ -93,6 +112,7 @@ function noHistorianReadIncidentDefaults() {
 function classifyOperationsMessage(message) {
   const sender = String(message?.from || message?.fromAddress || '').trim().toLowerCase();
   const subject = String(message?.subject || '');
+  if (isIgnoredOperationsAlert(sender, subject)) return { category: 'ignored', jiraIssueKey: '' };
   if (sender === OPERATIONS_MAIL_CATEGORIES.azure.sender && ngcPlantsMonitoringAlertState(subject)) return { category: 'ngcplantsmonitoring', jiraIssueKey: '' };
   if (sender === OPERATIONS_MAIL_CATEGORIES.coralogix.sender) return { category: 'coralogix', jiraIssueKey: '' };
   if (sender === OPERATIONS_MAIL_CATEGORIES.azure.sender) return { category: 'azure', jiraIssueKey: '' };
@@ -105,4 +125,4 @@ function normalizedOperationsCategory(value) {
   return Object.prototype.hasOwnProperty.call(OPERATIONS_MAIL_CATEGORIES, key) ? key : 'all';
 }
 
-module.exports = { OPERATIONS_MAIL_CATEGORIES, NGC_PLANTS_MONITORING_ALERT_NAME, classifyOperationsMessage, extractJiraIssueKey, isJiraCustomerTicketSubject, jiraSubjectPrefix, ngcPlantsMonitoringAlertState, noHistorianReadIncidentDefaults, normalizedOperationsCategory, operationsIncidentDefaults, subjectContains };
+module.exports = { OPERATIONS_MAIL_CATEGORIES, IGNORED_AZURE_ALERT_NAME_FRAGMENTS, NGC_PLANTS_MONITORING_ALERT_NAME, classifyOperationsMessage, extractJiraIssueKey, isIgnoredOperationsAlert, isJiraCustomerTicketSubject, jiraSubjectPrefix, ngcPlantsMonitoringAlertState, noHistorianReadIncidentDefaults, normalizedOperationsCategory, operationsIncidentDefaults, subjectContains };

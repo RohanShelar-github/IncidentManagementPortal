@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
-const { classifyOperationsMessage, isJiraCustomerTicketSubject, jiraSubjectPrefix, normalizedOperationsCategory } = require('./operationsMailClassificationService');
+const { classifyOperationsMessage, IGNORED_AZURE_ALERT_NAME_FRAGMENTS, isJiraCustomerTicketSubject, jiraSubjectPrefix, normalizedOperationsCategory } = require('./operationsMailClassificationService');
 const DEFAULT_EWS_URL = 'https://outlook.office365.com/EWS/Exchange.asmx';
 const GRAPH_ROOT = 'https://graph.microsoft.com/v1.0';
 let graphTokenCache = null;
@@ -399,7 +399,10 @@ async function graphInboxJsonRequest(path, method, body) {
 
 function mailboxCategoryGraphFilter(category) {
   if (category === 'coralogix') return "from/emailAddress/address eq 'alerts@coralogix.com'";
-  if (category === 'azure') return "from/emailAddress/address eq 'azure-noreply@microsoft.com'";
+  // Not-yet-production-ready alert types are excluded here too, so the
+  // Azure Alerts unread-count badge matches what the (classification-based)
+  // listing actually shows instead of counting messages the list hides.
+  if (category === 'azure') return `from/emailAddress/address eq 'azure-noreply@microsoft.com' and ${IGNORED_AZURE_ALERT_NAME_FRAGMENTS.map((fragment) => `not contains(subject,'${fragment}')`).join(' and ')}`;
   // The alert name substring sits between the quote characters in both
   // subject variants ("... was fired" / "... was resolved") and contains no
   // apostrophe itself, so it is safe to use directly as an OData literal.
@@ -474,7 +477,10 @@ async function listMailboxFolderMessages(folder, limit = 50, category = 'all', c
     data = await graphInboxRequest(`/mailFolders/${folder}/messages?${query}`, extraHeaders);
   }
   const rawMessages = Array.isArray(data.value) ? data.value.map((message) => mailboxDto(message, false)) : [];
-  const messages = selectedCategory === 'all' || folder !== 'inbox' ? rawMessages : rawMessages.filter((message) => message.category === selectedCategory);
+  // Not-yet-production-ready alerts are classified as 'ignored' and must
+  // stay invisible everywhere, including the unfiltered "All Incoming" view.
+  const visibleMessages = rawMessages.filter((message) => message.category !== 'ignored');
+  const messages = selectedCategory === 'all' || folder !== 'inbox' ? visibleMessages : visibleMessages.filter((message) => message.category === selectedCategory);
   return { messages, nextLink: data['@odata.nextLink'] || null };
 }
 
