@@ -105,10 +105,20 @@ test('dashboardAvgMttrCard (permanently hidden) sits outside #dashboardCardsFlow
 });
 
 test('the Edit Layout / Save Layout / Cancel control row exists, hidden by default', () => {
-  assert.match(html, /<div id="dashboardLayoutControls" style="display:none;[^"]*">/);
-  assert.match(html, /<button class="btn btn-secondary btn-sm" id="btnEditDashboardLayout" onclick="toggleDashboardLayoutEditMode\(\)">/);
-  assert.match(html, /<button class="btn btn-primary btn-sm" id="btnSaveDashboardLayout" onclick="saveDashboardLayout\(\)" style="display:none">/);
-  assert.match(html, /<button class="btn btn-secondary btn-sm" id="btnCancelDashboardLayout" onclick="cancelDashboardLayoutEdit\(\)" style="display:none">/);
+  assert.match(html, /<div id="dashboardLayoutControls" style="display:none;flex-wrap:wrap;[^"]*">/);
+  assert.match(html, /<button class="btn btn-secondary btn-sm" id="btnEditDashboardLayout" onclick="toggleDashboardLayoutEditMode\(\)"[^>]*>/);
+  assert.match(html, /<button class="btn btn-primary btn-sm" id="btnSaveDashboardLayout" onclick="saveDashboardLayout\(\)" style="display:none;[^"]*">/);
+  assert.match(html, /<button class="btn btn-secondary btn-sm" id="btnCancelDashboardLayout" onclick="cancelDashboardLayoutEdit\(\)" style="display:none;[^"]*">/);
+});
+
+// Regression test: a flex row with no wrap and a long, unconstrained hint
+// span doesn't reflow at browser zoom levels that shrink the effective
+// viewport — it overflows instead, pushing Save/Cancel outside the visible
+// row. flex-wrap + a shrinkable, min-width:0 hint span let the row wrap
+// cleanly at any zoom level instead of overflowing.
+test('the Edit Layout control row wraps at narrow effective widths instead of overflowing (zoom-safe)', () => {
+  assert.match(html, /<div id="dashboardLayoutControls" style="display:none;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px">/);
+  assert.match(html, /<span id="dashboardLayoutHint" style="display:none;flex:1 1 220px;min-width:0;[^"]*">/);
 });
 
 // ── Frontend: drag-and-drop + save/load/permission-gating logic ─────────

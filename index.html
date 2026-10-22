@@ -388,11 +388,11 @@
 </div>
 </div>
 </div>
-<div id="dashboardLayoutControls" style="display:none;align-items:center;gap:8px;margin-bottom:14px">
-<button class="btn btn-secondary btn-sm" id="btnEditDashboardLayout" onclick="toggleDashboardLayoutEditMode()">✥ Edit Layout</button>
-<button class="btn btn-primary btn-sm" id="btnSaveDashboardLayout" onclick="saveDashboardLayout()" style="display:none">Save Layout</button>
-<button class="btn btn-secondary btn-sm" id="btnCancelDashboardLayout" onclick="cancelDashboardLayoutEdit()" style="display:none">Cancel</button>
-<span id="dashboardLayoutHint" style="display:none;font-size:11px;color:var(--text-muted)">Drag any card by its handle, then Save Layout — this applies to every user.</span>
+<div id="dashboardLayoutControls" style="display:none;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px">
+<button class="btn btn-secondary btn-sm" id="btnEditDashboardLayout" onclick="toggleDashboardLayoutEditMode()" style="flex:0 0 auto">✥ Edit Layout</button>
+<button class="btn btn-primary btn-sm" id="btnSaveDashboardLayout" onclick="saveDashboardLayout()" style="display:none;flex:0 0 auto">Save Layout</button>
+<button class="btn btn-secondary btn-sm" id="btnCancelDashboardLayout" onclick="cancelDashboardLayoutEdit()" style="display:none;flex:0 0 auto">Cancel</button>
+<span id="dashboardLayoutHint" style="display:none;flex:1 1 220px;min-width:0;font-size:11px;color:var(--text-muted)">Drag any card by its handle, then Save Layout — this applies to every user.</span>
 </div>
 <!-- Temporarily hidden from the Dashboard; MTTR data remains available
      elsewhere. Deliberately excluded from the admin-customizable layout
