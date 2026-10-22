@@ -2389,6 +2389,22 @@ function clearDashFilters() {
   applyDashFilters();
 }
 
+// Browser zoom (and window resizing) changes the effective CSS pixel size of
+// every chart's container without reloading the page. Dashboard charts are
+// hand-drawn once, sized against their container at render time, and never
+// redrawn afterward — so a zoom change leaves them stale-sized relative to
+// their now differently-sized container, which shows up as overlapping/
+// overflowing chart content. Redraw on resize, debounced since both zooming
+// and window-dragging fire the resize event repeatedly in quick succession,
+// and only while the Dashboard page is the one currently shown.
+var dashboardResizeRedrawTimer = null;
+window.addEventListener('resize', function () {
+  var page = document.getElementById('page-dashboard');
+  if (!page || !page.classList.contains('active')) return;
+  clearTimeout(dashboardResizeRedrawTimer);
+  dashboardResizeRedrawTimer = setTimeout(applyDashFilters, 200);
+});
+
 // ─── ADMIN DASHBOARD LAYOUT CUSTOMIZATION ──────────────────────────────────
 // Every card in #dashboardCardsFlow carries a stable data-card-id. An admin
 // (gated by the customize_dashboard_layout permission) can drag any card to
