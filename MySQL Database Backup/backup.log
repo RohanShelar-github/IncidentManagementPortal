@@ -781,3 +781,29 @@ mysql: [Warning] Using a password on the command line interface can be insecure.
 Verification result email sent to babai_chatterjee@magicsoftware.com,rohan_shelar@magicsoftware.com
 BACKUP VERIFICATION PASSED: every table in the backup matches the live database row-for-row.
 Staging backup files for git... 
+warning: in the working copy of 'MySQL Database Backup/backup.log', LF will be replaced by CRLF the next time Git touches it
+[Dev ea1d5b3] Automated database backup
+ 4 files changed, 2004 insertions(+), 1 deletion(-)
+ create mode 100644 MySQL Database Backup/incident_management_db_2026-10-23_02-00-02.sql
+ create mode 100644 MySQL Database Backup/incident_management_db_2026-10-24_02-00-04.sql
+Pushing to origin main... 
+Everything up-to-date
+Backup committed and pushed successfully. 
+ 
+===== Sun 10/25/2026  2:00:02.61 ===== 
+Starting backup of database: incident_management_db 
+Backup successful: C:\Incident Management Portal\MySQL Database Backup\incident_management_db_2026-10-25_02-00-02.sql 
+Deleting backups older than 2 days... 
+Backup and cleanup completed. 
+ 
+===== Mon 10/26/2026  2:00:02.84 ===== 
+Running database dump... 
+===== Mon 10/26/2026  2:00:03.67 ===== 
+Starting backup of database: incident_management_db 
+Backup successful: C:\Incident Management Portal\MySQL Database Backup\incident_management_db_2026-10-26_02-00-03.sql 
+Deleting backups older than 2 days... 
+Backup and cleanup completed. 
+ 
+Verifying the new backup restores cleanly and matches live row counts... 
+Skipping verification — last run was less than 7 day(s) ago. Pass --force to run anyway.
+Staging backup files for git... 
