@@ -203,9 +203,17 @@ test('ngcPlantsMonitoringNotifyPreset builds the Running Tag No Data subject/bod
   assert.equal(unknownCase.subject, '[Alert] Running Tag Data Not Received - <<plantId>>');
   assert.match(unknownCase.bodyHtml, /The Running Tag tag is currently not receiving any data for 60 minutes or more/);
 
-  // Same requested To/CC recipients regardless of which plant/category fired.
-  assert.equal(ifpCase.to, 'matthewp@nationalgypsum.com,billb@nationalgypsum.com,dimpalp@nationalgypsum.com');
+  // Same requested To/CC recipients regardless of which plant/category
+  // fired — Running Tag No Data also includes the service desk in To.
+  assert.equal(ifpCase.to, 'matthewp@nationalgypsum.com,billb@nationalgypsum.com,dimpalp@nationalgypsum.com,servicedesk@nationalgypsum.com');
   assert.equal(ifpCase.cc, 'Rohan_Vikhe@magicsoftware.com,jaiprakash_prajapati@magicsoftware.com,Mayur_Jaipurkar@magicsoftware.com');
+});
+
+test('frontend: the service desk is only added to To for the Running Tag No Data alert, not the KF LIMAB Caliper alert', () => {
+  const { ngcPlantsMonitoringNotifyPreset } = loadNgcPlantsMonitoringFunctions();
+  const kfLimabFired = ngcPlantsMonitoringNotifyPreset({ category: 'ngcplantsmonitoring', subject: "Alert 'NGC Monitoring - KF LIMAB Caliper Average Not Found' was fired" });
+  assert.equal(kfLimabFired.to, 'matthewp@nationalgypsum.com,billb@nationalgypsum.com,dimpalp@nationalgypsum.com');
+  assert.doesNotMatch(kfLimabFired.to, /servicedesk@nationalgypsum\.com/);
 });
 
 test('frontend: the compose panel prefills recipients/subject/body from the NGC preset, and a Notify Customer button opens it', () => {

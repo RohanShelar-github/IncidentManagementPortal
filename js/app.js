@@ -3497,7 +3497,7 @@ function ngcPlantsMonitoringNotifyPreset(message) {
     var runningTagDescription = ngcRunningTagDescription(plantId);
     var runningTagSubject = '[Alert] ' + runningTagDescription + ' Data Not Received - ' + plantId;
     return {
-      to: recipients.to,
+      to: recipients.to + ',servicedesk@nationalgypsum.com',
       cc: recipients.cc,
       subject: runningTagSubject,
       bodyHtml: ngcPlantsMonitoringCardWrap(runningTagDescription + ' Data Not Received - ' + plantId,
