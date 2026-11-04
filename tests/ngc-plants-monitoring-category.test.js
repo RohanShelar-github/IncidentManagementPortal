@@ -97,31 +97,52 @@ test('frontend: ngcPlantsMonitoringNotifyPreset only fires for a non-resolved ng
   assert.match(frontend, /no new data is received from the KF LIMAB Caliper Average tag for 120 minutes\./);
 });
 
-test('frontend: ngcPlantsMonitoringNotifyPreset uses a distinct subject/body template for the Boardline/Main Belt alert, with a <<plantId>> fallback', () => {
+test('frontend: ngcPlantsMonitoringNotifyPreset uses a distinct, plant-category-aware subject/body template for the Running Tag No Data alert, with a <<plantId>> fallback', () => {
   assert.match(frontend, /if \(\/Boardline,\?\\s\*Main Belt or Line Running\/i\.test\(subject\)\) \{/);
   assert.match(frontend, /var plantId = ngcPlantsMonitoringPlantId\(message\) \|\| '<<plantId>>';/);
-  assert.match(frontend, /subject: 'Boardline, Main Belt or Line Running Data Not Received',/);
-  assert.match(frontend, /The Boardline \/ Main Belt \/ Line Running tag is currently not receiving any data for 60 minutes or more, while other sensor data continues to arrive\./);
+  assert.match(frontend, /var runningTagDescription = ngcRunningTagDescription\(plantId\);/);
+  assert.match(frontend, /subject: '\[Alert\] Running Tag Data Not Received - ' \+ plantId,/);
+  assert.match(frontend, /The ' \+ escapeMetricHtml\(runningTagDescription\) \+ ' tag is currently not receiving any data for 60 minutes or more, while other sensor data continues to arrive\./);
   assert.match(frontend, /<strong>Plant Name:<\/strong> ' \+ escapeMetricHtml\(plantId\)/);
   assert.match(frontend, /The alert will clear automatically once data transmission resumes\./);
   assert.match(frontend, /function ngcPlantsMonitoringPlantId\(message\) \{/);
+  assert.match(frontend, /function ngcRunningTagDescription\(plantId\) \{/);
 });
 
-// Real behavioral test (not just "does this regex exist in the source") —
-// extracts and runs the actual ngcPlantsMonitoringPlantId implementation
-// against a synthetic body shaped like the real alert: Kusto query text
-// ("Plant = tostring(customDimensions.PlantId)") followed by the real
-// Dimensions table row ("plantId" / "ATL2" — no separating punctuation,
-// unlike most other fields in this email, which is what the original,
-// mandatory-separator regex got wrong).
-function loadNgcPlantsMonitoringPlantId() {
+// Balanced-brace function extractor — a plain non-greedy regex stops at the
+// first "\n}" it finds, which for a function with nested if-blocks is an
+// inner brace, not the function's own closing one.
+function extractFunction(src, name) {
+  const startMarker = 'function ' + name + '(';
+  const start = src.indexOf(startMarker);
+  if (start === -1) throw new Error('not found: ' + name);
+  let i = src.indexOf('{', start);
+  let depth = 0;
+  for (; i < src.length; i += 1) {
+    if (src[i] === '{') depth += 1;
+    else if (src[i] === '}') { depth -= 1; if (depth === 0) { i += 1; break; } }
+  }
+  return src.slice(start, i);
+}
+
+// Loads the real, unmodified NGC Plants Monitoring frontend functions into
+// an isolated sandbox (a minimal document.createElement shim stands in for
+// mailboxDecodeEntities's DOM dependency) so these tests exercise actual
+// behavior, not just "does this regex/string exist in the source".
+function loadNgcPlantsMonitoringFunctions() {
   const sandbox = { document: { createElement: () => ({ set innerHTML(v) { this._v = v; }, get value() { return this._v; } }) } };
   const fnSource = [
-    frontend.match(/function mailboxDecodeEntities\([^)]*\) \{[\s\S]*?\n\}/)[0],
-    frontend.match(/function mailboxPlainText\([^)]*\) \{[^\n]*\}/)[0],
+    extractFunction(frontend, 'mailboxDecodeEntities'),
+    extractFunction(frontend, 'mailboxPlainText'),
     frontend.match(/var NGC_PLANTS_MONITORING_PLANT_ID_FALSE_POSITIVES = \[[^\]]*\];/)[0],
-    frontend.match(/function ngcPlantsMonitoringPlantId\(message\) \{[\s\S]*?\n\}/)[0],
-    'module.exports = ngcPlantsMonitoringPlantId;'
+    extractFunction(frontend, 'ngcPlantsMonitoringPlantId'),
+    frontend.match(/var NGC_RUNNING_TAG_PLANT_CATEGORIES = \{[\s\S]*?\n\};/)[0],
+    extractFunction(frontend, 'ngcRunningTagDescription'),
+    extractFunction(frontend, 'escapeMetricHtml'),
+    extractFunction(frontend, 'ngcPlantsMonitoringCardWrap'),
+    extractFunction(frontend, 'isResolvedOperationsEmail'),
+    extractFunction(frontend, 'ngcPlantsMonitoringNotifyPreset'),
+    'module.exports = { ngcPlantsMonitoringPlantId, ngcRunningTagDescription, ngcPlantsMonitoringNotifyPreset };'
   ].join('\n');
   const module = { exports: {} };
   // eslint-disable-next-line no-new-func
@@ -130,7 +151,7 @@ function loadNgcPlantsMonitoringPlantId() {
 }
 
 test('ngcPlantsMonitoringPlantId finds the Dimensions table value, skipping the Kusto query text that mentions the same field name', () => {
-  const ngcPlantsMonitoringPlantId = loadNgcPlantsMonitoringPlantId();
+  const { ngcPlantsMonitoringPlantId } = loadNgcPlantsMonitoringFunctions();
   const realisticBody = '<div>Query: | extend Plant = tostring(customDimensions.PlantId) | where Plant != ""</div>'
     + '<h2>Dimensions</h2><table><tr><td>plantId</td><td>ATL2</td></tr></table>'
     + '<h2>Affected resource hierarchy</h2><div>Resource Group</div><a>ngcstagingrg</a>';
@@ -143,6 +164,48 @@ test('ngcPlantsMonitoringPlantId finds the Dimensions table value, skipping the 
 
   assert.equal(ngcPlantsMonitoringPlantId({ body: '' }), null);
   assert.equal(ngcPlantsMonitoringPlantId({}), null);
+});
+
+test('ngcRunningTagDescription maps each plant list to its own tag description, and an unknown plant to the generic default', () => {
+  const { ngcRunningTagDescription } = loadNgcPlantsMonitoringFunctions();
+  assert.equal(ngcRunningTagDescription('APL'), 'Boardline Running');
+  assert.equal(ngcRunningTagDescription('wlm'), 'Boardline Running'); // case-insensitive
+  assert.equal(ngcRunningTagDescription('ATL2'), 'Line Running');
+  assert.equal(ngcRunningTagDescription('JSP4'), 'Line Running');
+  assert.equal(ngcRunningTagDescription('CIN'), 'Main Belt Running');
+  assert.equal(ngcRunningTagDescription('JAX'), 'Main Belt Running');
+  assert.equal(ngcRunningTagDescription('SOME-UNLISTED-PLANT'), 'Running Tag');
+  assert.equal(ngcRunningTagDescription(''), 'Running Tag');
+});
+
+test('ngcPlantsMonitoringNotifyPreset builds the Running Tag No Data subject/body end-to-end, per plant category, matching the exact requested template', () => {
+  const { ngcPlantsMonitoringNotifyPreset } = loadNgcPlantsMonitoringFunctions();
+  const firedBoardlineSubject = "Alert 'Boardline, Main Belt or Line Running data has not been received for over 60 minutes, while other plant data is still coming in' was fired";
+  const bodyWithPlant = (plant) => '<h2>Dimensions</h2><table><tr><td>plantId</td><td>' + plant + '</td></tr></table>';
+
+  const ifpCase = ngcPlantsMonitoringNotifyPreset({ category: 'ngcplantsmonitoring', subject: firedBoardlineSubject, body: bodyWithPlant('ATL2') });
+  assert.equal(ifpCase.subject, '[Alert] Running Tag Data Not Received - ATL2');
+  assert.match(ifpCase.bodyHtml, /The Line Running tag is currently not receiving any data for 60 minutes or more/);
+  assert.match(ifpCase.bodyHtml, /<strong>Plant Name:<\/strong> ATL2/);
+
+  const gypCase = ngcPlantsMonitoringNotifyPreset({ category: 'ngcplantsmonitoring', subject: firedBoardlineSubject, body: bodyWithPlant('APL') });
+  assert.equal(gypCase.subject, '[Alert] Running Tag Data Not Received - APL');
+  assert.match(gypCase.bodyHtml, /The Boardline Running tag is currently not receiving any data for 60 minutes or more/);
+
+  const cemCase = ngcPlantsMonitoringNotifyPreset({ category: 'ngcplantsmonitoring', subject: firedBoardlineSubject, body: bodyWithPlant('CIN') });
+  assert.equal(cemCase.subject, '[Alert] Running Tag Data Not Received - CIN');
+  assert.match(cemCase.bodyHtml, /The Main Belt Running tag is currently not receiving any data for 60 minutes or more/);
+
+  // No Dimensions table present at all — the <<plantId>> placeholder must
+  // appear rather than a wrong/blank value, and the description falls back
+  // to the generic "Running Tag" since the plant could not be identified.
+  const unknownCase = ngcPlantsMonitoringNotifyPreset({ category: 'ngcplantsmonitoring', subject: firedBoardlineSubject, body: '<div>no plant info here</div>' });
+  assert.equal(unknownCase.subject, '[Alert] Running Tag Data Not Received - <<plantId>>');
+  assert.match(unknownCase.bodyHtml, /The Running Tag tag is currently not receiving any data for 60 minutes or more/);
+
+  // Same requested To/CC recipients regardless of which plant/category fired.
+  assert.equal(ifpCase.to, 'matthewp@nationalgypsum.com,billb@nationalgypsum.com,dimpalp@nationalgypsum.com');
+  assert.equal(ifpCase.cc, 'Rohan_Vikhe@magicsoftware.com,jaiprakash_prajapati@magicsoftware.com,Mayur_Jaipurkar@magicsoftware.com');
 });
 
 test('frontend: the compose panel prefills recipients/subject/body from the NGC preset, and a Notify Customer button opens it', () => {

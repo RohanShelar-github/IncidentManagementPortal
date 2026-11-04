@@ -3449,6 +3449,24 @@ function ngcPlantsMonitoringPlantId(message) {
   return candidate;
 }
 
+// Plant → running-tag-category mapping for the "Running Tag No Data" alert.
+// GYP plants call the tag "Boardline Running", IFP plants "Line Running",
+// CEM plants "Main Belt Running"; an unlisted plant falls back to the
+// generic "Running Tag" rather than guessing which description applies.
+var NGC_RUNNING_TAG_PLANT_CATEGORIES = {
+  'Boardline Running': ['APL', 'BAL1', 'BAL2', 'BUR', 'ELO', 'FTD', 'MED1', 'MED2', 'MTH', 'NTL', 'PHX', 'POR', 'RIC', 'ROT', 'SAV', 'SHI', 'SHO', 'WAK', 'WLM', 'WWG'],
+  'Line Running': ['ATL1', 'ATL2', 'ATL3', 'BCP1', 'BCP2', 'DLS', 'JSP1', 'JSP2', 'JSP3', 'JSP4', 'ORL1', 'ORL2'],
+  'Main Belt Running': ['BRO', 'CIN', 'CLB', 'JAX']
+};
+
+function ngcRunningTagDescription(plantId) {
+  var normalized = String(plantId || '').trim().toUpperCase();
+  for (var description in NGC_RUNNING_TAG_PLANT_CATEGORIES) {
+    if (NGC_RUNNING_TAG_PLANT_CATEGORIES[description].indexOf(normalized) > -1) return description;
+  }
+  return 'Running Tag';
+}
+
 function ngcPlantsMonitoringCardWrap(heading, bodyHtml) {
   return '<div style="max-width:640px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a">'
     + '<div style="background:#172554;padding:20px 24px;color:#fff">'
@@ -3476,13 +3494,14 @@ function ngcPlantsMonitoringNotifyPreset(message) {
   var subject = String(message.subject || '');
   if (/Boardline,?\s*Main Belt or Line Running/i.test(subject)) {
     var plantId = ngcPlantsMonitoringPlantId(message) || '<<plantId>>';
+    var runningTagDescription = ngcRunningTagDescription(plantId);
     return {
       to: recipients.to,
       cc: recipients.cc,
-      subject: 'Boardline, Main Belt or Line Running Data Not Received',
-      bodyHtml: ngcPlantsMonitoringCardWrap('Boardline, Main Belt or Line Running Data Not Received',
+      subject: '[Alert] Running Tag Data Not Received - ' + plantId,
+      bodyHtml: ngcPlantsMonitoringCardWrap('Running Tag Data Not Received - ' + plantId,
         '<div>Hi Team,</div><div>&nbsp;</div>'
-        + '<div>The Boardline / Main Belt / Line Running tag is currently not receiving any data for 60 minutes or more, while other sensor data continues to arrive.</div>'
+        + '<div>The ' + escapeMetricHtml(runningTagDescription) + ' tag is currently not receiving any data for 60 minutes or more, while other sensor data continues to arrive.</div>'
         + '<div>&nbsp;</div>'
         + '<div><strong>Plant Name:</strong> ' + escapeMetricHtml(plantId) + '</div>'
         + '<div>&nbsp;</div>'
