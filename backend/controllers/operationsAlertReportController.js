@@ -16,7 +16,6 @@
 
 const pool = require('../config/database');
 const { listMailboxFolderMessages, getInboxMessage, sendCriticalIncidentEmail, mentionNotificationEmailHtml } = require('../services/emailService');
-const { classifyOperationsMessage } = require('../services/operationsMailClassificationService');
 const { attachMailboxIncidentLinks, matchingCustomersByName, plainMailText } = require('./mailboxController');
 const { notifyUsers, findMentionedUsers } = require('../services/notificationService');
 const { groupMessagesIntoAlerts, deriveAlertState, fingerprintKey, deriveAlertSeverity } = require('../services/operationsAlertGroupingService');
@@ -47,9 +46,11 @@ async function fetchRecentAlertMessages(sinceMs) {
     for (const message of messages) {
       const receivedMs = message.receivedAt ? new Date(message.receivedAt).getTime() : NaN;
       if (Number.isFinite(receivedMs) && receivedMs < sinceMs) { reachedCutoff = true; continue; }
-      const { category, jiraIssueKey } = classifyOperationsMessage(message);
-      if (!ALERT_CATEGORIES.has(category)) continue;
-      collected.push({ ...message, category, jiraIssueKey });
+      // listMailboxFolderMessages already classified this message (it reads
+      // the full body to do so for Azure senders) — re-classifying here from
+      // the lightweight DTO alone would lose that body and misclassify.
+      if (!ALERT_CATEGORIES.has(message.category)) continue;
+      collected.push(message);
     }
     // Messages are returned newest-first, so once a full page is older than
     // the requested window there is nothing more recent left to fetch.
@@ -522,8 +523,7 @@ const deleteAlert = async (req, res) => {
 const getAlertMessage = async (req, res) => {
   try {
     const message = await getInboxMessage(req.params.id);
-    const { category } = classifyOperationsMessage(message);
-    if (!ALERT_CATEGORIES.has(category)) {
+    if (!ALERT_CATEGORIES.has(message.category)) {
       return res.status(403).json({ success: false, message: 'Only Coralogix/Azure alert emails are available here.' });
     }
     res.json({ success: true, data: message });

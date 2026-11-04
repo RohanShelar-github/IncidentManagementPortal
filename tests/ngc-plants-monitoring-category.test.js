@@ -27,56 +27,53 @@ test('normalizedOperationsCategory recognizes the NGC category regardless of the
   assert.equal(classification.normalizedOperationsCategory('NGCPLANTSMONITORING'), 'ngcplantsmonitoring');
 });
 
-test('ngcPlantsMonitoringAlertState recognizes both exact subject variants, straight or curly quotes', () => {
-  assert.equal(classification.ngcPlantsMonitoringAlertState("Alert 'NGC Monitoring - KF LIMAB Caliper Average Not Found' was fired"), 'fired');
-  assert.equal(classification.ngcPlantsMonitoringAlertState("Alert 'NGC Monitoring - KF LIMAB Caliper Average Not Found' was resolved"), 'resolved');
-  assert.equal(classification.ngcPlantsMonitoringAlertState('Alert ’NGC Monitoring - KF LIMAB Caliper Average Not Found’ was fired'), 'fired');
-  // Reply/forward prefixes must not block the match.
-  assert.equal(classification.ngcPlantsMonitoringAlertState("Re: Alert 'NGC Monitoring - KF LIMAB Caliper Average Not Found' was fired"), 'fired');
-  assert.equal(classification.ngcPlantsMonitoringAlertState("FW: Alert 'NGC Monitoring - KF LIMAB Caliper Average Not Found' was resolved"), 'resolved');
+// Azure alerts are now split between Azure Alerts and NGC Plants Monitoring
+// by the Resource Group named in the alert body (not subject text, since
+// different alert types sharing a resource group have unrelated subjects).
+test('extractAzureResourceGroup reads the Resource Group label out of the body, independent of subject', () => {
+  assert.equal(classification.extractAzureResourceGroup('<div>Resource Group</div><a href="#">ngcrg</a>'), 'ngcrg');
+  assert.equal(classification.extractAzureResourceGroup('<div>Resource Group</div><a href="#">ngcstagingrg</a>'), 'ngcstagingrg');
+  assert.equal(classification.extractAzureResourceGroup('Resource Group: NGCRG'), 'ngcrg');
+  assert.equal(classification.extractAzureResourceGroup('no resource info here'), null);
+  assert.equal(classification.extractAzureResourceGroup(''), null);
 });
 
-test('ngcPlantsMonitoringAlertState rejects unrelated or partially-matching subjects', () => {
-  assert.equal(classification.ngcPlantsMonitoringAlertState("Alert 'NGC Monitoring - KF LIMAB Caliper Average Not Found' was something else"), null);
-  assert.equal(classification.ngcPlantsMonitoringAlertState('Azure: Activated Severity: Sev2 XPI_ProjectStatus'), null);
-  assert.equal(classification.ngcPlantsMonitoringAlertState(''), null);
-});
+test('classifyOperationsMessage routes Azure alerts by Resource Group: ngcrg to azure, ngcstagingrg to ngcplantsmonitoring', () => {
+  const ngcrgAlert = classification.classifyOperationsMessage({ from: 'azure-noreply@microsoft.com', subject: "Alert 'Redis Container Instance Restarted' was resolved", body: '<div>Resource Group</div><a>ngcrg</a>' });
+  assert.equal(ngcrgAlert.category, 'azure');
 
-test('classifyOperationsMessage routes matching Azure subjects to ngcplantsmonitoring, leaving other Azure alerts under azure', () => {
-  const ngcFired = classification.classifyOperationsMessage({ from: 'azure-noreply@microsoft.com', subject: "Alert 'NGC Monitoring - KF LIMAB Caliper Average Not Found' was fired" });
-  assert.equal(ngcFired.category, 'ngcplantsmonitoring');
+  const stagingAlert = classification.classifyOperationsMessage({ from: 'azure-noreply@microsoft.com', subject: "Alert 'NGC Monitoring - KF LIMAB Caliper Average Not Found' was fired", body: '<div>Resource Group</div><a>ngcstagingrg</a>' });
+  assert.equal(stagingAlert.category, 'ngcplantsmonitoring');
 
-  const ngcResolved = classification.classifyOperationsMessage({ from: 'azure-noreply@microsoft.com', subject: "Alert 'NGC Monitoring - KF LIMAB Caliper Average Not Found' was resolved" });
-  assert.equal(ngcResolved.category, 'ngcplantsmonitoring');
+  // Same subject/resource-group text, different alert type entirely —
+  // membership follows the resource group, not the alert's own name.
+  const stagingOtherAlert = classification.classifyOperationsMessage({ from: 'azure-noreply@microsoft.com', subject: "Alert 'Boardline, Main Belt or Line Running data has not been received for over 60 minutes, while other plant data is still coming in' was fired", body: '<div>Resource Group</div><a>ngcstagingrg</a>' });
+  assert.equal(stagingOtherAlert.category, 'ngcplantsmonitoring');
 
-  const otherAzure = classification.classifyOperationsMessage({ from: 'azure-noreply@microsoft.com', subject: 'Azure: Activated Severity: Sev2 XPI_ProjectStatus' });
-  assert.equal(otherAzure.category, 'azure');
+  // An unknown/missing resource group fails open to the default Azure bucket
+  // rather than hiding the alert.
+  const unknownRg = classification.classifyOperationsMessage({ from: 'azure-noreply@microsoft.com', subject: 'Azure: Activated Severity: Sev2 XPI_ProjectStatus', body: '<div>Resource Group</div><a>some-other-rg</a>' });
+  assert.equal(unknownRg.category, 'azure');
+  const noRg = classification.classifyOperationsMessage({ from: 'azure-noreply@microsoft.com', subject: 'Azure: Activated Severity: Sev2 XPI_ProjectStatus', body: '' });
+  assert.equal(noRg.category, 'azure');
 
   const coralogixAlert = classification.classifyOperationsMessage({ from: 'alerts@coralogix.com', subject: 'Coralogix Alert on magic / All Customers - Workspace is down' });
   assert.equal(coralogixAlert.category, 'coralogix');
 
-  // A different sender using the same subject text must not match.
-  const spoofedSender = classification.classifyOperationsMessage({ from: 'someone-else@example.com', subject: "Alert 'NGC Monitoring - KF LIMAB Caliper Average Not Found' was fired" });
+  // A different sender with the same body text must not match.
+  const spoofedSender = classification.classifyOperationsMessage({ from: 'someone-else@example.com', subject: 'Some alert', body: '<div>Resource Group</div><a>ngcstagingrg</a>' });
   assert.notEqual(spoofedSender.category, 'ngcplantsmonitoring');
 });
 
-test('backend: the Graph filter, client-side scan and unread-count paths all cover ngcplantsmonitoring, across every alert name in the category', () => {
-  assert.match(emailServiceSource, /if \(category === 'ngcplantsmonitoring'\) return `from\/emailAddress\/address eq 'azure-noreply@microsoft\.com' and \(\$\{NGC_PLANTS_MONITORING_ALERT_NAMES\.map\(\(name\) => `contains\(subject,'\$\{name\}'\)`\)\.join\(' or '\)\}\)`;/);
-  assert.match(emailServiceSource, /selectedCategory === 'ngcplantsmonitoring'/);
-  assert.match(emailServiceSource, /const categories = \['coralogix', 'azure', 'ngcplantsmonitoring', 'jira'\];/);
-
-  // Evaluate the same template the source builds, against the real alert
-  // name list, so a future addition to that list is covered automatically.
-  const filter = `from/emailAddress/address eq 'azure-noreply@microsoft.com' and (${classification.NGC_PLANTS_MONITORING_ALERT_NAMES.map((name) => `contains(subject,'${name}')`).join(' or ')})`;
-  assert.match(filter, /contains\(subject,'NGC Monitoring - KF LIMAB Caliper Average Not Found'\)/);
-  assert.match(filter, /contains\(subject,'Boardline, Main Belt or Line Running data has not been received for over 60 minutes, while other plant data is still coming in'\)/);
+test('backend: full message body is fetched and forwarded into classification so Resource Group is visible even for list views', () => {
+  assert.match(emailServiceSource, /const MAILBOX_SELECT_FIELDS = '[^']*\bbody\b[^']*\bbodyPreview\b[^']*';/);
+  assert.match(emailServiceSource, /Object\.assign\(dto, classifyOperationsMessage\(\{ \.\.\.dto, body: rawBody \}\)\);/);
 });
 
-test('ngcPlantsMonitoringAlertState also recognizes the Boardline/Main Belt alert type, fired or resolved', () => {
-  assert.equal(classification.ngcPlantsMonitoringAlertState("Alert 'Boardline, Main Belt or Line Running data has not been received for over 60 minutes, while other plant data is still coming in' was fired"), 'fired');
-  assert.equal(classification.ngcPlantsMonitoringAlertState('Alert ’Boardline, Main Belt or Line Running data has not been received for over 60 minutes, while other plant data is still coming in’ was resolved'), 'resolved');
-  const classified = classification.classifyOperationsMessage({ from: 'azure-noreply@microsoft.com', subject: "Alert 'Boardline, Main Belt or Line Running data has not been received for over 60 minutes, while other plant data is still coming in' was fired" });
-  assert.equal(classified.category, 'ngcplantsmonitoring');
+test('backend: the ngcplantsmonitoring unread badge is computed by a bounded body-classifying scan, since Graph cannot $filter on body content', () => {
+  assert.match(emailServiceSource, /async function countUnreadNgcPlantsMonitoringMessages\(\) \{/);
+  assert.match(emailServiceSource, /message\.category === 'ngcplantsmonitoring' && !message\.isRead/);
+  assert.match(emailServiceSource, /countUnreadNgcPlantsMonitoringMessages\(\)/);
 });
 
 test('frontend: the sidebar, view whitelist, label map and count-badge loader all know about ngcplantsmonitoring', () => {

@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
-const { classifyOperationsMessage, IGNORED_AZURE_ALERT_NAME_FRAGMENTS, isJiraCustomerTicketSubject, jiraSubjectPrefix, NGC_PLANTS_MONITORING_ALERT_NAMES, normalizedOperationsCategory } = require('./operationsMailClassificationService');
+const { classifyOperationsMessage, IGNORED_AZURE_ALERT_NAME_FRAGMENTS, isJiraCustomerTicketSubject, jiraSubjectPrefix, normalizedOperationsCategory } = require('./operationsMailClassificationService');
 const DEFAULT_EWS_URL = 'https://outlook.office365.com/EWS/Exchange.asmx';
 const GRAPH_ROOT = 'https://graph.microsoft.com/v1.0';
 let graphTokenCache = null;
@@ -322,6 +322,7 @@ function inboundMailboxAddress() {
 
 function mailboxDto(message, includeBody, attachments = []) {
   const sender = message?.from?.emailAddress || {};
+  const rawBody = String(message?.body?.content || '');
   const dto = {
     id: String(message?.id || ''), subject: String(message?.subject || '(No subject)'),
     from: String(sender.address || ''), fromName: String(sender.name || sender.address || 'Unknown sender'),
@@ -332,9 +333,14 @@ function mailboxDto(message, includeBody, attachments = []) {
     cc: (message?.ccRecipients || []).map((recipient) => String(recipient?.emailAddress?.address || '')).filter(Boolean).join(', '),
     sentAt: message?.sentDateTime || null
   };
-  Object.assign(dto, classifyOperationsMessage(dto));
+  // Classification (Azure Alerts vs NGC Plants Monitoring) reads the
+  // Resource Group out of the full body, which is fetched from Graph
+  // regardless of includeBody — but the full body is only ever attached to
+  // the DTO itself (and sent to the browser) when includeBody is true, same
+  // as before this changed.
+  Object.assign(dto, classifyOperationsMessage({ ...dto, body: rawBody }));
   if (includeBody) {
-    dto.body = String(message?.body?.content || '');
+    dto.body = rawBody;
     dto.attachments = attachments;
     const self = inboundMailboxAddress().toLowerCase();
     const senderAddress = String(sender.address || '').toLowerCase();
@@ -402,18 +408,23 @@ function mailboxCategoryGraphFilter(category) {
   // Not-yet-production-ready alert types are excluded here too, so the
   // Azure Alerts unread-count badge matches what the (classification-based)
   // listing actually shows instead of counting messages the list hides.
+  // This intentionally also counts messages that really belong under NGC
+  // Plants Monitoring (Graph can't $filter on the Resource Group value,
+  // which lives in the body) — an accepted approximation for this badge; the
+  // actual listing classifies correctly since it reads each message's body.
   if (category === 'azure') return `from/emailAddress/address eq 'azure-noreply@microsoft.com' and ${IGNORED_AZURE_ALERT_NAME_FRAGMENTS.map((fragment) => `not contains(subject,'${fragment}')`).join(' and ')}`;
-  // The alert name substring sits between the quote characters in both
-  // subject variants ("... was fired" / "... was resolved") and contains no
-  // apostrophe itself, so it is safe to use directly as an OData literal.
-  if (category === 'ngcplantsmonitoring') return `from/emailAddress/address eq 'azure-noreply@microsoft.com' and (${NGC_PLANTS_MONITORING_ALERT_NAMES.map((name) => `contains(subject,'${name}')`).join(' or ')})`;
   // Reply/forward prefixes are normal for Customer Raised Tickets, so an
   // exact startswith filter would undercount and hide active conversations.
   if (category === 'jira') return "contains(subject,'was reported by the customer')";
   return '';
 }
 
-const MAILBOX_SELECT_FIELDS = 'id,subject,from,toRecipients,receivedDateTime,sentDateTime,isRead,bodyPreview,hasAttachments,conversationId,internetMessageId';
+// Includes the full body (not just bodyPreview) because classifying Azure
+// Alerts vs NGC Plants Monitoring reads the Resource Group out of the body
+// (see operationsMailClassificationService.extractAzureResourceGroup) —
+// mailboxDto only forwards it into the DTO sent to the browser when a
+// single message is opened, so this does not change list-view payload size.
+const MAILBOX_SELECT_FIELDS = 'id,subject,from,toRecipients,receivedDateTime,sentDateTime,isRead,body,bodyPreview,hasAttachments,conversationId,internetMessageId';
 // Coralogix/Azure alerts can't use a server-side $filter (see the comment in
 // listMailboxFolderMessages below), so a single page of the newest messages
 // can legitimately contain zero matches when a noisier category floods the
@@ -505,9 +516,11 @@ async function fetchAlertMessagesSince(sinceMs) {
     for (const message of messages) {
       const receivedMs = message.receivedAt ? new Date(message.receivedAt).getTime() : NaN;
       if (Number.isFinite(receivedMs) && receivedMs < sinceMs) { reachedCutoff = true; continue; }
-      const { category, jiraIssueKey } = classifyOperationsMessage(message);
-      if (!ALERT_WINDOW_CATEGORIES.has(category)) continue;
-      collected.push({ ...message, category, jiraIssueKey });
+      // message.category was already set by listMailboxFolderMessages (it
+      // reads the full body to classify Azure senders) — re-classifying here
+      // from the lightweight DTO alone would lose that body and misclassify.
+      if (!ALERT_WINDOW_CATEGORIES.has(message.category)) continue;
+      collected.push(message);
     }
     if (reachedCutoff || !nextLink) break;
     cursor = nextLink;
@@ -605,10 +618,37 @@ async function countUnreadMailboxMessages(category) {
   return Number(data?.['@odata.count'] || 0);
 }
 
+// NGC Plants Monitoring is classified from the Resource Group in each
+// message's body, which Graph cannot $filter on server-side — so unlike the
+// other categories' counts (one $filter+$count request), this pages through
+// the newest inbox messages, classifies each locally, and tallies unread
+// matches. Bounded by MAILBOX_CATEGORY_SCAN_MAX_PAGES like the listing scan
+// above, so very old NGC mail outside that window is not reflected in the
+// badge — an accepted approximation.
+async function countUnreadNgcPlantsMonitoringMessages() {
+  let count = 0;
+  let cursor = null;
+  for (let page = 0; page < MAILBOX_CATEGORY_SCAN_MAX_PAGES; page += 1) {
+    const data = cursor
+      ? await graphInboxRequestByUrl(cursor)
+      : await graphInboxRequest(`/mailFolders/inbox/messages?${new URLSearchParams({ '$top': '100', '$select': MAILBOX_SELECT_FIELDS, '$orderby': 'receivedDateTime DESC' })}`);
+    const pageMessages = Array.isArray(data.value) ? data.value.map((message) => mailboxDto(message, false)) : [];
+    count += pageMessages.filter((message) => message.category === 'ngcplantsmonitoring' && !message.isRead).length;
+    const nextLink = data['@odata.nextLink'] || null;
+    if (!nextLink) break;
+    cursor = nextLink;
+  }
+  return count;
+}
+
 async function getOperationsMailboxCounts() {
-  const categories = ['coralogix', 'azure', 'ngcplantsmonitoring', 'jira'];
-  const values = await Promise.all(categories.map(async (category) => [category, await countUnreadMailboxMessages(category)]));
-  return Object.fromEntries(values);
+  const [coralogix, azure, jira, ngcplantsmonitoring] = await Promise.all([
+    countUnreadMailboxMessages('coralogix'),
+    countUnreadMailboxMessages('azure'),
+    countUnreadMailboxMessages('jira'),
+    countUnreadNgcPlantsMonitoringMessages()
+  ]);
+  return { coralogix, azure, jira, ngcplantsmonitoring };
 }
 
 async function getInboxMessage(id) {

@@ -236,7 +236,7 @@ test('the report includes per-occurrence history (timestamp + resolved flag) for
 test('the full alert email endpoint is gated by view_alert_compliance_report and restricted to alert categories', () => {
   assert.match(reportRoutes, /router\.get\('\/message\/:id', requirePermission\('view_alert_compliance_report'\), getAlertMessage\)/);
   assert.match(reportController, /const message = await getInboxMessage\(req\.params\.id\);/);
-  assert.match(reportController, /if \(!ALERT_CATEGORIES\.has\(category\)\) \{/);
+  assert.match(reportController, /if \(!ALERT_CATEGORIES\.has\(message\.category\)\) \{/);
 });
 
 test('occurrence rows are clickable and load the full email via mailboxSafeRichHtml (the same sanitizer the Mailbox page uses)', () => {
@@ -336,8 +336,11 @@ test('occurrence rows show the Incident ID when that specific occurrence led to 
 
 test('Jira (Customer Raised Tickets) is included alongside Coralogix/Azure in the fetched categories', () => {
   assert.match(reportController, /const ALERT_CATEGORIES = new Set\(\['coralogix', 'azure', 'jira'\]\);/);
-  assert.match(reportController, /const \{ category, jiraIssueKey \} = classifyOperationsMessage\(message\);/);
-  assert.match(reportController, /collected\.push\(\{ \.\.\.message, category, jiraIssueKey \}\);/);
+  // message.category is reused as-is (set by listMailboxFolderMessages,
+  // which has the full body available to classify Azure senders) rather than
+  // re-derived here from the lightweight DTO, which has no body.
+  assert.match(reportController, /if \(!ALERT_CATEGORIES\.has\(message\.category\)\) continue;/);
+  assert.match(reportController, /collected\.push\(message\);/);
 });
 
 test('Jira tickets are fingerprinted by their issue key, not subject text, since every ticket shares an almost-identical subject template', () => {

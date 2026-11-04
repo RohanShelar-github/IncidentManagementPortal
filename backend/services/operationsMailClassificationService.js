@@ -11,34 +11,30 @@ const OPERATIONS_MAIL_CATEGORIES = Object.freeze({
   sent: { key: 'sent', label: 'Sent Items' }
 });
 
-// The exact alert name text each NGC Plants Monitoring alert type carries
-// between the two quoted-and-fixed subject variants ("... was fired" /
-// "... was resolved"). Kept as one list so the Graph $filter
-// (emailService.js) and this subject-match regex can never drift apart, and
-// so a future alert type is added in exactly one place.
-const NGC_PLANTS_MONITORING_ALERT_NAMES = [
-  'NGC Monitoring - KF LIMAB Caliper Average Not Found',
-  'Boardline, Main Belt or Line Running data has not been received for over 60 minutes, while other plant data is still coming in'
-];
+// Azure alerts are split between the "Azure Alerts" and "NGC Plants
+// Monitoring" sidebar categories by the Azure Resource Group the alert fired
+// against (read from the alert email's body, not its subject — different
+// alert types from either resource group share the same subject wording, so
+// subject text cannot distinguish them). Keys are lower-cased resource group
+// names; a resource group not listed here (or one that can't be found in the
+// body at all) stays in the default "azure" bucket rather than being hidden.
+const AZURE_RESOURCE_GROUP_CATEGORY = {
+  ngcrg: 'azure',
+  ngcstagingrg: 'ngcplantsmonitoring'
+};
 
-function escapeRegExp(value) {
-  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function stripHtmlForClassification(value) {
+  return String(value || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
 }
 
-// Accepts straight (') and curly (’ ‘) apostrophes since Azure/Outlook can
-// render either around the alert name.
-const NGC_PLANTS_MONITORING_SUBJECT_PATTERNS = NGC_PLANTS_MONITORING_ALERT_NAMES.map(
-  (name) => new RegExp(`^Alert\\s+[’'‘]${escapeRegExp(name)}[’'‘]\\s+was\\s+(fired|resolved)\\s*$`, 'i')
-);
-
-function ngcPlantsMonitoringAlertState(subject) {
-  // Replies/forwards keep the original subject with a prefix chain.
-  const value = String(subject || '').trim().replace(/^(?:(?:re|fw|fwd)\s*:\s*)+/i, '');
-  for (const pattern of NGC_PLANTS_MONITORING_SUBJECT_PATTERNS) {
-    const match = value.match(pattern);
-    if (match) return match[1].toLowerCase();
-  }
-  return null;
+// Azure Monitor's alert email renders resource properties as label/value
+// pairs (for example a table row or stacked divs), so the value can be
+// separated from the "Resource Group" label by a colon or just whitespace
+// (table cells collapse to a run of spaces once HTML tags are stripped).
+function extractAzureResourceGroup(body) {
+  const text = stripHtmlForClassification(body);
+  const match = text.match(/Resource\s+Group\s*:?\s*([A-Za-z0-9][A-Za-z0-9._-]{0,60})/i);
+  return match ? match[1].trim().toLowerCase() : null;
 }
 
 // Azure alert types that exist in the mailbox but are not yet production
@@ -127,9 +123,12 @@ function classifyOperationsMessage(message) {
   const sender = String(message?.from || message?.fromAddress || '').trim().toLowerCase();
   const subject = String(message?.subject || '');
   if (isIgnoredOperationsAlert(sender, subject)) return { category: 'ignored', jiraIssueKey: '' };
-  if (sender === OPERATIONS_MAIL_CATEGORIES.azure.sender && ngcPlantsMonitoringAlertState(subject)) return { category: 'ngcplantsmonitoring', jiraIssueKey: '' };
+  if (sender === OPERATIONS_MAIL_CATEGORIES.azure.sender) {
+    const resourceGroup = extractAzureResourceGroup(message?.body);
+    const mappedCategory = resourceGroup && AZURE_RESOURCE_GROUP_CATEGORY[resourceGroup];
+    return { category: mappedCategory || 'azure', jiraIssueKey: '' };
+  }
   if (sender === OPERATIONS_MAIL_CATEGORIES.coralogix.sender) return { category: 'coralogix', jiraIssueKey: '' };
-  if (sender === OPERATIONS_MAIL_CATEGORIES.azure.sender) return { category: 'azure', jiraIssueKey: '' };
   if (isJiraCustomerTicketSubject(subject)) return { category: 'jira', jiraIssueKey: extractJiraIssueKey(subject) };
   return { category: 'other', jiraIssueKey: '' };
 }
@@ -139,4 +138,4 @@ function normalizedOperationsCategory(value) {
   return Object.prototype.hasOwnProperty.call(OPERATIONS_MAIL_CATEGORIES, key) ? key : 'all';
 }
 
-module.exports = { OPERATIONS_MAIL_CATEGORIES, IGNORED_AZURE_ALERT_NAME_FRAGMENTS, NGC_PLANTS_MONITORING_ALERT_NAMES, classifyOperationsMessage, extractJiraIssueKey, isIgnoredOperationsAlert, isJiraCustomerTicketSubject, jiraSubjectPrefix, ngcPlantsMonitoringAlertState, noHistorianReadIncidentDefaults, normalizedOperationsCategory, operationsIncidentDefaults, subjectContains };
+module.exports = { AZURE_RESOURCE_GROUP_CATEGORY, OPERATIONS_MAIL_CATEGORIES, IGNORED_AZURE_ALERT_NAME_FRAGMENTS, classifyOperationsMessage, extractAzureResourceGroup, extractJiraIssueKey, isIgnoredOperationsAlert, isJiraCustomerTicketSubject, jiraSubjectPrefix, noHistorianReadIncidentDefaults, normalizedOperationsCategory, operationsIncidentDefaults, subjectContains };
