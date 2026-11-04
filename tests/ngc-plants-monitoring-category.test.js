@@ -107,6 +107,16 @@ test('frontend: ngcPlantsMonitoringNotifyPreset uses a distinct subject/body tem
   assert.match(frontend, /function ngcPlantsMonitoringPlantId\(message\) \{/);
 });
 
+// Regression test: Azure alert bodies for this rule embed the underlying
+// Kusto query text (e.g. "Plant = tostring(customDimensions.PlantId)"), and
+// a naive "label = value" search captured "tostring" (a Kusto function name)
+// as if it were the real plant value, inserting it into the customer email.
+test('frontend: ngcPlantsMonitoringPlantId rejects Kusto query-syntax false positives instead of returning a wrong-looking value', () => {
+  assert.match(frontend, /var NGC_PLANTS_MONITORING_PLANT_ID_FALSE_POSITIVES = \[[^\]]*'tostring'[^\]]*\];/);
+  assert.match(frontend, /\{0,19\}\)\(\?!\\\(\)\/i,/);
+  assert.match(frontend, /NGC_PLANTS_MONITORING_PLANT_ID_FALSE_POSITIVES\.indexOf\(match\[1\]\.toLowerCase\(\)\) === -1/);
+});
+
 test('frontend: the compose panel prefills recipients/subject/body from the NGC preset, and a Notify Customer button opens it', () => {
   assert.match(frontend, /var ngcPreset = initialMode === 'forward' \? null : ngcPlantsMonitoringNotifyPreset\(message\);/);
   assert.match(frontend, /if \(ngcPreset\) to\.value = ngcPreset\.to;/);

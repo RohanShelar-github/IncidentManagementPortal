@@ -3424,20 +3424,28 @@ function noHistorianReplyRecipientPreset(message) {
   return historianMailRecipientPreset({ customer: 'NGC', project: 'Historian', area: 'Historian' });
 }
 
+// Azure alert bodies for this rule embed the underlying Kusto query text
+// (e.g. "Plant = tostring(customDimensions.PlantId)"), which a naive
+// "label = value" search matches instead of the actual fired value — these
+// are Kusto function names that can appear right after such a label.
+var NGC_PLANTS_MONITORING_PLANT_ID_FALSE_POSITIVES = ['tostring', 'toint', 'todouble', 'toreal', 'tobool', 'tolong', 'todatetime', 'totimespan', 'trim', 'extend', 'where', 'summarize', 'project', 'strcat', 'iff', 'case', 'customdimensions'];
+
 // Best-effort plant identifier extraction for alert types whose subject is
 // the same for every plant (the plant only appears in the alert body).
 // Tries the field-label shapes these Azure alert payloads are known to use;
-// returns null (never a guess) when nothing matches; try widening this list
-// once we've seen the exact body format for the Boardline/Main Belt alert.
+// returns null (never a guess) when nothing matches or only a known
+// query-syntax false positive is found — a wrong-looking real value is worse
+// than the visible <<plantId>> placeholder, since the placeholder is obvious
+// and the sender knows to fix it before sending.
 function ngcPlantsMonitoringPlantId(message) {
   var text = mailboxPlainText((message && (message.body || message.preview)) || '');
   var patterns = [
-    /\bplant\s*(?:id|name)?\s*[:=-]\s*([A-Za-z0-9][A-Za-z0-9._-]{0,19})/i,
-    /\bresource\s*[:=-]\s*([A-Za-z0-9][A-Za-z0-9._-]{0,19})/i
+    /\bplant\s*(?:id|name)?\s*[:=-]\s*([A-Za-z0-9][A-Za-z0-9._-]{0,19})(?!\()/i,
+    /\bresource\s*[:=-]\s*([A-Za-z0-9][A-Za-z0-9._-]{0,19})(?!\()/i
   ];
   for (var i = 0; i < patterns.length; i++) {
     var match = text.match(patterns[i]);
-    if (match) return match[1];
+    if (match && NGC_PLANTS_MONITORING_PLANT_ID_FALSE_POSITIVES.indexOf(match[1].toLowerCase()) === -1) return match[1];
   }
   return null;
 }
