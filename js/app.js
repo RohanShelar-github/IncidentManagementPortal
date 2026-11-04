@@ -3424,30 +3424,29 @@ function noHistorianReplyRecipientPreset(message) {
   return historianMailRecipientPreset({ customer: 'NGC', project: 'Historian', area: 'Historian' });
 }
 
-// Azure alert bodies for this rule embed the underlying Kusto query text
-// (e.g. "Plant = tostring(customDimensions.PlantId)"), which a naive
-// "label = value" search matches instead of the actual fired value — these
-// are Kusto function names that can appear right after such a label.
-var NGC_PLANTS_MONITORING_PLANT_ID_FALSE_POSITIVES = ['tostring', 'toint', 'todouble', 'toreal', 'tobool', 'tolong', 'todatetime', 'totimespan', 'trim', 'extend', 'where', 'summarize', 'project', 'strcat', 'iff', 'case', 'customdimensions'];
+// Azure alert bodies for this rule also embed the underlying Kusto query
+// text (e.g. "Plant = tostring(customDimensions.PlantId)"), which a loose
+// "label = value" search can match instead of the actual fired value.
+var NGC_PLANTS_MONITORING_PLANT_ID_FALSE_POSITIVES = ['tostring', 'toint', 'todouble', 'toreal', 'tobool', 'tolong', 'todatetime', 'totimespan', 'trim', 'extend', 'where', 'summarize', 'project', 'strcat', 'iff', 'case', 'customdimensions', 'string', 'int', 'long', 'real', 'bool', 'datetime'];
 
-// Best-effort plant identifier extraction for alert types whose subject is
-// the same for every plant (the plant only appears in the alert body).
-// Tries the field-label shapes these Azure alert payloads are known to use;
-// returns null (never a guess) when nothing matches or only a known
-// query-syntax false positive is found — a wrong-looking real value is worse
-// than the visible <<plantId>> placeholder, since the placeholder is obvious
-// and the sender knows to fix it before sending.
+// Plant identifier extraction: Azure's common alert schema renders a
+// "Dimensions" table with the fired dimension's name and value as adjacent
+// cells — "plantId" then e.g. "ATL2" — with NO separating punctuation
+// between them (unlike most other fields in this email, which use a colon),
+// so the separator here must be optional, not required.
+// Returns null (never a guess) when nothing usable is found — a wrong-
+// looking real value is worse than the visible <<plantId>> placeholder,
+// since the placeholder is obviously unfilled and the sender knows to check.
 function ngcPlantsMonitoringPlantId(message) {
   var text = mailboxPlainText((message && (message.body || message.preview)) || '');
-  var patterns = [
-    /\bplant\s*(?:id|name)?\s*[:=-]\s*([A-Za-z0-9][A-Za-z0-9._-]{0,19})(?!\()/i,
-    /\bresource\s*[:=-]\s*([A-Za-z0-9][A-Za-z0-9._-]{0,19})(?!\()/i
-  ];
-  for (var i = 0; i < patterns.length; i++) {
-    var match = text.match(patterns[i]);
-    if (match && NGC_PLANTS_MONITORING_PLANT_ID_FALSE_POSITIVES.indexOf(match[1].toLowerCase()) === -1) return match[1];
-  }
-  return null;
+  var match = text.match(/\bplant[\s_-]*id\b\s*:?\s*([A-Za-z0-9][A-Za-z0-9._-]{0,60})/i);
+  if (!match) return null;
+  var candidate = match[1].replace(/[.,;:]+$/, '');
+  // Reject query-syntax noise explicitly (never trust the regex alone to
+  // have stopped before a "(" — greedy backtracking can shorten the
+  // capture by one character to satisfy a lookahead instead of failing).
+  if (!candidate || /[()]/.test(candidate) || NGC_PLANTS_MONITORING_PLANT_ID_FALSE_POSITIVES.indexOf(candidate.toLowerCase()) > -1) return null;
+  return candidate;
 }
 
 function ngcPlantsMonitoringCardWrap(heading, bodyHtml) {

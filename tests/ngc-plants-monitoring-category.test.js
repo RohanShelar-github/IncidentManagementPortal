@@ -107,14 +107,42 @@ test('frontend: ngcPlantsMonitoringNotifyPreset uses a distinct subject/body tem
   assert.match(frontend, /function ngcPlantsMonitoringPlantId\(message\) \{/);
 });
 
-// Regression test: Azure alert bodies for this rule embed the underlying
-// Kusto query text (e.g. "Plant = tostring(customDimensions.PlantId)"), and
-// a naive "label = value" search captured "tostring" (a Kusto function name)
-// as if it were the real plant value, inserting it into the customer email.
-test('frontend: ngcPlantsMonitoringPlantId rejects Kusto query-syntax false positives instead of returning a wrong-looking value', () => {
-  assert.match(frontend, /var NGC_PLANTS_MONITORING_PLANT_ID_FALSE_POSITIVES = \[[^\]]*'tostring'[^\]]*\];/);
-  assert.match(frontend, /\{0,19\}\)\(\?!\\\(\)\/i,/);
-  assert.match(frontend, /NGC_PLANTS_MONITORING_PLANT_ID_FALSE_POSITIVES\.indexOf\(match\[1\]\.toLowerCase\(\)\) === -1/);
+// Real behavioral test (not just "does this regex exist in the source") —
+// extracts and runs the actual ngcPlantsMonitoringPlantId implementation
+// against a synthetic body shaped like the real alert: Kusto query text
+// ("Plant = tostring(customDimensions.PlantId)") followed by the real
+// Dimensions table row ("plantId" / "ATL2" — no separating punctuation,
+// unlike most other fields in this email, which is what the original,
+// mandatory-separator regex got wrong).
+function loadNgcPlantsMonitoringPlantId() {
+  const sandbox = { document: { createElement: () => ({ set innerHTML(v) { this._v = v; }, get value() { return this._v; } }) } };
+  const fnSource = [
+    frontend.match(/function mailboxDecodeEntities\([^)]*\) \{[\s\S]*?\n\}/)[0],
+    frontend.match(/function mailboxPlainText\([^)]*\) \{[^\n]*\}/)[0],
+    frontend.match(/var NGC_PLANTS_MONITORING_PLANT_ID_FALSE_POSITIVES = \[[^\]]*\];/)[0],
+    frontend.match(/function ngcPlantsMonitoringPlantId\(message\) \{[\s\S]*?\n\}/)[0],
+    'module.exports = ngcPlantsMonitoringPlantId;'
+  ].join('\n');
+  const module = { exports: {} };
+  // eslint-disable-next-line no-new-func
+  new Function('document', 'module', 'exports', fnSource)(sandbox.document, module, module.exports);
+  return module.exports;
+}
+
+test('ngcPlantsMonitoringPlantId finds the Dimensions table value, skipping the Kusto query text that mentions the same field name', () => {
+  const ngcPlantsMonitoringPlantId = loadNgcPlantsMonitoringPlantId();
+  const realisticBody = '<div>Query: | extend Plant = tostring(customDimensions.PlantId) | where Plant != ""</div>'
+    + '<h2>Dimensions</h2><table><tr><td>plantId</td><td>ATL2</td></tr></table>'
+    + '<h2>Affected resource hierarchy</h2><div>Resource Group</div><a>ngcstagingrg</a>';
+  assert.equal(ngcPlantsMonitoringPlantId({ body: realisticBody }), 'ATL2');
+
+  // The query text alone (no real Dimensions row present) must not produce
+  // a wrong-looking value — the known regression this test guards against.
+  const queryOnlyBody = '<div>Query: | extend Plant = tostring(customDimensions.PlantId)</div>';
+  assert.equal(ngcPlantsMonitoringPlantId({ body: queryOnlyBody }), null);
+
+  assert.equal(ngcPlantsMonitoringPlantId({ body: '' }), null);
+  assert.equal(ngcPlantsMonitoringPlantId({}), null);
 });
 
 test('frontend: the compose panel prefills recipients/subject/body from the NGC preset, and a Notify Customer button opens it', () => {
