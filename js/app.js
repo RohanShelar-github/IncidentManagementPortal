@@ -3424,31 +3424,78 @@ function noHistorianReplyRecipientPreset(message) {
   return historianMailRecipientPreset({ customer: 'NGC', project: 'Historian', area: 'Historian' });
 }
 
+// Best-effort plant identifier extraction for alert types whose subject is
+// the same for every plant (the plant only appears in the alert body).
+// Tries the field-label shapes these Azure alert payloads are known to use;
+// returns null (never a guess) when nothing matches; try widening this list
+// once we've seen the exact body format for the Boardline/Main Belt alert.
+function ngcPlantsMonitoringPlantId(message) {
+  var text = mailboxPlainText((message && (message.body || message.preview)) || '');
+  var patterns = [
+    /\bplant\s*(?:id|name)?\s*[:=-]\s*([A-Za-z0-9][A-Za-z0-9._-]{0,19})/i,
+    /\bresource\s*[:=-]\s*([A-Za-z0-9][A-Za-z0-9._-]{0,19})/i
+  ];
+  for (var i = 0; i < patterns.length; i++) {
+    var match = text.match(patterns[i]);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+function ngcPlantsMonitoringCardWrap(heading, bodyHtml) {
+  return '<div style="max-width:640px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a">'
+    + '<div style="background:#172554;padding:20px 24px;color:#fff">'
+    + '<div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;opacity:.8">AOC 24×7 Incident Management</div>'
+    + '<h1 style="font-size:20px;margin:8px 0 0">NGC Plants Monitoring Alert</h1>'
+    + '</div>'
+    + '<div style="padding:22px 24px">'
+    + '<div style="font-size:15px;font-weight:700;margin-bottom:14px">' + escapeMetricHtml(heading) + '</div>'
+    + '<div style="background:#f8fafc;border-left:4px solid #3b82f6;padding:14px 16px;font-size:13px;line-height:1.7">' + bodyHtml + '</div>'
+    + '</div></div>';
+}
+
 // "Notify Customer" prefill for NGC Plants Monitoring alerts — only offered
-// on a "fired" alert (a "resolved" one needs no customer notification). The
+// on a "fired" alert (a "resolved" one needs no customer notification). Each
+// alert type under this category gets its own subject/body template; the
 // body is prefilled with the same branded card styling incident emails use
 // (see emailService.js incidentEmail()) so this customer-facing notice looks
 // consistent with the rest of the portal's outgoing mail.
 function ngcPlantsMonitoringNotifyPreset(message) {
   if (!message || message.category !== 'ngcplantsmonitoring' || isResolvedOperationsEmail(message)) return null;
-  return {
+  var recipients = {
     to: 'matthewp@nationalgypsum.com,billb@nationalgypsum.com,dimpalp@nationalgypsum.com',
-    cc: 'Rohan_Vikhe@magicsoftware.com,jaiprakash_prajapati@magicsoftware.com,Mayur_Jaipurkar@magicsoftware.com',
+    cc: 'Rohan_Vikhe@magicsoftware.com,jaiprakash_prajapati@magicsoftware.com,Mayur_Jaipurkar@magicsoftware.com'
+  };
+  var subject = String(message.subject || '');
+  if (/Boardline,?\s*Main Belt or Line Running/i.test(subject)) {
+    var plantId = ngcPlantsMonitoringPlantId(message) || '<<plantId>>';
+    return {
+      to: recipients.to,
+      cc: recipients.cc,
+      subject: 'Boardline, Main Belt or Line Running Data Not Received',
+      bodyHtml: ngcPlantsMonitoringCardWrap('Boardline, Main Belt or Line Running Data Not Received',
+        '<div>Hi Team,</div><div>&nbsp;</div>'
+        + '<div>The Boardline / Main Belt / Line Running tag is currently not receiving any data for 60 minutes or more, while other sensor data continues to arrive.</div>'
+        + '<div>&nbsp;</div>'
+        + '<div><strong>Plant Name:</strong> ' + escapeMetricHtml(plantId) + '</div>'
+        + '<div>&nbsp;</div>'
+        + '<div>Please check the running tag’s connection at the edge or PLC to ensure data is being transmitted correctly.</div>'
+        + '<div>The affected tag may cause the line status and uptime in dashboards and reports to incorrectly show as Down, even if the line is running.</div>'
+        + '<div>&nbsp;</div>'
+        + '<div>The alert will clear automatically once data transmission resumes.</div>'
+        + '<div>&nbsp;</div><div>Thanks</div>')
+    };
+  }
+  return {
+    to: recipients.to,
+    cc: recipients.cc,
     subject: 'NGC Monitoring - KF LIMAB Caliper Average Not Found',
-    bodyHtml: '<div style="max-width:640px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a">'
-      + '<div style="background:#172554;padding:20px 24px;color:#fff">'
-      + '<div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;opacity:.8">AOC 24×7 Incident Management</div>'
-      + '<h1 style="font-size:20px;margin:8px 0 0">NGC Plants Monitoring Alert</h1>'
-      + '</div>'
-      + '<div style="padding:22px 24px">'
-      + '<div style="font-size:15px;font-weight:700;margin-bottom:14px">NGC Monitoring - KF LIMAB Caliper Average Not Found</div>'
-      + '<div style="background:#f8fafc;border-left:4px solid #3b82f6;padding:14px 16px;font-size:13px;line-height:1.7">'
-      + '<div>Hi Team,</div><div>&nbsp;</div>'
+    bodyHtml: ngcPlantsMonitoringCardWrap('NGC Monitoring - KF LIMAB Caliper Average Not Found',
+      '<div>Hi Team,</div><div>&nbsp;</div>'
       + '<div>The KF LIMAB Caliper Average tag is currently not receiving any data from the following plants:</div>'
       + '<ul style="margin:8px 0 10px 18px;padding:0"><li>BAL2</li><li>MED2</li><li>RIC</li><li>SAV</li><li>WLM</li></ul>'
       + '<div>The alarm is configured to trigger when the production line is running and no new data is received from the KF LIMAB Caliper Average tag for 120 minutes.</div>'
-      + '<div>&nbsp;</div><div>Thanks</div>'
-      + '</div></div></div>'
+      + '<div>&nbsp;</div><div>Thanks</div>')
   };
 }
 

@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
-const { classifyOperationsMessage, IGNORED_AZURE_ALERT_NAME_FRAGMENTS, isJiraCustomerTicketSubject, jiraSubjectPrefix, normalizedOperationsCategory } = require('./operationsMailClassificationService');
+const { classifyOperationsMessage, IGNORED_AZURE_ALERT_NAME_FRAGMENTS, isJiraCustomerTicketSubject, jiraSubjectPrefix, NGC_PLANTS_MONITORING_ALERT_NAMES, normalizedOperationsCategory } = require('./operationsMailClassificationService');
 const DEFAULT_EWS_URL = 'https://outlook.office365.com/EWS/Exchange.asmx';
 const GRAPH_ROOT = 'https://graph.microsoft.com/v1.0';
 let graphTokenCache = null;
@@ -406,7 +406,7 @@ function mailboxCategoryGraphFilter(category) {
   // The alert name substring sits between the quote characters in both
   // subject variants ("... was fired" / "... was resolved") and contains no
   // apostrophe itself, so it is safe to use directly as an OData literal.
-  if (category === 'ngcplantsmonitoring') return "from/emailAddress/address eq 'azure-noreply@microsoft.com' and contains(subject,'NGC Monitoring - KF LIMAB Caliper Average Not Found')";
+  if (category === 'ngcplantsmonitoring') return `from/emailAddress/address eq 'azure-noreply@microsoft.com' and (${NGC_PLANTS_MONITORING_ALERT_NAMES.map((name) => `contains(subject,'${name}')`).join(' or ')})`;
   // Reply/forward prefixes are normal for Customer Raised Tickets, so an
   // exact startswith filter would undercount and hide active conversations.
   if (category === 'jira') return "contains(subject,'was reported by the customer')";

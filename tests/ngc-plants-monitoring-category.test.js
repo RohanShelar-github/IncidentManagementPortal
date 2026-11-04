@@ -60,10 +60,23 @@ test('classifyOperationsMessage routes matching Azure subjects to ngcplantsmonit
   assert.notEqual(spoofedSender.category, 'ngcplantsmonitoring');
 });
 
-test('backend: the Graph filter, client-side scan and unread-count paths all cover ngcplantsmonitoring', () => {
-  assert.match(emailServiceSource, /if \(category === 'ngcplantsmonitoring'\) return "from\/emailAddress\/address eq 'azure-noreply@microsoft\.com' and contains\(subject,'NGC Monitoring - KF LIMAB Caliper Average Not Found'\)"/);
+test('backend: the Graph filter, client-side scan and unread-count paths all cover ngcplantsmonitoring, across every alert name in the category', () => {
+  assert.match(emailServiceSource, /if \(category === 'ngcplantsmonitoring'\) return `from\/emailAddress\/address eq 'azure-noreply@microsoft\.com' and \(\$\{NGC_PLANTS_MONITORING_ALERT_NAMES\.map\(\(name\) => `contains\(subject,'\$\{name\}'\)`\)\.join\(' or '\)\}\)`;/);
   assert.match(emailServiceSource, /selectedCategory === 'ngcplantsmonitoring'/);
   assert.match(emailServiceSource, /const categories = \['coralogix', 'azure', 'ngcplantsmonitoring', 'jira'\];/);
+
+  // Evaluate the same template the source builds, against the real alert
+  // name list, so a future addition to that list is covered automatically.
+  const filter = `from/emailAddress/address eq 'azure-noreply@microsoft.com' and (${classification.NGC_PLANTS_MONITORING_ALERT_NAMES.map((name) => `contains(subject,'${name}')`).join(' or ')})`;
+  assert.match(filter, /contains\(subject,'NGC Monitoring - KF LIMAB Caliper Average Not Found'\)/);
+  assert.match(filter, /contains\(subject,'Boardline, Main Belt or Line Running data has not been received for over 60 minutes, while other plant data is still coming in'\)/);
+});
+
+test('ngcPlantsMonitoringAlertState also recognizes the Boardline/Main Belt alert type, fired or resolved', () => {
+  assert.equal(classification.ngcPlantsMonitoringAlertState("Alert 'Boardline, Main Belt or Line Running data has not been received for over 60 minutes, while other plant data is still coming in' was fired"), 'fired');
+  assert.equal(classification.ngcPlantsMonitoringAlertState('Alert ’Boardline, Main Belt or Line Running data has not been received for over 60 minutes, while other plant data is still coming in’ was resolved'), 'resolved');
+  const classified = classification.classifyOperationsMessage({ from: 'azure-noreply@microsoft.com', subject: "Alert 'Boardline, Main Belt or Line Running data has not been received for over 60 minutes, while other plant data is still coming in' was fired" });
+  assert.equal(classified.category, 'ngcplantsmonitoring');
 });
 
 test('frontend: the sidebar, view whitelist, label map and count-badge loader all know about ngcplantsmonitoring', () => {
@@ -85,6 +98,16 @@ test('frontend: ngcPlantsMonitoringNotifyPreset only fires for a non-resolved ng
   assert.match(frontend, /The KF LIMAB Caliper Average tag is currently not receiving any data from the following plants:/);
   assert.match(frontend, /<li>BAL2<\/li><li>MED2<\/li><li>RIC<\/li><li>SAV<\/li><li>WLM<\/li>/);
   assert.match(frontend, /no new data is received from the KF LIMAB Caliper Average tag for 120 minutes\./);
+});
+
+test('frontend: ngcPlantsMonitoringNotifyPreset uses a distinct subject/body template for the Boardline/Main Belt alert, with a <<plantId>> fallback', () => {
+  assert.match(frontend, /if \(\/Boardline,\?\\s\*Main Belt or Line Running\/i\.test\(subject\)\) \{/);
+  assert.match(frontend, /var plantId = ngcPlantsMonitoringPlantId\(message\) \|\| '<<plantId>>';/);
+  assert.match(frontend, /subject: 'Boardline, Main Belt or Line Running Data Not Received',/);
+  assert.match(frontend, /The Boardline \/ Main Belt \/ Line Running tag is currently not receiving any data for 60 minutes or more, while other sensor data continues to arrive\./);
+  assert.match(frontend, /<strong>Plant Name:<\/strong> ' \+ escapeMetricHtml\(plantId\)/);
+  assert.match(frontend, /The alert will clear automatically once data transmission resumes\./);
+  assert.match(frontend, /function ngcPlantsMonitoringPlantId\(message\) \{/);
 });
 
 test('frontend: the compose panel prefills recipients/subject/body from the NGC preset, and a Notify Customer button opens it', () => {

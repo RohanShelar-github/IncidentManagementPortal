@@ -11,20 +11,34 @@ const OPERATIONS_MAIL_CATEGORIES = Object.freeze({
   sent: { key: 'sent', label: 'Sent Items' }
 });
 
-// The exact alert name text NGC Plants Monitoring subjects carry between the
-// two quoted-and-fixed subject variants ("... was fired" / "... was
-// resolved"). Kept as one constant so the Graph $filter (emailService.js)
-// and this subject-match regex can never drift apart.
-const NGC_PLANTS_MONITORING_ALERT_NAME = 'NGC Monitoring - KF LIMAB Caliper Average Not Found';
+// The exact alert name text each NGC Plants Monitoring alert type carries
+// between the two quoted-and-fixed subject variants ("... was fired" /
+// "... was resolved"). Kept as one list so the Graph $filter
+// (emailService.js) and this subject-match regex can never drift apart, and
+// so a future alert type is added in exactly one place.
+const NGC_PLANTS_MONITORING_ALERT_NAMES = [
+  'NGC Monitoring - KF LIMAB Caliper Average Not Found',
+  'Boardline, Main Belt or Line Running data has not been received for over 60 minutes, while other plant data is still coming in'
+];
+
+function escapeRegExp(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Accepts straight (') and curly (’ ‘) apostrophes since Azure/Outlook can
 // render either around the alert name.
-const NGC_PLANTS_MONITORING_SUBJECT = /^Alert\s+[’'‘]NGC Monitoring - KF LIMAB Caliper Average Not Found[’'‘]\s+was\s+(fired|resolved)\s*$/i;
+const NGC_PLANTS_MONITORING_SUBJECT_PATTERNS = NGC_PLANTS_MONITORING_ALERT_NAMES.map(
+  (name) => new RegExp(`^Alert\\s+[’'‘]${escapeRegExp(name)}[’'‘]\\s+was\\s+(fired|resolved)\\s*$`, 'i')
+);
 
 function ngcPlantsMonitoringAlertState(subject) {
   // Replies/forwards keep the original subject with a prefix chain.
   const value = String(subject || '').trim().replace(/^(?:(?:re|fw|fwd)\s*:\s*)+/i, '');
-  const match = value.match(NGC_PLANTS_MONITORING_SUBJECT);
-  return match ? match[1].toLowerCase() : null;
+  for (const pattern of NGC_PLANTS_MONITORING_SUBJECT_PATTERNS) {
+    const match = value.match(pattern);
+    if (match) return match[1].toLowerCase();
+  }
+  return null;
 }
 
 // Azure alert types that exist in the mailbox but are not yet production
@@ -125,4 +139,4 @@ function normalizedOperationsCategory(value) {
   return Object.prototype.hasOwnProperty.call(OPERATIONS_MAIL_CATEGORIES, key) ? key : 'all';
 }
 
-module.exports = { OPERATIONS_MAIL_CATEGORIES, IGNORED_AZURE_ALERT_NAME_FRAGMENTS, NGC_PLANTS_MONITORING_ALERT_NAME, classifyOperationsMessage, extractJiraIssueKey, isIgnoredOperationsAlert, isJiraCustomerTicketSubject, jiraSubjectPrefix, ngcPlantsMonitoringAlertState, noHistorianReadIncidentDefaults, normalizedOperationsCategory, operationsIncidentDefaults, subjectContains };
+module.exports = { OPERATIONS_MAIL_CATEGORIES, IGNORED_AZURE_ALERT_NAME_FRAGMENTS, NGC_PLANTS_MONITORING_ALERT_NAMES, classifyOperationsMessage, extractJiraIssueKey, isIgnoredOperationsAlert, isJiraCustomerTicketSubject, jiraSubjectPrefix, ngcPlantsMonitoringAlertState, noHistorianReadIncidentDefaults, normalizedOperationsCategory, operationsIncidentDefaults, subjectContains };
