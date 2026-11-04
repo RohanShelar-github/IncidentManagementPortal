@@ -3495,11 +3495,12 @@ function ngcPlantsMonitoringNotifyPreset(message) {
   if (/Boardline,?\s*Main Belt or Line Running/i.test(subject)) {
     var plantId = ngcPlantsMonitoringPlantId(message) || '<<plantId>>';
     var runningTagDescription = ngcRunningTagDescription(plantId);
+    var runningTagSubject = '[Alert] ' + runningTagDescription + ' Data Not Received - ' + plantId;
     return {
       to: recipients.to,
       cc: recipients.cc,
-      subject: '[Alert] Running Tag Data Not Received - ' + plantId,
-      bodyHtml: ngcPlantsMonitoringCardWrap('Running Tag Data Not Received - ' + plantId,
+      subject: runningTagSubject,
+      bodyHtml: ngcPlantsMonitoringCardWrap(runningTagDescription + ' Data Not Received - ' + plantId,
         '<div>Hi Team,</div><div>&nbsp;</div>'
         + '<div>The ' + escapeMetricHtml(runningTagDescription) + ' tag is currently not receiving any data for 60 minutes or more, while other sensor data continues to arrive.</div>'
         + '<div>&nbsp;</div>'

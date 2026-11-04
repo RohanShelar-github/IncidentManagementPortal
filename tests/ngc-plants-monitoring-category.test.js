@@ -101,7 +101,7 @@ test('frontend: ngcPlantsMonitoringNotifyPreset uses a distinct, plant-category-
   assert.match(frontend, /if \(\/Boardline,\?\\s\*Main Belt or Line Running\/i\.test\(subject\)\) \{/);
   assert.match(frontend, /var plantId = ngcPlantsMonitoringPlantId\(message\) \|\| '<<plantId>>';/);
   assert.match(frontend, /var runningTagDescription = ngcRunningTagDescription\(plantId\);/);
-  assert.match(frontend, /subject: '\[Alert\] Running Tag Data Not Received - ' \+ plantId,/);
+  assert.match(frontend, /var runningTagSubject = '\[Alert\] ' \+ runningTagDescription \+ ' Data Not Received - ' \+ plantId;/);
   assert.match(frontend, /The ' \+ escapeMetricHtml\(runningTagDescription\) \+ ' tag is currently not receiving any data for 60 minutes or more, while other sensor data continues to arrive\./);
   assert.match(frontend, /<strong>Plant Name:<\/strong> ' \+ escapeMetricHtml\(plantId\)/);
   assert.match(frontend, /The alert will clear automatically once data transmission resumes\./);
@@ -184,16 +184,16 @@ test('ngcPlantsMonitoringNotifyPreset builds the Running Tag No Data subject/bod
   const bodyWithPlant = (plant) => '<h2>Dimensions</h2><table><tr><td>plantId</td><td>' + plant + '</td></tr></table>';
 
   const ifpCase = ngcPlantsMonitoringNotifyPreset({ category: 'ngcplantsmonitoring', subject: firedBoardlineSubject, body: bodyWithPlant('ATL2') });
-  assert.equal(ifpCase.subject, '[Alert] Running Tag Data Not Received - ATL2');
+  assert.equal(ifpCase.subject, '[Alert] Line Running Data Not Received - ATL2');
   assert.match(ifpCase.bodyHtml, /The Line Running tag is currently not receiving any data for 60 minutes or more/);
   assert.match(ifpCase.bodyHtml, /<strong>Plant Name:<\/strong> ATL2/);
 
   const gypCase = ngcPlantsMonitoringNotifyPreset({ category: 'ngcplantsmonitoring', subject: firedBoardlineSubject, body: bodyWithPlant('APL') });
-  assert.equal(gypCase.subject, '[Alert] Running Tag Data Not Received - APL');
+  assert.equal(gypCase.subject, '[Alert] Boardline Running Data Not Received - APL');
   assert.match(gypCase.bodyHtml, /The Boardline Running tag is currently not receiving any data for 60 minutes or more/);
 
   const cemCase = ngcPlantsMonitoringNotifyPreset({ category: 'ngcplantsmonitoring', subject: firedBoardlineSubject, body: bodyWithPlant('CIN') });
-  assert.equal(cemCase.subject, '[Alert] Running Tag Data Not Received - CIN');
+  assert.equal(cemCase.subject, '[Alert] Main Belt Running Data Not Received - CIN');
   assert.match(cemCase.bodyHtml, /The Main Belt Running tag is currently not receiving any data for 60 minutes or more/);
 
   // No Dimensions table present at all — the <<plantId>> placeholder must
