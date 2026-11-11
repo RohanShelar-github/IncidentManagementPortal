@@ -4326,11 +4326,53 @@ function sopPageSafeHtml(value) {
   // Always a light theme, independent of the app's own dark/light setting —
   // Confluence authors this content assuming a white background (panels,
   // status badges, etc. use light pastel colors that would clash with a
-  // forced dark background).
-  var themeCss = 'html,body{margin:0;background:#fff;color:#172033;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6}'
-    + 'body{padding:24px;box-sizing:border-box}img{max-width:100%;height:auto}'
-    + 'table{max-width:100%;border-collapse:collapse;margin:8px 0}td,th{border:1px solid #dce1ed;padding:6px 10px}'
-    + 'a,a:visited{color:#2563eb}blockquote{border-left:3px solid #dce1ed;margin-left:0;padding-left:14px;color:#69728a}';
+  // forced dark background). The sanitizer above only strips tags/attributes,
+  // never the class attribute, so Confluence's own macro class names (info/
+  // note/warning/tip panels, embedded-image alignment, etc. — confirmed
+  // against this space's real page markup) are still present in the HTML;
+  // this stylesheet gives them Confluence's actual look since we don't load
+  // Confluence's own CSS (that would mean trusting an external, versioned
+  // stylesheet bundle inside the sandbox).
+  var themeCss = 'html,body{margin:0;background:#fff;color:#172b4d;'
+      + 'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14.5px;line-height:1.5}'
+    + 'body{padding:24px 32px;box-sizing:border-box;max-width:860px;margin:0 auto}'
+    + 'h1,h2,h3,h4,h5,h6{color:#172b4d;font-weight:600;line-height:1.3;margin:28px 0 12px}'
+    + 'h1{font-size:24px;border-bottom:2px solid #dfe1e6;padding-bottom:8px}h2{font-size:20px;border-bottom:1px solid #dfe1e6;padding-bottom:6px}h3{font-size:16px}h4{font-size:14.5px}'
+    + 'p{margin:0 0 12px}ul,ol{margin:0 0 12px;padding-left:28px}li{margin-bottom:4px}'
+    + 'a,a:visited{color:#0052cc;text-decoration:none}a:hover{text-decoration:underline}'
+    + '.confluence-anchor-link{color:#8993a4;text-decoration:none;font-size:12px;margin-left:4px}'
+    + 'img{max-width:100%;height:auto}'
+    + '.confluence-embedded-image{display:block;margin:12px auto;border:1px solid #dfe1e6;border-radius:3px}'
+    + '.confluence-embedded-image.image-center{margin-left:auto;margin-right:auto}'
+    + '.confluence-embedded-image.image-wrap-left{float:left;margin:4px 16px 8px 0}'
+    + '.confluence-embedded-image.image-wrap-right,.confluence-embedded-image.image-right{float:right;margin:4px 0 8px 16px}'
+    + 'table{max-width:100%;border-collapse:collapse;margin:8px 0 16px;width:100%}'
+    + 'td,th{border:1px solid #dfe1e6;padding:8px 12px;vertical-align:top}'
+    + 'th{background:#f4f5f7;font-weight:600;text-align:left}'
+    + 'blockquote{border-left:3px solid #dfe1e6;margin:12px 0;padding-left:14px;color:#44546f}'
+    + 'code{background:#f4f5f7;border-radius:3px;padding:1px 5px;font-family:"SFMono-Regular",Consolas,Menlo,monospace;font-size:13px}'
+    + 'pre,.code.panel .codeContent,.codeContent{background:#f4f5f7;border:1px solid #dfe1e6;border-radius:3px;padding:12px 14px;overflow-x:auto;font-family:"SFMono-Regular",Consolas,Menlo,monospace;font-size:13px;margin:0 0 16px}'
+    + 'pre code{background:transparent;padding:0}'
+    // Confluence's four info-panel macro types — colors match Atlassian's
+    // own design tokens for each (info=blue, note=yellow, warning=red/orange,
+    // tip=green). Confirmed class names against this space's real markup
+    // (e.g. "confluence-information-macro confluence-information-macro-note").
+    + '.confluence-information-macro{display:flex;align-items:flex-start;gap:10px;margin:0 0 16px;padding:12px 14px;border-radius:3px;font-size:14px}'
+    + '.confluence-information-macro-body,.confluence-information-macro>.confluence-information-macro-body{flex:1;min-width:0}'
+    + '.confluence-information-macro-body>:last-child{margin-bottom:0}'
+    + '.confluence-information-macro::before{flex-shrink:0;font-size:16px;line-height:1.3}'
+    + '.confluence-information-macro-information{background:#deebff}.confluence-information-macro-information::before{content:"ℹ️"}'
+    + '.confluence-information-macro-note{background:#fff7d6}.confluence-information-macro-note::before{content:"📝"}'
+    + '.confluence-information-macro-warning{background:#ffebe6}.confluence-information-macro-warning::before{content:"⚠️"}'
+    + '.confluence-information-macro-tip{background:#e3fcef}.confluence-information-macro-tip::before{content:"💡"}'
+    // Generic "panel" macro — Confluence supplies its own background/border
+    // color as an inline style per-panel; this just adds the padding/radius
+    // Confluence's stylesheet would otherwise contribute.
+    + '.panel{border:1px solid #dfe1e6;border-radius:3px;margin:0 0 16px;overflow:hidden}'
+    + '.panelContent{padding:12px 14px}'
+    + '.panelContent>:last-child{margin-bottom:0}'
+    // Status lozenges (e.g. a DONE/TODO/BLOCKED badge).
+    + '.status-macro,.aui-lozenge{display:inline-block;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:700;text-transform:uppercase;background:#dfe1e6;color:#42526e}';
   return '<!doctype html><html><head><meta charset="utf-8"><style>' + themeCss + '</style></head><body>' + documentValue.body.innerHTML + '</body></html>';
 }
 

@@ -155,6 +155,25 @@ test('frontend: sopPageSafeHtml strips scripts/forms/event handlers and only all
   assert.match(frontend, /!\/\^\(https:\|mailto:\|data:image\\\/\|\\\/api\\\/sop\\\/asset\\\?\)\/i\.test\(raw\)/);
 });
 
+// Regression test for a direct follow-up request: the content viewer looked
+// "too basic" because the sanitizer never stripped Confluence's own class
+// attributes (only tags/dangerous attributes), but no CSS targeted those
+// classes — Confluence's visual styling (info/note/warning/tip panels,
+// embedded-image alignment, etc.) comes entirely from ITS OWN stylesheet,
+// which this app deliberately doesn't load (that would mean trusting an
+// external, versioned CSS bundle inside the sandbox). Confirmed these exact
+// class names against this space's real page markup before writing the CSS.
+test('frontend: sopPageSafeHtml\'s stylesheet gives Confluence\'s own macro/panel classes their real visual look (info/note/warning/tip panels, embedded-image alignment, generic panel/code blocks) — confirmed against real page markup, not guessed', () => {
+  assert.match(frontend, /\.confluence-information-macro-information\{background:#deebff\}/);
+  assert.match(frontend, /\.confluence-information-macro-note\{background:#fff7d6\}/);
+  assert.match(frontend, /\.confluence-information-macro-warning\{background:#ffebe6\}/);
+  assert.match(frontend, /\.confluence-information-macro-tip\{background:#e3fcef\}/);
+  assert.match(frontend, /\.confluence-embedded-image\.image-center\{margin-left:auto;margin-right:auto\}/);
+  assert.match(frontend, /\.confluence-embedded-image\.image-wrap-left\{float:left;/);
+  assert.match(frontend, /'\.panel\{border:1px solid #dfe1e6;border-radius:3px;margin:0 0 16px;overflow:hidden\}'/);
+  assert.match(frontend, /'\.panelContent\{padding:12px 14px\}'/);
+});
+
 test('backend: the SOP Library and page-content routes are mounted and gated behind view_mailbox; the asset proxy is deliberately NOT (it is loaded via <img src>, which cannot send an Authorization header)', () => {
   assert.match(sopRoutes, /router\.get\('\/library', requirePermission\('view_mailbox'\), getSopLibrary\);/);
   assert.match(sopRoutes, /router\.get\('\/page\/:id', requirePermission\('view_mailbox'\), getSopPage\);/);
