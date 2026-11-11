@@ -144,15 +144,32 @@ test('frontend: openSopLibraryPage fetches real page content and renders it in a
   assert.match(frontend, /function openSopLibraryPage\(page\) \{/);
   assert.match(frontend, /API_BASE_URL \+ '\/sop\/page\/' \+ encodeURIComponent\(page\.id\)/);
   assert.match(frontend, /frame\.setAttribute\('sandbox', 'allow-popups allow-popups-to-escape-sandbox'\);/);
-  assert.match(frontend, /frame\.srcdoc = sopPageSafeHtml\(data\.html\);/);
+  assert.match(frontend, /frame\.srcdoc = sopPageSafeHtml\(data\.html, document\.body\.classList\.contains\('light-mode'\)\);/);
   assert.match(frontend, /openLink\.textContent = 'Open in Confluence ↗';/);
 });
 
 test('frontend: sopPageSafeHtml strips scripts/forms/event handlers and only allows https:/mailto:/data:image URLs plus the app\'s own asset-proxy path — the same security posture as mailboxSafeRichHtml, reused rather than re-invented, with one scoped addition', () => {
-  assert.match(frontend, /function sopPageSafeHtml\(value\) \{/);
+  assert.match(frontend, /function sopPageSafeHtml\(value, useLightTheme\) \{/);
   assert.match(frontend, /querySelectorAll\('script,iframe,object,embed,form,input,button,textarea,select,meta,base,link,style'\)\.forEach\(function \(node\) \{ node\.remove\(\); \}\);/);
   assert.match(frontend, /if \(name\.indexOf\('on'\) === 0 \|\| name === 'srcdoc'\) node\.removeAttribute\(attribute\.name\);/);
   assert.match(frontend, /!\/\^\(https:\|mailto:\|data:image\\\/\|\\\/api\\\/sop\\\/asset\\\?\)\/i\.test\(raw\)/);
+});
+
+// Regression test for a direct follow-up request: the viewer always rendered
+// a white page even when the app itself was in dark mode. sopPageSafeHtml
+// now follows the same document.body.classList.contains('light-mode')
+// signal mailboxSafeRichHtml already uses, picking a light or dark palette
+// for the page background/text/borders. The four info-panel macro types
+// (and the generic "panel" macro, which sets its own background via an
+// inline style per-instance) deliberately keep a FIXED light background +
+// dark text in both themes — Confluence authors them assuming a light
+// background, and there is no reliable way to invert an arbitrary
+// per-instance inline panel color for a dark theme.
+test('frontend: sopPageSafeHtml picks a light or dark palette from useLightTheme for the page itself, while keeping the macro/panel boxes a fixed light-background+dark-text treatment in both themes', () => {
+  assert.match(frontend, /var palette = useLightTheme\s*\n\s*\? \{ bg: '#ffffff', text: '#172b4d', muted: '#44546f', border: '#dfe1e6', link: '#0052cc', codeBg: '#f4f5f7' \}\s*\n\s*: \{ bg: '#1d2125', text: '#dcdfe4', muted: '#9fadbc', border: '#454f59', link: '#85b8ff', codeBg: '#22272b' \};/);
+  assert.match(frontend, /'html,body\{margin:0;background:' \+ palette\.bg \+ ';color:' \+ palette\.text \+ ';'/);
+  assert.match(frontend, /\.confluence-information-macro\{display:flex;align-items:flex-start;gap:10px;margin:0 0 16px;padding:12px 14px;border-radius:3px;font-size:14px;color:#172b4d\}/);
+  assert.match(frontend, /'\.panel\{border:1px solid ' \+ palette\.border \+ ';border-radius:3px;margin:0 0 16px;overflow:hidden;color:#172b4d\}'/);
 });
 
 // Regression test for a direct follow-up request: the content viewer looked
@@ -170,7 +187,7 @@ test('frontend: sopPageSafeHtml\'s stylesheet gives Confluence\'s own macro/pane
   assert.match(frontend, /\.confluence-information-macro-tip\{background:#e3fcef\}/);
   assert.match(frontend, /\.confluence-embedded-image\.image-center\{margin-left:auto;margin-right:auto\}/);
   assert.match(frontend, /\.confluence-embedded-image\.image-wrap-left\{float:left;/);
-  assert.match(frontend, /'\.panel\{border:1px solid #dfe1e6;border-radius:3px;margin:0 0 16px;overflow:hidden\}'/);
+  assert.match(frontend, /'\.panel\{border:1px solid ' \+ palette\.border \+ ';border-radius:3px;margin:0 0 16px;overflow:hidden;color:#172b4d\}'/);
   assert.match(frontend, /'\.panelContent\{padding:12px 14px\}'/);
 });
 

@@ -4310,8 +4310,11 @@ function renderSopLibrary() {
 // mailbox email bodies — scripts/forms/event handlers stripped, and only
 // https:/mailto:/data:image URLs plus our own asset-proxy path allowed for
 // href/src, so untrusted remote HTML can never execute script or exfiltrate
-// via arbitrary origins in this viewer.
-function sopPageSafeHtml(value) {
+// via arbitrary origins in this viewer. useLightTheme follows the app's own
+// dark/light setting (document.body.classList.contains('light-mode'), the
+// same signal mailboxSafeRichHtml already uses), so the page background/
+// text/borders match instead of always being a white page.
+function sopPageSafeHtml(value, useLightTheme) {
   var parser = new DOMParser();
   var documentValue = parser.parseFromString(String(value || ''), 'text/html');
   documentValue.querySelectorAll('script,iframe,object,embed,form,input,button,textarea,select,meta,base,link,style').forEach(function (node) { node.remove(); });
@@ -4325,41 +4328,45 @@ function sopPageSafeHtml(value) {
     if (node.tagName === 'A') { node.setAttribute('target', '_blank'); node.setAttribute('rel', 'noopener noreferrer'); }
     if (node.tagName === 'IMG') { node.setAttribute('loading', 'lazy'); node.style.maxWidth = '100%'; node.style.height = 'auto'; }
   });
-  // Always a light theme, independent of the app's own dark/light setting —
-  // Confluence authors this content assuming a white background (panels,
-  // status badges, etc. use light pastel colors that would clash with a
-  // forced dark background). The sanitizer above only strips tags/attributes,
-  // never the class attribute, so Confluence's own macro class names (info/
-  // note/warning/tip panels, embedded-image alignment, etc. — confirmed
-  // against this space's real page markup) are still present in the HTML;
-  // this stylesheet gives them Confluence's actual look since we don't load
-  // Confluence's own CSS (that would mean trusting an external, versioned
-  // stylesheet bundle inside the sandbox).
-  var themeCss = 'html,body{margin:0;background:#fff;color:#172b4d;'
+  var palette = useLightTheme
+    ? { bg: '#ffffff', text: '#172b4d', muted: '#44546f', border: '#dfe1e6', link: '#0052cc', codeBg: '#f4f5f7' }
+    : { bg: '#1d2125', text: '#dcdfe4', muted: '#9fadbc', border: '#454f59', link: '#85b8ff', codeBg: '#22272b' };
+  // The sanitizer above only strips tags/attributes, never the class
+  // attribute, so Confluence's own macro class names (info/note/warning/tip
+  // panels, embedded-image alignment, etc. — confirmed against this space's
+  // real page markup) are still present in the HTML; this stylesheet gives
+  // them Confluence's actual look since we don't load Confluence's own CSS
+  // (that would mean trusting an external, versioned stylesheet bundle
+  // inside the sandbox).
+  var themeCss = 'html,body{margin:0;background:' + palette.bg + ';color:' + palette.text + ';'
       + 'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14.5px;line-height:1.5}'
     + 'body{padding:24px 32px;box-sizing:border-box;max-width:860px;margin:0 auto}'
-    + 'h1,h2,h3,h4,h5,h6{color:#172b4d;font-weight:600;line-height:1.3;margin:28px 0 12px}'
-    + 'h1{font-size:24px;border-bottom:2px solid #dfe1e6;padding-bottom:8px}h2{font-size:20px;border-bottom:1px solid #dfe1e6;padding-bottom:6px}h3{font-size:16px}h4{font-size:14.5px}'
+    + 'h1,h2,h3,h4,h5,h6{color:' + palette.text + ';font-weight:600;line-height:1.3;margin:28px 0 12px}'
+    + 'h1{font-size:24px;border-bottom:2px solid ' + palette.border + ';padding-bottom:8px}h2{font-size:20px;border-bottom:1px solid ' + palette.border + ';padding-bottom:6px}h3{font-size:16px}h4{font-size:14.5px}'
     + 'p{margin:0 0 12px}ul,ol{margin:0 0 12px;padding-left:28px}li{margin-bottom:4px}'
-    + 'a,a:visited{color:#0052cc;text-decoration:none}a:hover{text-decoration:underline}'
-    + '.confluence-anchor-link{color:#8993a4;text-decoration:none;font-size:12px;margin-left:4px}'
+    + 'a,a:visited{color:' + palette.link + ';text-decoration:none}a:hover{text-decoration:underline}'
+    + '.confluence-anchor-link{color:' + palette.muted + ';text-decoration:none;font-size:12px;margin-left:4px}'
     + 'img{max-width:100%;height:auto}'
-    + '.confluence-embedded-image{display:block;margin:12px auto;border:1px solid #dfe1e6;border-radius:3px}'
+    + '.confluence-embedded-image{display:block;margin:12px auto;border:1px solid ' + palette.border + ';border-radius:3px}'
     + '.confluence-embedded-image.image-center{margin-left:auto;margin-right:auto}'
     + '.confluence-embedded-image.image-wrap-left{float:left;margin:4px 16px 8px 0}'
     + '.confluence-embedded-image.image-wrap-right,.confluence-embedded-image.image-right{float:right;margin:4px 0 8px 16px}'
     + 'table{max-width:100%;border-collapse:collapse;margin:8px 0 16px;width:100%}'
-    + 'td,th{border:1px solid #dfe1e6;padding:8px 12px;vertical-align:top}'
-    + 'th{background:#f4f5f7;font-weight:600;text-align:left}'
-    + 'blockquote{border-left:3px solid #dfe1e6;margin:12px 0;padding-left:14px;color:#44546f}'
-    + 'code{background:#f4f5f7;border-radius:3px;padding:1px 5px;font-family:"SFMono-Regular",Consolas,Menlo,monospace;font-size:13px}'
-    + 'pre,.code.panel .codeContent,.codeContent{background:#f4f5f7;border:1px solid #dfe1e6;border-radius:3px;padding:12px 14px;overflow-x:auto;font-family:"SFMono-Regular",Consolas,Menlo,monospace;font-size:13px;margin:0 0 16px}'
+    + 'td,th{border:1px solid ' + palette.border + ';padding:8px 12px;vertical-align:top}'
+    + 'th{background:' + palette.codeBg + ';font-weight:600;text-align:left}'
+    + 'blockquote{border-left:3px solid ' + palette.border + ';margin:12px 0;padding-left:14px;color:' + palette.muted + '}'
+    + 'code{background:' + palette.codeBg + ';border-radius:3px;padding:1px 5px;font-family:"SFMono-Regular",Consolas,Menlo,monospace;font-size:13px}'
+    + 'pre,.code.panel .codeContent,.codeContent{background:' + palette.codeBg + ';border:1px solid ' + palette.border + ';border-radius:3px;padding:12px 14px;overflow-x:auto;font-family:"SFMono-Regular",Consolas,Menlo,monospace;font-size:13px;margin:0 0 16px}'
     + 'pre code{background:transparent;padding:0}'
-    // Confluence's four info-panel macro types — colors match Atlassian's
-    // own design tokens for each (info=blue, note=yellow, warning=red/orange,
-    // tip=green). Confirmed class names against this space's real markup
-    // (e.g. "confluence-information-macro confluence-information-macro-note").
-    + '.confluence-information-macro{display:flex;align-items:flex-start;gap:10px;margin:0 0 16px;padding:12px 14px;border-radius:3px;font-size:14px}'
+    // Confluence's four info-panel macro types (and the generic "panel"
+    // macro, which sets its own background via an inline style per-instance)
+    // keep a fixed light background + dark text in BOTH app themes, like a
+    // status badge — colors match Atlassian's own design tokens (info=blue,
+    // note=yellow, warning=red/orange, tip=green; confirmed class names
+    // against this space's real markup). Confluence authors these assuming a
+    // light background, and there's no reliable way to invert an arbitrary
+    // per-instance inline panel color for a dark theme.
+    + '.confluence-information-macro{display:flex;align-items:flex-start;gap:10px;margin:0 0 16px;padding:12px 14px;border-radius:3px;font-size:14px;color:#172b4d}'
     + '.confluence-information-macro-body,.confluence-information-macro>.confluence-information-macro-body{flex:1;min-width:0}'
     + '.confluence-information-macro-body>:last-child{margin-bottom:0}'
     + '.confluence-information-macro::before{flex-shrink:0;font-size:16px;line-height:1.3}'
@@ -4367,13 +4374,11 @@ function sopPageSafeHtml(value) {
     + '.confluence-information-macro-note{background:#fff7d6}.confluence-information-macro-note::before{content:"📝"}'
     + '.confluence-information-macro-warning{background:#ffebe6}.confluence-information-macro-warning::before{content:"⚠️"}'
     + '.confluence-information-macro-tip{background:#e3fcef}.confluence-information-macro-tip::before{content:"💡"}'
-    // Generic "panel" macro — Confluence supplies its own background/border
-    // color as an inline style per-panel; this just adds the padding/radius
-    // Confluence's stylesheet would otherwise contribute.
-    + '.panel{border:1px solid #dfe1e6;border-radius:3px;margin:0 0 16px;overflow:hidden}'
+    + '.panel{border:1px solid ' + palette.border + ';border-radius:3px;margin:0 0 16px;overflow:hidden;color:#172b4d}'
     + '.panelContent{padding:12px 14px}'
     + '.panelContent>:last-child{margin-bottom:0}'
-    // Status lozenges (e.g. a DONE/TODO/BLOCKED badge).
+    // Status lozenges (e.g. a DONE/TODO/BLOCKED badge) — same "fixed, not
+    // theme-dependent" treatment as the panels above.
     + '.status-macro,.aui-lozenge{display:inline-block;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:700;text-transform:uppercase;background:#dfe1e6;color:#42526e}';
   return '<!doctype html><html><head><meta charset="utf-8"><style>' + themeCss + '</style></head><body>' + documentValue.body.innerHTML + '</body></html>';
 }
@@ -4396,7 +4401,7 @@ function openSopLibraryPage(page) {
       frame.setAttribute('sandbox', 'allow-popups allow-popups-to-escape-sandbox'); frame.setAttribute('referrerpolicy', 'no-referrer');
       frame.title = data.title || page.title;
       content.appendChild(frame);
-      frame.srcdoc = sopPageSafeHtml(data.html);
+      frame.srcdoc = sopPageSafeHtml(data.html, document.body.classList.contains('light-mode'));
     })
     .catch(function (error) { loading.textContent = error.message; });
 }
