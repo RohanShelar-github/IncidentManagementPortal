@@ -89,9 +89,9 @@ test('findSopCandidates against the real Confluence space: the exact reported bu
   assert.ok(results.some((r) => r.title === 'Prettl- SOP for Local Agent Connectors Alert'), `expected the real Prettl SOP page in results, got: ${JSON.stringify(results)}`);
 });
 
-test('frontend: the Find SOP button only appears for alert-provider categories, and redirects to the SOP Library instead of showing results inline', () => {
+test('frontend: the Find SOP button only appears on exactly the messages that would also show + Create Incident (reusing that same eligibility function, not a separate category check), and redirects to the SOP Library instead of showing results inline', () => {
   assert.match(frontend, /function mailboxSopButton\(message, detail\) \{/);
-  assert.match(frontend, /if \(\['coralogix', 'azure', 'ngcplantsmonitoring'\]\.indexOf\(message\.category\) === -1\) return null;/);
+  assert.match(frontend, /if \(!mailboxHasCreateIncidentButton\(message\)\) return null;/);
   assert.match(frontend, /var sopButton = mailboxSopButton\(message, detail\); if \(sopButton\) actions\.appendChild\(sopButton\);/);
   assert.match(frontend, /function loadMailboxSopSuggestion\(message, button\) \{/);
   assert.match(frontend, /API_BASE_URL \+ '\/sop\/suggestion\?' \+ params/);
