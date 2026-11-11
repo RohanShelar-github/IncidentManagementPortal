@@ -79,6 +79,11 @@
 </div>
 <div class="nav-item" id="mailboxNav" onclick="navigate('mailbox', this)"><span class="nav-icon">✉</span><span class="nav-label"> Mailbox</span></div>
 <div class="nav-item" id="draftsNav" onclick="navigate('drafts', this)"><span class="nav-icon">⌛</span><span class="nav-label"> Draft Review</span></div>
+<!-- SOP LIBRARY: additive nav item, safe to delete to revert -->
+<div class="nav-item" id="sopLibraryNav" onclick="navigate('sopLibrary', this)">
+<span class="nav-icon">📖</span><span class="nav-label"> SOP Library</span>
+</div>
+<!-- /SOP LIBRARY NAV -->
 <div class="nav-section">Reporting</div>
 <div class="nav-item" id="reportsNav" onclick="navigate('reports', this)">
 <span class="nav-icon">◈</span><span class="nav-label"> Reports</span>
@@ -91,11 +96,6 @@
 <span class="nav-icon">📡</span><span class="nav-label"> Alert Compliance</span>
 </div>
 <!-- /ALERT COMPLIANCE REPORT -->
-<!-- SOP LIBRARY: additive nav item, safe to delete to revert -->
-<div class="nav-item" id="sopLibraryNav" onclick="navigate('sopLibrary', this)">
-<span class="nav-icon">📖</span><span class="nav-label"> SOP Library</span>
-</div>
-<!-- /SOP LIBRARY NAV -->
 
 <div class="nav-section" id="adminSection">Admin</div>
 <div class="nav-item" data-label="Users" id="usersNav" onclick="navigate('users', this)">
