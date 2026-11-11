@@ -4315,6 +4315,10 @@ function renderSopLibrary() {
 // same signal mailboxSafeRichHtml already uses), so the page background/
 // text/borders match instead of always being a white page.
 function sopPageSafeHtml(value, useLightTheme) {
+  // The saved preference is available before a page finishes restoring its
+  // body class (same race mailboxSafeRichHtml already guards against) —
+  // prefer either signal so a fast fetch can't render with the wrong theme.
+  try { useLightTheme = !!useLightTheme || localStorage.getItem('mc_theme') === 'light'; } catch (_) { useLightTheme = !!useLightTheme; }
   var parser = new DOMParser();
   var documentValue = parser.parseFromString(String(value || ''), 'text/html');
   documentValue.querySelectorAll('script,iframe,object,embed,form,input,button,textarea,select,meta,base,link,style').forEach(function (node) { node.remove(); });

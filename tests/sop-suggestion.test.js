@@ -172,6 +172,17 @@ test('frontend: sopPageSafeHtml picks a light or dark palette from useLightTheme
   assert.match(frontend, /'\.panel\{border:1px solid ' \+ palette\.border \+ ';border-radius:3px;margin:0 0 16px;overflow:hidden;color:#172b4d\}'/);
 });
 
+// Regression test for a real bug the above fix shipped with: the viewer
+// rendered dark even while the app itself was visibly in light mode.
+// mailboxSafeRichHtml already has an explicit fix for exactly this ("The
+// saved preference is available before a page finishes restoring its body
+// class... prefer either signal so a fast fetch cannot render with the
+// opposite theme") that sopPageSafeHtml was missing — it only checked the
+// body class, with no localStorage fallback for that race.
+test('frontend: sopPageSafeHtml falls back to localStorage("mc_theme") when the body class hasn\'t been restored yet, the same race mailboxSafeRichHtml already guards against', () => {
+  assert.match(frontend, /function sopPageSafeHtml\(value, useLightTheme\) \{\s*\n(?:\s*\/\/[^\n]*\n)*\s*try \{ useLightTheme = !!useLightTheme \|\| localStorage\.getItem\('mc_theme'\) === 'light'; \} catch \(_\) \{ useLightTheme = !!useLightTheme; \}/);
+});
+
 // Regression test for a direct follow-up request: the content viewer looked
 // "too basic" because the sanitizer never stripped Confluence's own class
 // attributes (only tags/dangerous attributes), but no CSS targeted those
