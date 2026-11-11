@@ -1,8 +1,10 @@
 'use strict';
 
+const jwt = require('jsonwebtoken');
 const pool = require('../config/database');
+const { jwtSecret } = require('../config/security');
 const { matchingCustomersByName } = require('./mailboxController');
-const { confluenceConfigured, findSopCandidates, listSopLibrary } = require('../services/confluenceService');
+const { confluenceConfigured, fetchConfluenceAsset, findSopCandidates, getSopPageContent, listSopLibrary, rewriteConfluenceImageSrcs } = require('../services/confluenceService');
 
 // Best-effort customer resolution for the SOP suggestion only — this is
 // advisory (the user clicks through and judges the result themselves), so it
@@ -44,4 +46,43 @@ const getSopLibrary = async (req, res) => {
   }
 };
 
-module.exports = { getSopLibrary, getSopSuggestion };
+// The SOP content viewer's embedded images are rewritten to point back at
+// getSopAsset (see below) so they load with Confluence's own credentials —
+// the viewer page itself passes its JWT along in that rewritten URL, read
+// back here.
+const getSopPage = async (req, res) => {
+  try {
+    if (!confluenceConfigured()) return res.status(404).json({ success: false, message: 'Confluence integration is not configured.' });
+    const page = await getSopPageContent(req.params.id);
+    if (!page) return res.status(404).json({ success: false, message: 'SOP page not found.' });
+    const token = String(req.headers.authorization || '').split(' ')[1] || '';
+    const assetProxyBase = `/api/sop/asset?token=${encodeURIComponent(token)}`;
+    res.json({ success: true, data: { id: page.id, title: page.title, html: rewriteConfluenceImageSrcs(page.html, page.attachments, assetProxyBase) } });
+  } catch (error) {
+    console.error('SOP page content error:', error.message);
+    res.status(502).json({ success: false, message: 'Unable to load this SOP page from Confluence.' });
+  }
+};
+
+// Loaded via a plain <img src> inside the sandboxed content iframe, which
+// cannot attach an Authorization header — so this route authenticates via a
+// ?token= query param instead of the standard Bearer-header middleware
+// (hence it is registered before router.use(authenticateToken), not after).
+const getSopAsset = async (req, res) => {
+  try {
+    jwt.verify(String(req.query.token || ''), jwtSecret(), { algorithms: ['HS256'] });
+  } catch (error) {
+    return res.status(401).end();
+  }
+  try {
+    const asset = await fetchConfluenceAsset(String(req.query.url || ''));
+    res.setHeader('Content-Type', asset.contentType);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.send(asset.buffer);
+  } catch (error) {
+    console.error('SOP asset proxy error:', error.message);
+    res.status(502).end();
+  }
+};
+
+module.exports = { getSopAsset, getSopLibrary, getSopPage, getSopSuggestion };

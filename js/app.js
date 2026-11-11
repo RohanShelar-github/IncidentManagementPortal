@@ -4222,29 +4222,40 @@ function loadMailboxSopSuggestion(message, button) {
 }
 
 var sopLibraryData = [];
-var sopLibraryHighlight = null; // { customer, pageId } — set just before navigating here from "Find SOP"
+var sopLibraryExpanded = {}; // customer name (lowercased) -> bool, which tree sections are open
+var sopLibraryActivePageId = null;
+var sopLibraryHighlight = null; // { customer, pageId } — set just before navigating here from "Find SOP"; consumed once, after the library loads
 
 function navigateToSopLibrary(customer, pageId) {
   sopLibraryHighlight = { customer: customer || null, pageId: pageId || null };
+  if (customer) sopLibraryExpanded[String(customer).toLowerCase()] = true;
   navigate('sopLibrary', document.getElementById('sopLibraryNav'));
 }
 
 function loadSopLibrary(forceRefresh) {
-  var list = document.getElementById('sopLibraryList');
-  if (list && !sopLibraryData.length) list.innerHTML = '<div class="mailbox-empty">Loading SOP library…</div>';
+  var tree = document.getElementById('sopLibraryTree');
+  if (tree && !sopLibraryData.length) tree.innerHTML = '<div class="mailbox-empty">Loading SOP library…</div>';
   var params = forceRefresh ? '?refresh=true' : '';
   fetch(window.APP_CONFIG.API_BASE_URL + '/sop/library' + params, { headers: { Authorization: 'Bearer ' + sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY) } })
     .then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to load the SOP library'); return data.data; }); })
     .then(function (data) {
-      if (!data.configured) { if (list) list.innerHTML = '<div class="mailbox-empty">Confluence integration is not configured.</div>'; return; }
+      if (!data.configured) { if (tree) tree.innerHTML = '<div class="mailbox-empty">Confluence integration is not configured.</div>'; return; }
       sopLibraryData = data.customers || [];
       renderSopLibrary();
+      // One-shot: if "Find SOP" navigated here with a specific matched page,
+      // open its content automatically instead of making the user click it.
+      if (sopLibraryHighlight && sopLibraryHighlight.pageId) {
+        var matched = null;
+        sopLibraryData.forEach(function (entry) { entry.pages.forEach(function (page) { if (String(page.id) === String(sopLibraryHighlight.pageId)) matched = page; }); });
+        if (matched) openSopLibraryPage(matched);
+        sopLibraryHighlight = null;
+      }
     })
-    .catch(function (error) { if (list) list.innerHTML = '<div class="mailbox-empty">' + error.message + '</div>'; });
+    .catch(function (error) { if (tree) tree.innerHTML = '<div class="mailbox-empty">' + error.message + '</div>'; });
 }
 
 function renderSopLibrary() {
-  var list = document.getElementById('sopLibraryList'); if (!list) return;
+  var tree = document.getElementById('sopLibraryTree'); if (!tree) return;
   var query = String((document.getElementById('sopLibrarySearch') || {}).value || '').trim().toLowerCase();
   var customers = sopLibraryData;
   if (query) {
@@ -4253,25 +4264,82 @@ function renderSopLibrary() {
       var pages = customerMatches ? entry.pages : entry.pages.filter(function (p) { return p.category.toLowerCase().indexOf(query) > -1 || p.title.toLowerCase().indexOf(query) > -1; });
       return { customer: entry.customer, pages: pages };
     }).filter(function (entry) { return entry.pages.length; });
+    // Auto-expand every matching customer while searching, so matches are visible without an extra click.
+    customers.forEach(function (entry) { sopLibraryExpanded[entry.customer.toLowerCase()] = true; });
   }
-  if (!customers.length) { list.innerHTML = '<div class="mailbox-empty">' + (sopLibraryData.length ? 'No SOPs match this search.' : 'No SOPs found yet.') + '</div>'; return; }
-  list.innerHTML = '';
-  var highlightEl = null;
+  tree.innerHTML = '';
+  if (!customers.length) { tree.innerHTML = '<div class="mailbox-empty">' + (sopLibraryData.length ? 'No SOPs match this search.' : 'No SOPs found yet.') + '</div>'; return; }
   customers.forEach(function (entry) {
-    var card = document.createElement('div'); card.className = 'sop-library-customer';
-    var isHighlightedCustomer = sopLibraryHighlight && sopLibraryHighlight.customer && sopLibraryHighlight.customer.toLowerCase() === entry.customer.toLowerCase();
-    var name = document.createElement('div'); name.className = 'sop-library-customer-name'; name.textContent = entry.customer;
-    var pagesWrap = document.createElement('div'); pagesWrap.className = 'sop-library-pages';
+    var key = entry.customer.toLowerCase();
+    var expanded = !!sopLibraryExpanded[key];
+    var row = document.createElement('div'); row.className = 'sop-library-customer-row';
+    var label = document.createElement('span'); label.textContent = entry.customer;
+    var caret = document.createElement('span'); caret.textContent = expanded ? '▾' : '▸';
+    row.append(label, caret);
+    var pagesWrap = document.createElement('div'); pagesWrap.className = 'sop-library-pages-tree' + (expanded ? ' expanded' : '');
     entry.pages.forEach(function (page) {
-      var link = document.createElement('a'); link.className = 'sop-library-link'; link.href = page.url; link.target = '_blank'; link.rel = 'noopener'; link.textContent = page.category;
-      if (sopLibraryHighlight && String(sopLibraryHighlight.pageId) === String(page.id)) { link.classList.add('sop-library-highlight'); highlightEl = card; }
-      pagesWrap.appendChild(link);
+      var pageRow = document.createElement('div'); pageRow.className = 'sop-library-page-row'; pageRow.textContent = page.category;
+      if (sopLibraryActivePageId && String(sopLibraryActivePageId) === String(page.id)) pageRow.classList.add('active');
+      pageRow.onclick = function () { openSopLibraryPage(page); };
+      pagesWrap.appendChild(pageRow);
     });
-    card.append(name, pagesWrap);
-    list.appendChild(card);
-    if (isHighlightedCustomer && !highlightEl) highlightEl = card;
+    row.onclick = function () { sopLibraryExpanded[key] = !sopLibraryExpanded[key]; renderSopLibrary(); };
+    tree.append(row, pagesWrap);
   });
-  if (highlightEl) setTimeout(function () { highlightEl.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
+}
+
+// Renders a Confluence SOP page's actual content in-app (not just a link),
+// reusing the same sanitize-then-sandboxed-iframe pattern already proven for
+// mailbox email bodies — scripts/forms/event handlers stripped, and only
+// https:/mailto:/data:image URLs plus our own asset-proxy path allowed for
+// href/src, so untrusted remote HTML can never execute script or exfiltrate
+// via arbitrary origins in this viewer.
+function sopPageSafeHtml(value) {
+  var parser = new DOMParser();
+  var documentValue = parser.parseFromString(String(value || ''), 'text/html');
+  documentValue.querySelectorAll('script,iframe,object,embed,form,input,button,textarea,select,meta,base,link,style').forEach(function (node) { node.remove(); });
+  documentValue.querySelectorAll('*').forEach(function (node) {
+    Array.from(node.attributes).forEach(function (attribute) {
+      var name = attribute.name.toLowerCase(), raw = String(attribute.value || '').trim(), scheme = raw.toLowerCase();
+      if (name.indexOf('on') === 0 || name === 'srcdoc') node.removeAttribute(attribute.name);
+      else if ((name === 'href' || name === 'src') && !/^(https:|mailto:|data:image\/|\/api\/sop\/asset\?)/i.test(raw)) node.removeAttribute(attribute.name);
+      else if (name === 'style' && /expression\s*\(|javascript:|behavior\s*:/i.test(scheme)) node.removeAttribute(attribute.name);
+    });
+    if (node.tagName === 'A') { node.setAttribute('target', '_blank'); node.setAttribute('rel', 'noopener noreferrer'); }
+    if (node.tagName === 'IMG') { node.setAttribute('loading', 'lazy'); node.style.maxWidth = '100%'; node.style.height = 'auto'; }
+  });
+  // Always a light theme, independent of the app's own dark/light setting —
+  // Confluence authors this content assuming a white background (panels,
+  // status badges, etc. use light pastel colors that would clash with a
+  // forced dark background).
+  var themeCss = 'html,body{margin:0;background:#fff;color:#172033;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6}'
+    + 'body{padding:24px;box-sizing:border-box}img{max-width:100%;height:auto}'
+    + 'table{max-width:100%;border-collapse:collapse;margin:8px 0}td,th{border:1px solid #dce1ed;padding:6px 10px}'
+    + 'a,a:visited{color:#2563eb}blockquote{border-left:3px solid #dce1ed;margin-left:0;padding-left:14px;color:#69728a}';
+  return '<!doctype html><html><head><meta charset="utf-8"><style>' + themeCss + '</style></head><body>' + documentValue.body.innerHTML + '</body></html>';
+}
+
+function openSopLibraryPage(page) {
+  sopLibraryActivePageId = page.id;
+  renderSopLibrary();
+  var content = document.getElementById('sopLibraryContent'); if (!content) return;
+  var header = document.createElement('div'); header.className = 'sop-library-content-header';
+  var title = document.createElement('div'); title.className = 'sop-library-content-title'; title.textContent = page.category || page.title;
+  var openLink = document.createElement('a'); openLink.className = 'btn btn-secondary btn-sm'; openLink.href = page.url; openLink.target = '_blank'; openLink.rel = 'noopener'; openLink.textContent = 'Open in Confluence ↗';
+  header.append(title, openLink);
+  content.innerHTML = ''; content.appendChild(header);
+  var loading = document.createElement('div'); loading.className = 'mailbox-empty'; loading.textContent = 'Loading…'; content.appendChild(loading);
+  fetch(window.APP_CONFIG.API_BASE_URL + '/sop/page/' + encodeURIComponent(page.id), { headers: { Authorization: 'Bearer ' + sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY) } })
+    .then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to load this SOP'); return data.data; }); })
+    .then(function (data) {
+      loading.remove();
+      var frame = document.createElement('iframe'); frame.className = 'sop-library-content-frame';
+      frame.setAttribute('sandbox', 'allow-popups allow-popups-to-escape-sandbox'); frame.setAttribute('referrerpolicy', 'no-referrer');
+      frame.title = data.title || page.title;
+      content.appendChild(frame);
+      frame.srcdoc = sopPageSafeHtml(data.html);
+    })
+    .catch(function (error) { loading.textContent = error.message; });
 }
 
 // The Operations inbox receives recipient data from Graph as message.to. Keep

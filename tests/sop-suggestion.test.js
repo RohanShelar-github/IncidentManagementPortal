@@ -107,18 +107,58 @@ test('frontend: SOP Library page, nav item and permission gating (same view_mail
   assert.match(frontend, /el = document\.getElementById\('sopLibraryNav'\);\s*\n\s*if \(el\) el\.style\.display = can\('view_mailbox'\) \? '' : 'none';/);
 });
 
-test('frontend: navigateToSopLibrary sets a highlight before navigating, and loadSopLibrary/renderSopLibrary handle the unconfigured and empty-result cases without throwing', () => {
+test('frontend: navigateToSopLibrary expands the matched customer and sets a one-shot highlight before navigating; loadSopLibrary handles the unconfigured case without throwing', () => {
   assert.match(frontend, /function navigateToSopLibrary\(customer, pageId\) \{/);
   assert.match(frontend, /sopLibraryHighlight = \{ customer: customer \|\| null, pageId: pageId \|\| null \};/);
+  assert.match(frontend, /if \(customer\) sopLibraryExpanded\[String\(customer\)\.toLowerCase\(\)\] = true;/);
   assert.match(frontend, /navigate\('sopLibrary', document\.getElementById\('sopLibraryNav'\)\);/);
   assert.match(frontend, /function loadSopLibrary\(forceRefresh\) \{/);
-  assert.match(frontend, /if \(!data\.configured\) \{ if \(list\) list\.innerHTML = '<div class="mailbox-empty">Confluence integration is not configured\.<\/div>'; return; \}/);
+  assert.match(frontend, /if \(!data\.configured\) \{ if \(tree\) tree\.innerHTML = '<div class="mailbox-empty">Confluence integration is not configured\.<\/div>'; return; \}/);
   assert.match(frontend, /function renderSopLibrary\(\) \{/);
 });
 
-test('backend: the SOP Library route is mounted and gated behind view_mailbox', () => {
+test('frontend: loadSopLibrary auto-opens the matched page content after a "Find SOP" redirect, then consumes the one-shot highlight', () => {
+  assert.match(frontend, /if \(sopLibraryHighlight && sopLibraryHighlight\.pageId\) \{/);
+  assert.match(frontend, /if \(matched\) openSopLibraryPage\(matched\);/);
+  assert.match(frontend, /sopLibraryHighlight = null;/);
+});
+
+test('frontend: renderSopLibrary builds an expandable customer tree (not flat pills), auto-expanding matches while searching and marking the active page', () => {
+  assert.match(frontend, /row\.onclick = function \(\) \{ sopLibraryExpanded\[key\] = !sopLibraryExpanded\[key\]; renderSopLibrary\(\); \};/);
+  assert.match(frontend, /customers\.forEach\(function \(entry\) \{ sopLibraryExpanded\[entry\.customer\.toLowerCase\(\)\] = true; \}\);/);
+  assert.match(frontend, /if \(sopLibraryActivePageId && String\(sopLibraryActivePageId\) === String\(page\.id\)\) pageRow\.classList\.add\('active'\);/);
+});
+
+test('frontend: openSopLibraryPage fetches real page content and renders it in a sandboxed iframe (not just a link), alongside an explicit "Open in Confluence" escape hatch', () => {
+  assert.match(frontend, /function openSopLibraryPage\(page\) \{/);
+  assert.match(frontend, /API_BASE_URL \+ '\/sop\/page\/' \+ encodeURIComponent\(page\.id\)/);
+  assert.match(frontend, /frame\.setAttribute\('sandbox', 'allow-popups allow-popups-to-escape-sandbox'\);/);
+  assert.match(frontend, /frame\.srcdoc = sopPageSafeHtml\(data\.html\);/);
+  assert.match(frontend, /openLink\.textContent = 'Open in Confluence ↗';/);
+});
+
+test('frontend: sopPageSafeHtml strips scripts/forms/event handlers and only allows https:/mailto:/data:image URLs plus the app\'s own asset-proxy path — the same security posture as mailboxSafeRichHtml, reused rather than re-invented, with one scoped addition', () => {
+  assert.match(frontend, /function sopPageSafeHtml\(value\) \{/);
+  assert.match(frontend, /querySelectorAll\('script,iframe,object,embed,form,input,button,textarea,select,meta,base,link,style'\)\.forEach\(function \(node\) \{ node\.remove\(\); \}\);/);
+  assert.match(frontend, /if \(name\.indexOf\('on'\) === 0 \|\| name === 'srcdoc'\) node\.removeAttribute\(attribute\.name\);/);
+  assert.match(frontend, /!\/\^\(https:\|mailto:\|data:image\\\/\|\\\/api\\\/sop\\\/asset\\\?\)\/i\.test\(raw\)/);
+});
+
+test('backend: the SOP Library and page-content routes are mounted and gated behind view_mailbox; the asset proxy is deliberately NOT (it is loaded via <img src>, which cannot send an Authorization header)', () => {
   assert.match(sopRoutes, /router\.get\('\/library', requirePermission\('view_mailbox'\), getSopLibrary\);/);
+  assert.match(sopRoutes, /router\.get\('\/page\/:id', requirePermission\('view_mailbox'\), getSopPage\);/);
+  assert.match(sopRoutes, /router\.get\('\/asset', getSopAsset\);\s*\n\s*router\.use\(authenticateToken\);/);
   assert.match(sopController, /if \(!confluenceConfigured\(\)\) return res\.json\(\{ success: true, data: \{ configured: false, customers: \[\] \} \}\);/);
+});
+
+test('backend: getSopAsset authenticates itself via its own ?token= query param (jwt.verify) rather than the shared Bearer-header middleware, and validates the url before fetching', () => {
+  assert.match(sopController, /jwt\.verify\(String\(req\.query\.token \|\| ''\), jwtSecret\(\), \{ algorithms: \['HS256'\] \}\);/);
+  assert.match(sopController, /const asset = await fetchConfluenceAsset\(String\(req\.query\.url \|\| ''\)\);/);
+});
+
+test('backend: getSopPage embeds the requesting user\'s own bearer token into the rewritten asset-proxy URLs, so the asset route can authenticate the same request that loaded the page', () => {
+  assert.match(sopController, /const token = String\(req\.headers\.authorization \|\| ''\)\.split\(' '\)\[1\] \|\| '';/);
+  assert.match(sopController, /const assetProxyBase = `\/api\/sop\/asset\?token=\$\{encodeURIComponent\(token\)\}`;/);
 });
 
 test('deriveCustomerFromCookbookTitle strips the "Monitoring Cookbook" suffix regardless of dash/spacing style', () => {
@@ -159,4 +199,62 @@ test('listSopLibrary against the real Confluence space: finds every customer Mon
   const tileBar = library.find((entry) => entry.customer === 'TileBar');
   assert.ok(tileBar, 'expected a TileBar entry in the library');
   assert.ok(tileBar.pages.some((p) => p.category === 'EKS Infrastructure Alerts'), `expected TileBar's EKS Infrastructure Alerts page, got: ${JSON.stringify(tileBar.pages.map((p) => p.category))}`);
+});
+
+test('getSopPageContent is configuration-safe: returns null (never throws) when Atlassian credentials are missing', async () => {
+  const previous = { site: process.env.ATLASSIAN_SITE, email: process.env.ATLASSIAN_EMAIL, token: process.env.ATLASSIAN_TOKEN };
+  delete process.env.ATLASSIAN_SITE; delete process.env.ATLASSIAN_EMAIL; delete process.env.ATLASSIAN_TOKEN;
+  try {
+    const result = await confluenceService.getSopPageContent('3337650177');
+    assert.equal(result, null);
+  } finally {
+    if (previous.site !== undefined) process.env.ATLASSIAN_SITE = previous.site;
+    if (previous.email !== undefined) process.env.ATLASSIAN_EMAIL = previous.email;
+    if (previous.token !== undefined) process.env.ATLASSIAN_TOKEN = previous.token;
+  }
+});
+
+test('fetchConfluenceAsset rejects any URL that isn\'t on the configured Atlassian site\'s wiki path — never an open proxy for arbitrary URLs', async () => {
+  await assert.rejects(() => confluenceService.fetchConfluenceAsset('https://evil.example.com/x.png'), /Invalid or disallowed asset URL/);
+  await assert.rejects(() => confluenceService.fetchConfluenceAsset(''), /Invalid or disallowed asset URL/);
+});
+
+// Regression test for a real finding during this work: Confluence's
+// rendered body embeds images via a CDN-fronted "/wiki/download/..." URL
+// that (confirmed empirically) rejects the same Basic Auth that works fine
+// against the regular REST API, expecting OAuth/a browser session instead —
+// so proxying that exact URL always 401s. The REST API's own
+// attachment-download link does accept Basic Auth, so each image must be
+// resolved by filename against the page's attachment list and rewritten to
+// THAT link, not the URL actually present in the HTML.
+test('rewriteConfluenceImageSrcs resolves each embedded image by filename against the page\'s attachment list, rewriting to the REST API download link (not the CDN thumbnail URL, which rejects Basic Auth)', () => {
+  const previousSite = process.env.ATLASSIAN_SITE;
+  process.env.ATLASSIAN_SITE = 'example.atlassian.net';
+  try {
+    const html = '<img src="https://example.atlassian.net/wiki/download/thumbnails/123/photo.png?version=1&width=760">'
+      + '<img src="https://example.atlassian.net/wiki/download/attachments/123/unresolved.png">';
+    const attachments = [{ title: 'photo.png', _links: { download: '/rest/api/content/123/child/attachment/att1/download' } }];
+    const result = confluenceService.rewriteConfluenceImageSrcs(html, attachments, '/api/sop/asset?token=abc');
+    assert.match(result, /src="\/api\/sop\/asset\?token=abc&url=https%3A%2F%2Fexample\.atlassian\.net%2Fwiki%2Frest%2Fapi%2Fcontent%2F123%2Fchild%2Fattachment%2Fatt1%2Fdownload"/);
+    // A filename not found in the attachment list is left as-is (best
+    // effort — that one image may not load, rather than failing the page).
+    assert.match(result, /src="https:\/\/example\.atlassian\.net\/wiki\/download\/attachments\/123\/unresolved\.png"/);
+  } finally {
+    if (previousSite !== undefined) process.env.ATLASSIAN_SITE = previousSite; else delete process.env.ATLASSIAN_SITE;
+  }
+});
+
+test('getSopPageContent + rewriteConfluenceImageSrcs + fetchConfluenceAsset against the real Confluence space: every embedded image on a real page resolves and is actually downloadable', async (t) => {
+  if (!confluenceService.confluenceConfigured()) { t.skip('ATLASSIAN_* credentials not available in this environment'); return; }
+  const page = await confluenceService.getSopPageContent('3337650177'); // TileBar - SOP for EKS Infrastructure Alerts
+  assert.equal(page.title, 'TileBar- SOP for EKS Infrastructure Alerts');
+  assert.ok(page.attachments.length > 0, 'expected this real page to have attachments');
+  const rewritten = confluenceService.rewriteConfluenceImageSrcs(page.html, page.attachments, '/api/sop/asset?token=fake');
+  const imgSrcs = [...rewritten.matchAll(/<img[^>]*src="([^"]*)"/g)].map((m) => m[1]);
+  assert.ok(imgSrcs.length > 0, 'expected this real page to embed images');
+  assert.ok(imgSrcs.every((src) => src.startsWith('/api/sop/asset')), `expected every image to resolve through the proxy, got: ${JSON.stringify(imgSrcs)}`);
+  const firstAssetUrl = decodeURIComponent(imgSrcs[0].split('&url=')[1]);
+  const asset = await confluenceService.fetchConfluenceAsset(firstAssetUrl);
+  assert.ok(asset.buffer.length > 0, 'expected real image bytes back');
+  assert.match(asset.contentType, /^image\//);
 });

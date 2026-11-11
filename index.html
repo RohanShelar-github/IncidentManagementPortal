@@ -1449,11 +1449,16 @@
 <div class="page-header-sub"><span>Confluence runbooks for every customer, grouped by alert category</span></div>
 </div>
 </div>
-<div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
-<input id="sopLibrarySearch" type="text" placeholder="Search by customer or SOP title…" oninput="renderSopLibrary()" style="flex:1;min-width:220px;max-width:420px;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 14px;color:var(--text);font-size:13px;outline:none"/>
-<button class="btn btn-secondary btn-sm" onclick="loadSopLibrary(true)">↻ Refresh</button>
+<div class="sop-library-layout">
+<aside class="sop-library-sidebar">
+<input id="sopLibrarySearch" type="text" placeholder="Search by customer or SOP title…" oninput="renderSopLibrary()" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 14px;color:var(--text);font-size:13px;outline:none;margin-bottom:10px"/>
+<button class="btn btn-secondary btn-sm" onclick="loadSopLibrary(true)" style="margin-bottom:10px;width:100%">↻ Refresh</button>
+<div id="sopLibraryTree" class="sop-library-tree"></div>
+</aside>
+<div class="sop-library-content" id="sopLibraryContent">
+<div class="mailbox-empty">Select an SOP on the left to view it here.</div>
 </div>
-<div id="sopLibraryList"></div>
+</div>
 </div>
 <!-- /SOP LIBRARY -->
 <!-- ALERT COMPLIANCE DETAIL MODAL: additive, safe to delete to revert -->
@@ -2629,5 +2634,5 @@
 <div class="ai-chat-suggestions"><button onclick="askAiSuggestion(this)">Show open Critical incidents</button><button onclick="askAiSuggestion(this)">Summarize recent incidents</button></div>
 <footer class="ai-chat-compose"><textarea id="aiChatInput" rows="2" maxlength="2000" placeholder="Ask about incidents..." onkeydown="handleAiChatKey(event)"></textarea><button id="aiChatSend" onclick="sendAiChatMessage()">Send</button></footer>
 </section>
-<script src="./js/reportingMetrics.js"></script><script src="./js/incidentReportExcel.js"></script><script src="./js/app.js?v=20261111-sop-library-page"></script><script src="./config/config.js"></script></body>
+<script src="./js/reportingMetrics.js"></script><script src="./js/incidentReportExcel.js"></script><script src="./js/app.js?v=20261111-sop-content-viewer"></script><script src="./config/config.js"></script></body>
 </html>

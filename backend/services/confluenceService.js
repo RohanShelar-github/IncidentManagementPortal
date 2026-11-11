@@ -148,6 +148,66 @@ async function listSopLibrary({ forceRefresh } = {}) {
   }
 }
 
+async function confluencePageAttachments(pageId) {
+  const data = await confluenceGet(`/rest/api/content/${encodeURIComponent(pageId)}/child/attachment?limit=100`);
+  return Array.isArray(data.results) ? data.results : [];
+}
+
+// Returns one SOP page's title, pre-rendered HTML body (Confluence's own
+// "view" rendering, with most macros already resolved into plain markup) and
+// its attachment list (needed to resolve embedded image URLs — see
+// rewriteConfluenceImageSrcs). Returns null (never throws) when Confluence
+// isn't configured, so a missing/misconfigured integration never breaks the
+// content viewer.
+async function getSopPageContent(id) {
+  if (!confluenceConfigured()) return null;
+  const [data, attachments] = await Promise.all([
+    confluenceGet(`/rest/api/content/${encodeURIComponent(id)}?expand=body.view`),
+    confluencePageAttachments(id).catch(() => [])
+  ]);
+  return { id: data.id, title: data.title, html: data.body?.view?.value || '', attachments };
+}
+
+// Confluence's rendered body embeds images via the CDN-fronted
+// ".../wiki/download/thumbnails|attachments/{pageId}/{file}?..." URL, which
+// (confirmed empirically) rejects the same Basic Auth that works fine
+// against the regular REST API — it expects OAuth/a browser session
+// instead. The REST API's own attachment-download link
+// (".../rest/api/content/{pageId}/child/attachment/{attId}/download") DOES
+// accept Basic Auth, so each embedded image is resolved by filename against
+// the page's attachment list and rewritten to that working link instead of
+// the URL actually present in the HTML. An image whose filename isn't found
+// in the attachment list is left as-is (best effort — that one image may not
+// load, rather than failing the whole page).
+function rewriteConfluenceImageSrcs(html, attachments, assetProxyBase) {
+  const site = String(process.env.ATLASSIAN_SITE || '').trim();
+  if (!site || !assetProxyBase) return html;
+  const byFilename = new Map((attachments || []).map((attachment) => [attachment.title, attachment]));
+  const escapedSite = site.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`src="(https://${escapedSite}/wiki/download/(?:thumbnails|attachments)/\\d+/([^?"]+)[^"]*)"`, 'gi');
+  return String(html || '').replace(pattern, (match, originalUrl, encodedFilename) => {
+    let filename;
+    try { filename = decodeURIComponent(encodedFilename); } catch { filename = encodedFilename; }
+    const attachment = byFilename.get(filename);
+    if (!attachment?._links?.download) return match;
+    const downloadUrl = `${confluenceBaseUrl()}${attachment._links.download}`;
+    return `src="${assetProxyBase}&url=${encodeURIComponent(downloadUrl)}"`;
+  });
+}
+
+// Fetches one Confluence-hosted asset (an image a SOP page embeds) with
+// Basic Auth, for the proxy route to stream back to the browser. The URL
+// must belong to the configured Atlassian site's wiki path — this is a
+// narrow, single-purpose proxy, never an open proxy for arbitrary URLs.
+async function fetchConfluenceAsset(url) {
+  const site = String(process.env.ATLASSIAN_SITE || '').trim();
+  const allowedPrefix = `https://${site}/wiki/`;
+  if (!site || !String(url || '').startsWith(allowedPrefix)) throw new Error('Invalid or disallowed asset URL');
+  const response = await fetch(url, { headers: { Authorization: confluenceAuthHeader() }, signal: AbortSignal.timeout(20000) });
+  if (!response.ok) throw new Error(`Confluence asset request failed (${response.status})`);
+  return { contentType: response.headers.get('content-type') || 'application/octet-stream', buffer: Buffer.from(await response.arrayBuffer()) };
+}
+
 // Returns up to a few candidate SOP pages for this alert, best match first —
 // never a single confident claim, since text search can rank the wrong page.
 // Returns [] (not an error) when nothing matches or Confluence isn't
@@ -175,4 +235,4 @@ async function findSopCandidates({ customer, subject }) {
   }
 }
 
-module.exports = { alertSearchText, confluenceConfigured, deriveCategoryLabel, deriveCustomerFromCookbookTitle, findSopCandidates, listSopLibrary, SOP_SPACE_KEY, stripLeadingCustomerName };
+module.exports = { alertSearchText, confluenceConfigured, deriveCategoryLabel, deriveCustomerFromCookbookTitle, fetchConfluenceAsset, findSopCandidates, getSopPageContent, listSopLibrary, rewriteConfluenceImageSrcs, SOP_SPACE_KEY, stripLeadingCustomerName };
