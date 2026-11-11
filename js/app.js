@@ -4194,6 +4194,49 @@ function openMailboxMessage(id) {
   fetch(window.APP_CONFIG.API_BASE_URL + '/mailbox/inbox/' + encodeURIComponent(id), { headers: { Authorization: 'Bearer ' + mailboxToken() } }).then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to load message'); return data.data; }); }).then(function (message) { markMailboxMessageReadInUi(message); detail.innerHTML = ''; var head = document.createElement('div'); head.className = 'mailbox-detail-head'; var subject = document.createElement('div'); subject.className = 'mailbox-detail-subject'; subject.textContent = message.subject; var meta = document.createElement('div'); meta.className = 'mailbox-detail-meta'; meta.textContent = (mailboxActiveView === 'sent' ? 'To: ' + (message.to || '') + '\nSent: ' + mailboxDate(message.sentAt || message.receivedAt) : 'From: ' + (message.fromName || message.from) + (message.from ? ' <' + message.from + '>' : '') + '\nReceived: ' + mailboxDate(message.receivedAt)); head.append(subject, meta); var actions = document.createElement('div'); actions.className = 'mailbox-message-actions'; if (mailboxActiveView !== 'sent' && hasMailboxPermission('send_mailbox')) actions.append(mailboxActionButton('Reply', '↩', function () { showMailboxReply(message, detail, 'reply'); }), mailboxActionButton('Reply all', '↩↩', function () { showMailboxReply(message, detail, 'replyAll'); }), mailboxActionButton('Forward', '↪', function () { showMailboxReply(message, detail, 'forward'); })); if (mailboxActiveView !== 'sent' && hasMailboxPermission('delete_mailbox')) actions.appendChild(mailboxActionButton('Move to Deleted Items', '⌫', function () { deleteMailboxMessage(message, detail); }, true)); if (actions.childElementCount) head.appendChild(actions); var attachments = message.attachments || []; if (attachments.length) { var attachmentBox = document.createElement('div'); attachmentBox.className = 'mailbox-attachments'; var attachmentTitle = document.createElement('div'); attachmentTitle.className = 'mailbox-attachments-title'; attachmentTitle.textContent = 'Attachments'; attachmentBox.appendChild(attachmentTitle); attachments.forEach(function (attachment) { var item = document.createElement('button'); item.className = 'mailbox-attachment'; item.title = 'Download ' + attachment.name; item.onclick = function () { downloadMailboxAttachment(message.id, attachment); }; var name = document.createElement('span'); name.textContent = attachment.name; var size = document.createElement('small'); size.textContent = mailboxFormatBytes(attachment.size); item.append(name, size); attachmentBox.appendChild(item); }); head.appendChild(attachmentBox); } var wrap = document.createElement('div'); wrap.className = 'mailbox-detail-body-wrap'; var frame = document.createElement('iframe'); frame.className = 'mailbox-rich-frame'; frame.setAttribute('sandbox', 'allow-popups allow-popups-to-escape-sandbox'); frame.setAttribute('referrerpolicy', 'no-referrer'); frame.title = 'Safe rich email preview'; frame.srcdoc = mailboxSafeRichHtml(message.body || message.preview || 'This message has no readable text body.', document.body.classList.contains('light-mode')); wrap.appendChild(frame); detail.append(head, wrap); }).catch(function (error) { detail.innerHTML = '<div class="mailbox-empty"></div>'; detail.firstChild.textContent = error.message; });
 }
 
+// "Find SOP" — only offered for alert-provider categories, where a matching
+// Confluence runbook is plausible. Toggles a results panel rather than
+// opening a new one each click, so repeat clicks don't stack duplicate
+// panels under the message header.
+function mailboxSopButton(message, detail) {
+  if (['coralogix', 'azure', 'ngcplantsmonitoring'].indexOf(message.category) === -1) return null;
+  var button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-secondary btn-sm'; button.textContent = '📖 Find SOP';
+  button.onclick = function () { loadMailboxSopSuggestion(message, button, detail); };
+  return button;
+}
+
+function loadMailboxSopSuggestion(message, button, detail) {
+  var existing = detail.querySelector('.mailbox-sop-panel');
+  if (existing) { existing.remove(); return; }
+  var originalText = button.textContent; button.disabled = true; button.textContent = 'Searching…';
+  var params = new URLSearchParams({ category: message.category || '', subject: message.subject || '' });
+  fetch(window.APP_CONFIG.API_BASE_URL + '/sop/suggestion?' + params, { headers: { Authorization: 'Bearer ' + mailboxToken() } })
+    .then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to search for an SOP'); return data.data; }); })
+    .then(function (result) {
+      var panel = document.createElement('div'); panel.className = 'mailbox-sop-panel';
+      panel.style.cssText = 'margin-top:10px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);font-size:13px';
+      if (!result.configured) {
+        panel.textContent = 'Confluence integration is not configured.';
+      } else if (!result.candidates.length) {
+        panel.textContent = 'No matching SOP found yet' + (result.customer ? ' for ' + result.customer : '') + '. This is a text search against Confluence — it may just mean no SOP has been written for this alert.';
+      } else {
+        var label = document.createElement('div');
+        label.style.cssText = 'font-weight:700;margin-bottom:6px;color:var(--text-muted)';
+        label.textContent = (result.candidates.length > 1 ? 'Possible SOPs' : 'Possible SOP') + (result.customer ? ' for ' + result.customer : '') + ' — verify before following:';
+        panel.appendChild(label);
+        result.candidates.forEach(function (candidate) {
+          var link = document.createElement('a');
+          link.href = candidate.url; link.target = '_blank'; link.rel = 'noopener'; link.textContent = candidate.title;
+          link.style.cssText = 'display:block;color:var(--accent);text-decoration:none;margin:3px 0';
+          panel.appendChild(link);
+        });
+      }
+      var head = detail.querySelector('.mailbox-detail-head'); if (head) head.appendChild(panel);
+    })
+    .catch(function (error) { showToast(error.message, 'error'); })
+    .finally(function () { button.disabled = false; button.textContent = originalText; });
+}
+
 // The Operations inbox receives recipient data from Graph as message.to. Keep
 // it visible in the selected-message header, just as Sent Items already does.
 function openMailboxMessage(id) {
@@ -4220,6 +4263,7 @@ function openMailboxMessage(id) {
       var actions = document.createElement('div'); actions.className = 'mailbox-message-actions';
       if (hasMailboxPermission('send_mailbox')) actions.append(mailboxActionButton('Reply', '↩', function () { showMailboxReply(message, detail, 'reply'); }), mailboxActionButton('Reply all', '↩↩', function () { showMailboxReply(message, detail, 'replyAll'); }), mailboxActionButton('Forward', '↪', function () { showMailboxReply(message, detail, 'forward'); }));
       if (hasMailboxPermission('send_mailbox') && ngcPlantsMonitoringNotifyPreset(message)) { var notifyCustomer = document.createElement('button'); notifyCustomer.type = 'button'; notifyCustomer.className = 'btn btn-primary btn-sm mailbox-notify-customer'; notifyCustomer.textContent = 'Notify Customer'; notifyCustomer.onclick = function () { showMailboxReply(message, detail, 'reply'); }; actions.appendChild(notifyCustomer); }
+      var sopButton = mailboxSopButton(message, detail); if (sopButton) actions.appendChild(sopButton);
       if (mailboxActiveView !== 'sent' && message.isRead) actions.appendChild(mailboxActionButton('Mark as unread', '○', function () { setMailboxMessageReadStateInUi(message, false); }));
       if (hasMailboxPermission('delete_mailbox')) actions.appendChild(mailboxActionButton('Move to Deleted Items', '⌫', function () { deleteMailboxMessage(message, detail); }, true));
       if (actions.childElementCount) head.appendChild(actions);

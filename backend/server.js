@@ -19,6 +19,7 @@ const operationsAlertReportRoutes = require('./routes/operationsAlertReportRoute
 // New, additive route for the admin-customizable Dashboard card layout.
 // Safe to remove this line + the app.use below to fully revert the feature.
 const dashboardLayoutRoutes = require('./routes/dashboardLayoutRoutes');
+const sopRoutes = require('./routes/sopRoutes');
 const { startMailboxNotificationPolling } = require('./controllers/mailboxController');
 const { startUiServer } = require('../server-ui');
 const pool = require('./config/database');
@@ -69,6 +70,7 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/mailbox', mailboxRoutes);
 app.use('/api/operations-alerts', operationsAlertReportRoutes);
 app.use('/api/dashboard-layout', dashboardLayoutRoutes);
+app.use('/api/sop', sopRoutes);
 
 // Health check endpoint
 app.get('/api/health', async (req, res) => {
