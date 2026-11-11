@@ -168,8 +168,8 @@ test('frontend: sopPageSafeHtml strips scripts/forms/event handlers and only all
 test('frontend: sopPageSafeHtml picks a light or dark palette from useLightTheme for the page itself, while keeping the macro/panel boxes a fixed light-background+dark-text treatment in both themes', () => {
   assert.match(frontend, /var palette = useLightTheme\s*\n\s*\? \{ bg: '#ffffff', text: '#172b4d', muted: '#44546f', border: '#dfe1e6', link: '#0052cc', codeBg: '#f4f5f7' \}\s*\n\s*: \{ bg: '#1d2125', text: '#dcdfe4', muted: '#9fadbc', border: '#454f59', link: '#85b8ff', codeBg: '#22272b' \};/);
   assert.match(frontend, /'html,body\{margin:0;background:' \+ palette\.bg \+ ';color:' \+ palette\.text \+ ';'/);
-  assert.match(frontend, /\.confluence-information-macro\{display:flex;align-items:flex-start;gap:10px;margin:0 0 16px;padding:12px 14px;border-radius:3px;font-size:14px;color:#172b4d\}/);
-  assert.match(frontend, /'\.panel\{border:1px solid ' \+ palette\.border \+ ';border-radius:3px;margin:0 0 16px;overflow:hidden;color:#172b4d\}'/);
+  assert.match(frontend, /\.confluence-information-macro\{clear:both;display:flex;align-items:flex-start;gap:10px;margin:0 0 16px;padding:12px 14px;border-radius:3px;font-size:14px;color:#172b4d\}/);
+  assert.match(frontend, /'\.panel\{clear:both;border:1px solid ' \+ palette\.border \+ ';border-radius:3px;margin:0 0 16px;overflow:hidden;color:#172b4d\}'/);
 });
 
 // Regression test for a real bug the above fix shipped with: the viewer
@@ -198,8 +198,24 @@ test('frontend: sopPageSafeHtml\'s stylesheet gives Confluence\'s own macro/pane
   assert.match(frontend, /\.confluence-information-macro-tip\{background:#e3fcef\}/);
   assert.match(frontend, /\.confluence-embedded-image\.image-center\{margin-left:auto;margin-right:auto\}/);
   assert.match(frontend, /\.confluence-embedded-image\.image-wrap-left\{float:left;/);
-  assert.match(frontend, /'\.panel\{border:1px solid ' \+ palette\.border \+ ';border-radius:3px;margin:0 0 16px;overflow:hidden;color:#172b4d\}'/);
+  assert.match(frontend, /'\.panel\{clear:both;border:1px solid ' \+ palette\.border \+ ';border-radius:3px;margin:0 0 16px;overflow:hidden;color:#172b4d\}'/);
   assert.match(frontend, /'\.panelContent\{padding:12px 14px\}'/);
+});
+
+// Regression test for a real reported bug: a panel/heading meant to sit
+// BELOW a "wrap-left" flow-chart image instead got squeezed onto the same
+// line as content wrapping beside the float. Confirmed against a real page
+// (BWC's EKS Infrastructure Alerts, "[kubernetes] Kubernetes Pods
+// Restarting" section) that Confluence's raw body HTML has NO explicit
+// clear-float markup (no "clear:" style, no <br clear>) between the floated
+// image and the following "Critical Alert:" heading — that behavior comes
+// entirely from Confluence's own stylesheet, which this viewer doesn't
+// load, so headings/tables/macro panels must clear floats themselves.
+test('frontend: sopPageSafeHtml clears floats on headings/tables/macro panels, so a section after a wrap-left flow-chart image starts below it instead of squeezing beside it', () => {
+  assert.match(frontend, /'h1,h2,h3,h4,h5,h6\{clear:both;color:' \+ palette\.text \+ ';/);
+  assert.match(frontend, /'table\{clear:both;max-width:100%;/);
+  assert.match(frontend, /'\.confluence-information-macro\{clear:both;display:flex;/);
+  assert.match(frontend, /'\.panel\{clear:both;border:1px solid ' \+ palette\.border \+ ';/);
 });
 
 test('backend: the SOP Library and page-content routes are mounted and gated behind view_mailbox; the asset proxy is deliberately NOT (it is loaded via <img src>, which cannot send an Authorization header)', () => {

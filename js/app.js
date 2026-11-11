@@ -4345,7 +4345,14 @@ function sopPageSafeHtml(value, useLightTheme) {
   var themeCss = 'html,body{margin:0;background:' + palette.bg + ';color:' + palette.text + ';'
       + 'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14.5px;line-height:1.5}'
     + 'body{padding:24px 32px;box-sizing:border-box;max-width:860px;margin:0 auto}'
-    + 'h1,h2,h3,h4,h5,h6{color:' + palette.text + ';font-weight:600;line-height:1.3;margin:28px 0 12px}'
+    // clear:both on headings/tables/macro blocks: Confluence floats images
+    // aligned "wrap-left"/"wrap-right" (text wraps beside them, confirmed in
+    // this space's real markup) with no explicit clearing markup in the body
+    // HTML itself — the "next section starts on its own line" behavior comes
+    // entirely from Confluence's own stylesheet, which we don't load.
+    // Without this, a heading/panel meant to sit BELOW a flow-chart image
+    // instead gets squeezed into the same line as the floated content.
+    + 'h1,h2,h3,h4,h5,h6{clear:both;color:' + palette.text + ';font-weight:600;line-height:1.3;margin:28px 0 12px}'
     + 'h1{font-size:24px;border-bottom:2px solid ' + palette.border + ';padding-bottom:8px}h2{font-size:20px;border-bottom:1px solid ' + palette.border + ';padding-bottom:6px}h3{font-size:16px}h4{font-size:14.5px}'
     + 'p{margin:0 0 12px}ul,ol{margin:0 0 12px;padding-left:28px}li{margin-bottom:4px}'
     + 'a,a:visited{color:' + palette.link + ';text-decoration:none}a:hover{text-decoration:underline}'
@@ -4355,7 +4362,7 @@ function sopPageSafeHtml(value, useLightTheme) {
     + '.confluence-embedded-image.image-center{margin-left:auto;margin-right:auto}'
     + '.confluence-embedded-image.image-wrap-left{float:left;margin:4px 16px 8px 0}'
     + '.confluence-embedded-image.image-wrap-right,.confluence-embedded-image.image-right{float:right;margin:4px 0 8px 16px}'
-    + 'table{max-width:100%;border-collapse:collapse;margin:8px 0 16px;width:100%}'
+    + 'table{clear:both;max-width:100%;border-collapse:collapse;margin:8px 0 16px;width:100%}'
     + 'td,th{border:1px solid ' + palette.border + ';padding:8px 12px;vertical-align:top}'
     + 'th{background:' + palette.codeBg + ';font-weight:600;text-align:left}'
     + 'blockquote{border-left:3px solid ' + palette.border + ';margin:12px 0;padding-left:14px;color:' + palette.muted + '}'
@@ -4370,7 +4377,7 @@ function sopPageSafeHtml(value, useLightTheme) {
     // against this space's real markup). Confluence authors these assuming a
     // light background, and there's no reliable way to invert an arbitrary
     // per-instance inline panel color for a dark theme.
-    + '.confluence-information-macro{display:flex;align-items:flex-start;gap:10px;margin:0 0 16px;padding:12px 14px;border-radius:3px;font-size:14px;color:#172b4d}'
+    + '.confluence-information-macro{clear:both;display:flex;align-items:flex-start;gap:10px;margin:0 0 16px;padding:12px 14px;border-radius:3px;font-size:14px;color:#172b4d}'
     + '.confluence-information-macro-body,.confluence-information-macro>.confluence-information-macro-body{flex:1;min-width:0}'
     + '.confluence-information-macro-body>:last-child{margin-bottom:0}'
     + '.confluence-information-macro::before{flex-shrink:0;font-size:16px;line-height:1.3}'
@@ -4378,7 +4385,7 @@ function sopPageSafeHtml(value, useLightTheme) {
     + '.confluence-information-macro-note{background:#fff7d6}.confluence-information-macro-note::before{content:"📝"}'
     + '.confluence-information-macro-warning{background:#ffebe6}.confluence-information-macro-warning::before{content:"⚠️"}'
     + '.confluence-information-macro-tip{background:#e3fcef}.confluence-information-macro-tip::before{content:"💡"}'
-    + '.panel{border:1px solid ' + palette.border + ';border-radius:3px;margin:0 0 16px;overflow:hidden;color:#172b4d}'
+    + '.panel{clear:both;border:1px solid ' + palette.border + ';border-radius:3px;margin:0 0 16px;overflow:hidden;color:#172b4d}'
     + '.panelContent{padding:12px 14px}'
     + '.panelContent>:last-child{margin-bottom:0}'
     // Status lozenges (e.g. a DONE/TODO/BLOCKED badge) — same "fixed, not
