@@ -1446,13 +1446,20 @@
 <span class="breadcrumb-item active">SOP Library</span>
 </div>
 <div class="page-header-title">SOP Library</div>
-<div class="page-header-sub"><span>Confluence runbooks for every customer, grouped by alert category</span></div>
+<div class="page-header-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>Confluence runbooks for every customer, grouped by alert category</span><span style="color:var(--text-muted)">-</span><span id="sopLibraryLastUpdated" style="color:var(--text-muted)">Last updated just now</span>
+<span id="sopLibraryRefreshBtn" onclick="refreshSopLibrary(event)" onmouseout="this.style.color='var(--text-muted)';this.style.background='transparent'" onmouseover="this.style.color='var(--accent)';this.style.background='rgba(79,142,247,0.12)'" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--text-muted);transition:color .2s,background .2s;flex-shrink:0" title="Refresh">
+<svg fill="none" height="13" id="sopLibraryRefreshIcon" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" style="transition:transform .7s ease" viewbox="0 0 24 24" width="13">
+<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+<path d="M21 3v5h-5"></path>
+<path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+<path d="M8 16H3v5"></path>
+</svg>
+</span></div>
 </div>
 </div>
 <div class="sop-library-layout">
 <aside class="sop-library-sidebar">
 <input id="sopLibrarySearch" type="text" placeholder="Search by customer or SOP title…" oninput="renderSopLibrary()" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 14px;color:var(--text);font-size:13px;outline:none;margin-bottom:10px"/>
-<button class="btn btn-secondary btn-sm" onclick="loadSopLibrary(true)" style="margin-bottom:10px;width:100%">↻ Refresh</button>
 <div id="sopLibraryTree" class="sop-library-tree"></div>
 </aside>
 <div class="sop-library-content" id="sopLibraryContent">
@@ -2634,5 +2641,5 @@
 <div class="ai-chat-suggestions"><button onclick="askAiSuggestion(this)">Show open Critical incidents</button><button onclick="askAiSuggestion(this)">Summarize recent incidents</button></div>
 <footer class="ai-chat-compose"><textarea id="aiChatInput" rows="2" maxlength="2000" placeholder="Ask about incidents..." onkeydown="handleAiChatKey(event)"></textarea><button id="aiChatSend" onclick="sendAiChatMessage()">Send</button></footer>
 </section>
-<script src="./js/reportingMetrics.js"></script><script src="./js/incidentReportExcel.js"></script><script src="./js/app.js?v=20261111-sop-content-viewer"></script><script src="./config/config.js"></script></body>
+<script src="./js/reportingMetrics.js"></script><script src="./js/incidentReportExcel.js"></script><script src="./js/app.js?v=20261111-sop-refresh-icon"></script><script src="./config/config.js"></script></body>
 </html>

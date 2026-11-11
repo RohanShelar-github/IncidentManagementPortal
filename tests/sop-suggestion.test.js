@@ -112,9 +112,20 @@ test('frontend: navigateToSopLibrary expands the matched customer and sets a one
   assert.match(frontend, /sopLibraryHighlight = \{ customer: customer \|\| null, pageId: pageId \|\| null \};/);
   assert.match(frontend, /if \(customer\) sopLibraryExpanded\[String\(customer\)\.toLowerCase\(\)\] = true;/);
   assert.match(frontend, /navigate\('sopLibrary', document\.getElementById\('sopLibraryNav'\)\);/);
-  assert.match(frontend, /function loadSopLibrary\(forceRefresh\) \{/);
-  assert.match(frontend, /if \(!data\.configured\) \{ if \(tree\) tree\.innerHTML = '<div class="mailbox-empty">Confluence integration is not configured\.<\/div>'; return; \}/);
+  assert.match(frontend, /function loadSopLibrary\(forceRefresh, callback\) \{/);
+  assert.match(frontend, /if \(!data\.configured\) \{ if \(tree\) tree\.innerHTML = '<div class="mailbox-empty">Confluence integration is not configured\.<\/div>'; if \(callback\) callback\(null\); return; \}/);
   assert.match(frontend, /function renderSopLibrary\(\) \{/);
+});
+
+test('frontend: the SOP Library refresh control is the small circular icon pattern shared with other pages (e.g. Alert Compliance), not a standalone button, driven by the shared setPageRefreshState id convention', () => {
+  assert.match(html, /<span id="sopLibraryRefreshBtn" onclick="refreshSopLibrary\(event\)"/);
+  assert.match(html, /<svg [^>]*id="sopLibraryRefreshIcon"/);
+  assert.match(html, /id="sopLibraryLastUpdated"/);
+  assert.doesNotMatch(html, /onclick="loadSopLibrary\(true\)"/);
+  assert.match(frontend, /function refreshSopLibrary\(event\) \{/);
+  assert.match(frontend, /setPageRefreshState\('sopLibrary', true\);/);
+  assert.match(frontend, /loadSopLibrary\(true, function \(error\) \{/);
+  assert.match(frontend, /setPageRefreshState\('sopLibrary', false, error \? \(error\.message \|\| 'Refresh failed'\) : ''\);/);
 });
 
 test('frontend: loadSopLibrary auto-opens the matched page content after a "Find SOP" redirect, then consumes the one-shot highlight', () => {

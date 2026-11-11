@@ -4232,14 +4232,14 @@ function navigateToSopLibrary(customer, pageId) {
   navigate('sopLibrary', document.getElementById('sopLibraryNav'));
 }
 
-function loadSopLibrary(forceRefresh) {
+function loadSopLibrary(forceRefresh, callback) {
   var tree = document.getElementById('sopLibraryTree');
   if (tree && !sopLibraryData.length) tree.innerHTML = '<div class="mailbox-empty">Loading SOP library…</div>';
   var params = forceRefresh ? '?refresh=true' : '';
   fetch(window.APP_CONFIG.API_BASE_URL + '/sop/library' + params, { headers: { Authorization: 'Bearer ' + sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY) } })
     .then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to load the SOP library'); return data.data; }); })
     .then(function (data) {
-      if (!data.configured) { if (tree) tree.innerHTML = '<div class="mailbox-empty">Confluence integration is not configured.</div>'; return; }
+      if (!data.configured) { if (tree) tree.innerHTML = '<div class="mailbox-empty">Confluence integration is not configured.</div>'; if (callback) callback(null); return; }
       sopLibraryData = data.customers || [];
       renderSopLibrary();
       // One-shot: if "Find SOP" navigated here with a specific matched page,
@@ -4250,8 +4250,23 @@ function loadSopLibrary(forceRefresh) {
         if (matched) openSopLibraryPage(matched);
         sopLibraryHighlight = null;
       }
+      if (callback) callback(null);
     })
-    .catch(function (error) { if (tree) tree.innerHTML = '<div class="mailbox-empty">' + error.message + '</div>'; });
+    .catch(function (error) { if (tree) tree.innerHTML = '<div class="mailbox-empty">' + error.message + '</div>'; if (callback) callback(error); });
+}
+
+// Mirrors the small circular refresh-icon pattern used by the other pages
+// (e.g. Alert Compliance) instead of a standalone "Refresh" button, via the
+// shared setPageRefreshState('sopLibrary', ...) — same #{page}LastUpdated/
+// #{page}RefreshBtn/#{page}RefreshIcon id convention, so the existing spin
+// animation and "Last updated HH:MM" label work with no changes there.
+function refreshSopLibrary(event) {
+  if (event && event.preventDefault) event.preventDefault();
+  setPageRefreshState('sopLibrary', true);
+  loadSopLibrary(true, function (error) {
+    setPageRefreshState('sopLibrary', false, error ? (error.message || 'Refresh failed') : '');
+    showToast(error ? ('Refresh failed: ' + error.message) : 'SOP library refreshed', error ? 'error' : 'success');
+  });
 }
 
 function renderSopLibrary() {
