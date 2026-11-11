@@ -49,6 +49,23 @@ function cqlQuote(value) {
   return String(value || '').replace(/["\\]/g, '\\$&');
 }
 
+// Coralogix subjects commonly read "{Customer} - {alert text}", so after
+// alertSearchText the customer name is still the leading word(s) of the
+// keyword phrase — duplicating it into the keyword clause alongside the
+// dedicated customer title clause. Confirmed empirically against this real
+// Confluence space: that duplication collapses the combined query's
+// relevance score to zero hits even when an exact-match page exists (e.g.
+// "Prettl - Local Agent Connectors not running for last 5 minutes" found
+// nothing, but the same text with the leading "Prettl" removed found the
+// real "Prettl- SOP for Local Agent Connectors Alert" page). Stripping it
+// here, once, avoids that failure mode everywhere.
+function stripLeadingCustomerName(keywords, customer) {
+  if (!customer) return keywords;
+  const escapedCustomer = String(customer).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const stripped = String(keywords || '').replace(new RegExp(`^${escapedCustomer}\\s*[-:]?\\s*`, 'i'), '').trim();
+  return stripped || keywords;
+}
+
 async function confluenceSearch(cql) {
   const query = new URLSearchParams({ cql, limit: String(SOP_SEARCH_LIMIT), expand: 'space' });
   const response = await fetch(`${confluenceBaseUrl()}/rest/api/content/search?${query}`, {
@@ -75,7 +92,7 @@ function toSopLink(page) {
 // mailbox UI around it.
 async function findSopCandidates({ customer, subject }) {
   if (!confluenceConfigured()) return [];
-  const keywords = alertSearchText(subject);
+  const keywords = stripLeadingCustomerName(alertSearchText(subject), customer);
   if (!keywords) return [];
   const keywordClause = `(title ~ "${cqlQuote(keywords)}" OR text ~ "${cqlQuote(keywords)}")`;
   const customerClause = customer ? ` AND title ~ "${cqlQuote(customer)}"` : '';
@@ -95,4 +112,4 @@ async function findSopCandidates({ customer, subject }) {
   }
 }
 
-module.exports = { alertSearchText, confluenceConfigured, findSopCandidates, SOP_SPACE_KEY };
+module.exports = { alertSearchText, confluenceConfigured, findSopCandidates, SOP_SPACE_KEY, stripLeadingCustomerName };

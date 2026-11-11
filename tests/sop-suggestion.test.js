@@ -57,6 +57,37 @@ test('findSopCandidates returns [] rather than throwing when given no usable sub
   assert.deepEqual(result, []);
 });
 
+// Regression test for a real production bug: Coralogix subjects read
+// "{Customer} - {alert text}", so after alertSearchText the customer name
+// was still the leading word(s) of the keyword phrase — duplicating it
+// alongside the separate customer-title clause. Confirmed empirically
+// against the real Confluence space that this duplication collapses the
+// combined CQL query's relevance score to zero hits even when an exact-
+// match page exists (reported: "Prettl - Local Agent Connectors not running
+// for last 5 minutes" found nothing, despite "Prettl- SOP for Local Agent
+// Connectors Alert" existing verbatim).
+test('stripLeadingCustomerName removes a duplicated leading customer name from the keyword phrase, case-insensitively, with or without a separator', () => {
+  assert.equal(confluenceService.stripLeadingCustomerName('Prettl - Local Agent Connectors not running for last 5 minutes', 'Prettl'), 'Local Agent Connectors not running for last 5 minutes');
+  assert.equal(confluenceService.stripLeadingCustomerName('prettl Local Agent Connectors', 'Prettl'), 'Local Agent Connectors');
+  assert.equal(confluenceService.stripLeadingCustomerName('TileBar: Average K8s Node Memory', 'TileBar'), 'Average K8s Node Memory');
+  // No customer resolved — keywords pass through unchanged.
+  assert.equal(confluenceService.stripLeadingCustomerName('Redis Container Instance Restarted', null), 'Redis Container Instance Restarted');
+  // Customer name isn't actually the leading text — left alone rather than
+  // mangled, and the function never returns an empty string that would make
+  // findSopCandidates give up with nothing to search.
+  assert.equal(confluenceService.stripLeadingCustomerName('Redis Container Instance Restarted', 'NGC'), 'Redis Container Instance Restarted');
+  assert.equal(confluenceService.stripLeadingCustomerName('Prettl', 'Prettl'), 'Prettl');
+});
+
+test('findSopCandidates against the real Confluence space: the exact reported bug (Prettl Local Agent Connectors) now finds its real SOP page', async (t) => {
+  if (!confluenceService.confluenceConfigured()) { t.skip('ATLASSIAN_* credentials not available in this environment'); return; }
+  const results = await confluenceService.findSopCandidates({
+    customer: 'Prettl',
+    subject: 'Coralogix Alert on magic / Prettl - Local Agent Connectors not running for last 5 minutes'
+  });
+  assert.ok(results.some((r) => r.title === 'Prettl- SOP for Local Agent Connectors Alert'), `expected the real Prettl SOP page in results, got: ${JSON.stringify(results)}`);
+});
+
 test('frontend: the Find SOP button only appears for alert-provider categories, and toggles a results panel instead of stacking duplicates', () => {
   assert.match(frontend, /function mailboxSopButton\(message, detail\) \{/);
   assert.match(frontend, /if \(\['coralogix', 'azure', 'ngcplantsmonitoring'\]\.indexOf\(message\.category\) === -1\) return null;/);
