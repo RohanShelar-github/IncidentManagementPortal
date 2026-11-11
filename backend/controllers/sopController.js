@@ -2,7 +2,7 @@
 
 const pool = require('../config/database');
 const { matchingCustomersByName } = require('./mailboxController');
-const { confluenceConfigured, findSopCandidates } = require('../services/confluenceService');
+const { confluenceConfigured, findSopCandidates, listSopLibrary } = require('../services/confluenceService');
 
 // Best-effort customer resolution for the SOP suggestion only — this is
 // advisory (the user clicks through and judges the result themselves), so it
@@ -32,4 +32,16 @@ const getSopSuggestion = async (req, res) => {
   }
 };
 
-module.exports = { getSopSuggestion };
+const getSopLibrary = async (req, res) => {
+  try {
+    if (!confluenceConfigured()) return res.json({ success: true, data: { configured: false, customers: [] } });
+    const forceRefresh = String(req.query.refresh || '').toLowerCase() === 'true';
+    const customers = await listSopLibrary({ forceRefresh });
+    res.json({ success: true, data: { configured: true, customers } });
+  } catch (error) {
+    console.error('SOP library error:', error.message);
+    res.status(502).json({ success: false, message: 'Unable to load the SOP library from Confluence.' });
+  }
+};
+
+module.exports = { getSopLibrary, getSopSuggestion };

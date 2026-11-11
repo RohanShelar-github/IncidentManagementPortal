@@ -2638,3 +2638,11 @@
 .ai-chat-incident-links{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}.ai-chat-incident-links button{border:1px solid rgba(79,142,247,.35);background:rgba(79,142,247,.1);color:var(--accent);border-radius:999px;padding:3px 8px;font-size:10px;cursor:pointer}.ai-chat-suggestions{display:flex;gap:6px;padding:8px 12px;overflow-x:auto;border-top:1px solid var(--border)}.ai-chat-suggestions button{white-space:nowrap;border:1px solid var(--border);background:var(--surface2);color:var(--text-muted);border-radius:999px;padding:5px 9px;font-size:10px;cursor:pointer}
 .ai-chat-compose{display:flex;gap:8px;padding:12px;border-top:1px solid var(--border);background:var(--surface)}.ai-chat-compose textarea{flex:1;resize:none;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:9px 11px;color:var(--text);font:12px inherit;outline:none}.ai-chat-compose button{align-self:stretch;border:0;border-radius:9px;background:var(--accent);color:#fff;padding:0 15px;font-weight:700;cursor:pointer}.ai-chat-compose button:disabled{opacity:.55;cursor:not-allowed}
 @media(max-width:600px){.ai-chat-launcher{right:16px;bottom:16px;width:58px;height:58px}.ai-chat-launcher-icon{width:45px;height:45px}.ai-chat-panel{right:16px;bottom:84px;height:calc(100vh - 104px)}}
+
+/* ─── SOP LIBRARY ──────────────────────────────────────────── */
+.sop-library-customer{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:12px}
+.sop-library-customer-name{font-size:14px;font-weight:800;color:var(--text);margin-bottom:10px}
+.sop-library-pages{display:flex;flex-wrap:wrap;gap:8px}
+.sop-library-link{display:inline-block;border:1px solid var(--border);background:var(--surface2);color:var(--text);text-decoration:none;border-radius:8px;padding:6px 11px;font-size:12px;transition:border-color .15s,color .15s}
+.sop-library-link:hover{border-color:var(--accent);color:var(--accent)}
+.sop-library-link.sop-library-highlight{border-color:var(--accent);background:rgba(79,142,247,.12);color:var(--accent);font-weight:700}

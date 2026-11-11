@@ -66,14 +66,23 @@ function stripLeadingCustomerName(keywords, customer) {
   return stripped || keywords;
 }
 
-async function confluenceSearch(cql) {
-  const query = new URLSearchParams({ cql, limit: String(SOP_SEARCH_LIMIT), expand: 'space' });
-  const response = await fetch(`${confluenceBaseUrl()}/rest/api/content/search?${query}`, {
+async function confluenceGet(path) {
+  const response = await fetch(`${confluenceBaseUrl()}${path}`, {
     headers: { Authorization: confluenceAuthHeader(), Accept: 'application/json' },
     signal: AbortSignal.timeout(15000)
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data?.message || `Confluence search failed (${response.status})`);
+  if (!response.ok) throw new Error(data?.message || `Confluence request failed (${response.status})`);
+  return data;
+}
+
+async function confluenceSearch(cql, limit = SOP_SEARCH_LIMIT) {
+  const query = new URLSearchParams({ cql, limit: String(limit), expand: 'space' });
+  return (await confluenceGet(`/rest/api/content/search?${query}`)).results || [];
+}
+
+async function confluenceChildPages(pageId) {
+  const data = await confluenceGet(`/rest/api/content/${encodeURIComponent(pageId)}/child/page?limit=100`);
   return Array.isArray(data.results) ? data.results : [];
 }
 
@@ -83,6 +92,60 @@ function toSopLink(page) {
     title: page.title,
     url: `${confluenceBaseUrl()}${page._links?.webui || ''}`
   };
+}
+
+// Each customer's SOPs live as child pages of their own "{Customer} -
+// Monitoring Cookbook" page (confirmed across ~25 customers). Listing every
+// customer's full catalog means ~1 + (1 per customer) Confluence calls, so
+// it's cached rather than re-fetched on every page view.
+const SOP_LIBRARY_CACHE_TTL_MS = 20 * 60 * 1000;
+let sopLibraryCache = null; // { data, expiresAt }
+
+function deriveCustomerFromCookbookTitle(title) {
+  return String(title || '').replace(/[\s\-–]*Monitoring\s+Cookbook\s*$/i, '').trim();
+}
+
+// Strips the leading customer name and a "SOP for/on " prefix, leaving a
+// short, readable category label — e.g. "TileBar- SOP for EKS Infrastructure
+// Alerts" -> "EKS Infrastructure Alerts". A page whose title doesn't follow
+// that convention (e.g. "TileBar – K8s Pod Memory Utilization Exceeded 6GB")
+// still gets a sensible label: the customer prefix stripped, nothing more.
+function deriveCategoryLabel(title, customer) {
+  let remainder = String(title || '');
+  if (customer) {
+    const escapedCustomer = String(customer).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    remainder = remainder.replace(new RegExp(`^${escapedCustomer}\\s*[-–:]?\\s*`, 'i'), '');
+  }
+  remainder = remainder.replace(/^SOP\s+(?:for|on)\s+/i, '').trim();
+  return remainder || title;
+}
+
+// Returns every customer's SOP catalog, grouped and category-labeled,
+// sourced from the CSO space's "{Customer} - Monitoring Cookbook" pages and
+// their children. Returns [] (never throws) when Confluence isn't
+// configured or a lookup fails, so a missing/misconfigured integration never
+// breaks the SOP Library page around it.
+async function listSopLibrary({ forceRefresh } = {}) {
+  if (!confluenceConfigured()) return [];
+  if (!forceRefresh && sopLibraryCache && sopLibraryCache.expiresAt > Date.now()) return sopLibraryCache.data;
+  try {
+    const cookbooks = await confluenceSearch(`space = "${cqlQuote(SOP_SPACE_KEY)}" AND type = page AND title ~ "Monitoring Cookbook"`, 100);
+    const library = await Promise.all(cookbooks.map(async (cookbook) => {
+      const customer = deriveCustomerFromCookbookTitle(cookbook.title);
+      const children = await confluenceChildPages(cookbook.id).catch(() => []);
+      return {
+        customer,
+        cookbookUrl: toSopLink(cookbook).url,
+        pages: children.map((child) => ({ ...toSopLink(child), category: deriveCategoryLabel(child.title, customer) }))
+      };
+    }));
+    library.sort((a, b) => a.customer.localeCompare(b.customer));
+    sopLibraryCache = { data: library, expiresAt: Date.now() + SOP_LIBRARY_CACHE_TTL_MS };
+    return library;
+  } catch (error) {
+    console.error('Confluence SOP library error:', error.message);
+    return sopLibraryCache?.data || [];
+  }
 }
 
 // Returns up to a few candidate SOP pages for this alert, best match first —
@@ -112,4 +175,4 @@ async function findSopCandidates({ customer, subject }) {
   }
 }
 
-module.exports = { alertSearchText, confluenceConfigured, findSopCandidates, SOP_SPACE_KEY, stripLeadingCustomerName };
+module.exports = { alertSearchText, confluenceConfigured, deriveCategoryLabel, deriveCustomerFromCookbookTitle, findSopCandidates, listSopLibrary, SOP_SPACE_KEY, stripLeadingCustomerName };

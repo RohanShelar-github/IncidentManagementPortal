@@ -3217,7 +3217,8 @@ function navigateInternal(page, el) {
     roles: 'manage_roles',
     customer360: 'view_customer360',
     datamanagement: 'manage_data',
-    alertCompliance: 'view_alert_compliance_report'
+    alertCompliance: 'view_alert_compliance_report',
+    sopLibrary: 'view_mailbox'
   };
   // Dashboard blocked separately so it doesn't interfere with initial load
   if (page === 'dashboard' && !hasPermission('view_dashboard')) {
@@ -3237,7 +3238,7 @@ function navigateInternal(page, el) {
   pageEl.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   if (el) el.classList.add('active');
-  const titles = { home: 'Home', dashboard: 'Dashboard', incidents: 'Incident Management', mailbox: 'Operations', drafts: 'Draft Review', reports: 'Reports', users: 'User Management', roles: 'Role Management', customer360: 'Customer 360', alertCompliance: 'Alert Compliance' };
+  const titles = { home: 'Home', dashboard: 'Dashboard', incidents: 'Incident Management', mailbox: 'Operations', drafts: 'Draft Review', reports: 'Reports', users: 'User Management', roles: 'Role Management', customer360: 'Customer 360', alertCompliance: 'Alert Compliance', sopLibrary: 'SOP Library' };
   if (page === 'home') renderHomePage();
   var _tbt = document.getElementById('topbarTitle'); if (_tbt) _tbt.textContent = titles[page] || page;
   if (page === 'incidents') renderIncidentTable();
@@ -3262,6 +3263,7 @@ function navigateInternal(page, el) {
     }
   }
   if (page === 'alertCompliance') loadAlertComplianceReport();
+  if (page === 'sopLibrary') loadSopLibrary();
   updateStatusBar();
   closeSidebar();
 }
@@ -4195,46 +4197,81 @@ function openMailboxMessage(id) {
 }
 
 // "Find SOP" — only offered for alert-provider categories, where a matching
-// Confluence runbook is plausible. Toggles a results panel rather than
-// opening a new one each click, so repeat clicks don't stack duplicate
-// panels under the message header.
+// Confluence runbook is plausible. Redirects to the SOP Library page (rather
+// than showing results inline here) with the best match, if any, highlighted.
 function mailboxSopButton(message, detail) {
   if (['coralogix', 'azure', 'ngcplantsmonitoring'].indexOf(message.category) === -1) return null;
   var button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-secondary btn-sm'; button.textContent = '📖 Find SOP';
-  button.onclick = function () { loadMailboxSopSuggestion(message, button, detail); };
+  button.onclick = function () { loadMailboxSopSuggestion(message, button); };
   return button;
 }
 
-function loadMailboxSopSuggestion(message, button, detail) {
-  var existing = detail.querySelector('.mailbox-sop-panel');
-  if (existing) { existing.remove(); return; }
+function loadMailboxSopSuggestion(message, button) {
   var originalText = button.textContent; button.disabled = true; button.textContent = 'Searching…';
   var params = new URLSearchParams({ category: message.category || '', subject: message.subject || '' });
   fetch(window.APP_CONFIG.API_BASE_URL + '/sop/suggestion?' + params, { headers: { Authorization: 'Bearer ' + mailboxToken() } })
     .then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to search for an SOP'); return data.data; }); })
     .then(function (result) {
-      var panel = document.createElement('div'); panel.className = 'mailbox-sop-panel';
-      panel.style.cssText = 'margin-top:10px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);font-size:13px';
-      if (!result.configured) {
-        panel.textContent = 'Confluence integration is not configured.';
-      } else if (!result.candidates.length) {
-        panel.textContent = 'No matching SOP found yet' + (result.customer ? ' for ' + result.customer : '') + '. This is a text search against Confluence — it may just mean no SOP has been written for this alert.';
-      } else {
-        var label = document.createElement('div');
-        label.style.cssText = 'font-weight:700;margin-bottom:6px;color:var(--text-muted)';
-        label.textContent = (result.candidates.length > 1 ? 'Possible SOPs' : 'Possible SOP') + (result.customer ? ' for ' + result.customer : '') + ' — verify before following:';
-        panel.appendChild(label);
-        result.candidates.forEach(function (candidate) {
-          var link = document.createElement('a');
-          link.href = candidate.url; link.target = '_blank'; link.rel = 'noopener'; link.textContent = candidate.title;
-          link.style.cssText = 'display:block;color:var(--accent);text-decoration:none;margin:3px 0';
-          panel.appendChild(link);
-        });
-      }
-      var head = detail.querySelector('.mailbox-detail-head'); if (head) head.appendChild(panel);
+      if (!result.configured) { showToast('Confluence integration is not configured.', 'error'); return; }
+      var best = result.candidates && result.candidates[0];
+      if (!best) showToast('No matching SOP found yet' + (result.customer ? ' for ' + result.customer : '') + '. Opening the SOP Library to check manually.', 'info');
+      navigateToSopLibrary(result.customer, best ? best.id : null);
     })
     .catch(function (error) { showToast(error.message, 'error'); })
     .finally(function () { button.disabled = false; button.textContent = originalText; });
+}
+
+var sopLibraryData = [];
+var sopLibraryHighlight = null; // { customer, pageId } — set just before navigating here from "Find SOP"
+
+function navigateToSopLibrary(customer, pageId) {
+  sopLibraryHighlight = { customer: customer || null, pageId: pageId || null };
+  navigate('sopLibrary', document.getElementById('sopLibraryNav'));
+}
+
+function loadSopLibrary(forceRefresh) {
+  var list = document.getElementById('sopLibraryList');
+  if (list && !sopLibraryData.length) list.innerHTML = '<div class="mailbox-empty">Loading SOP library…</div>';
+  var params = forceRefresh ? '?refresh=true' : '';
+  fetch(window.APP_CONFIG.API_BASE_URL + '/sop/library' + params, { headers: { Authorization: 'Bearer ' + sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY) } })
+    .then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to load the SOP library'); return data.data; }); })
+    .then(function (data) {
+      if (!data.configured) { if (list) list.innerHTML = '<div class="mailbox-empty">Confluence integration is not configured.</div>'; return; }
+      sopLibraryData = data.customers || [];
+      renderSopLibrary();
+    })
+    .catch(function (error) { if (list) list.innerHTML = '<div class="mailbox-empty">' + error.message + '</div>'; });
+}
+
+function renderSopLibrary() {
+  var list = document.getElementById('sopLibraryList'); if (!list) return;
+  var query = String((document.getElementById('sopLibrarySearch') || {}).value || '').trim().toLowerCase();
+  var customers = sopLibraryData;
+  if (query) {
+    customers = sopLibraryData.map(function (entry) {
+      var customerMatches = entry.customer.toLowerCase().indexOf(query) > -1;
+      var pages = customerMatches ? entry.pages : entry.pages.filter(function (p) { return p.category.toLowerCase().indexOf(query) > -1 || p.title.toLowerCase().indexOf(query) > -1; });
+      return { customer: entry.customer, pages: pages };
+    }).filter(function (entry) { return entry.pages.length; });
+  }
+  if (!customers.length) { list.innerHTML = '<div class="mailbox-empty">' + (sopLibraryData.length ? 'No SOPs match this search.' : 'No SOPs found yet.') + '</div>'; return; }
+  list.innerHTML = '';
+  var highlightEl = null;
+  customers.forEach(function (entry) {
+    var card = document.createElement('div'); card.className = 'sop-library-customer';
+    var isHighlightedCustomer = sopLibraryHighlight && sopLibraryHighlight.customer && sopLibraryHighlight.customer.toLowerCase() === entry.customer.toLowerCase();
+    var name = document.createElement('div'); name.className = 'sop-library-customer-name'; name.textContent = entry.customer;
+    var pagesWrap = document.createElement('div'); pagesWrap.className = 'sop-library-pages';
+    entry.pages.forEach(function (page) {
+      var link = document.createElement('a'); link.className = 'sop-library-link'; link.href = page.url; link.target = '_blank'; link.rel = 'noopener'; link.textContent = page.category;
+      if (sopLibraryHighlight && String(sopLibraryHighlight.pageId) === String(page.id)) { link.classList.add('sop-library-highlight'); highlightEl = card; }
+      pagesWrap.appendChild(link);
+    });
+    card.append(name, pagesWrap);
+    list.appendChild(card);
+    if (isHighlightedCustomer && !highlightEl) highlightEl = card;
+  });
+  if (highlightEl) setTimeout(function () { highlightEl.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
 }
 
 // The Operations inbox receives recipient data from Graph as message.to. Keep
@@ -4331,6 +4368,10 @@ function switchRole(role) {
   // Alert Compliance nav — only if can view the alert compliance report
   el = document.getElementById('alertComplianceNav');
   if (el) el.style.display = can('view_alert_compliance_report') ? '' : 'none';
+
+  // SOP Library nav — same gate as the Operations mailbox it's linked from
+  el = document.getElementById('sopLibraryNav');
+  if (el) el.style.display = can('view_mailbox') ? '' : 'none';
 
   // Data management — roles with manage_data permission
   el = document.getElementById('dataMgmtNav');
