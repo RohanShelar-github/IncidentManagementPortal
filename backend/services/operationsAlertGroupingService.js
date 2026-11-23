@@ -110,9 +110,15 @@ function groupMessagesIntoAlerts(messages) {
     // ticket whose creation email has already aged out of the report's own
     // time window, EVERY occurrence still in the window is itself a reply,
     // leaving nothing original to prefer.
+    // Monitoring alerts (Azure/Coralogix) display their REAL subject text —
+    // normalizeAlertSubject's "STATE" placeholder exists only so the firing
+    // and resolved variants share one fingerprint, and must never leak into
+    // what users see. The group shows its chronologically latest
+    // occurrence's subject (updated below alongside lastSeen), so the row
+    // reads "...was resolved" / "Deactivated" once the alert has resolved.
     const displaySubject = message.category === 'jira'
       ? String(message.subject || '').trim().replace(/^(?:(?:re|fw|fwd)\s*:\s*)+/i, '')
-      : normalizeAlertSubject(message.subject);
+      : String(message.subject || '').replace(/\s+/g, ' ').trim();
     let group = groups.get(dayFingerprint);
     if (!group) {
       group = {
@@ -146,6 +152,7 @@ function groupMessagesIntoAlerts(messages) {
     if (receivedAt && (!group.lastSeen || new Date(receivedAt) > new Date(group.lastSeen))) {
       group.lastSeen = receivedAt;
       group.lastOccurrenceResolved = resolved;
+      if (message.category !== 'jira') group.sampleSubject = displaySubject;
     }
   });
   return Array.from(groups.values());

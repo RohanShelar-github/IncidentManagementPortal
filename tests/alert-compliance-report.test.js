@@ -1007,3 +1007,16 @@ test('the report only passes category into deriveAlertSeverity on the body-fetch
   assert.doesNotMatch(reportController, /deriveAlertSeverity\(r\.subject, ''\), r\.category\)/);
   assert.match(reportController, /const severity = deriveAlertSeverity\(r\.subject, plainMailText\(message\.body \|\| message\.preview \|\| ''\), r\.category\);/);
 });
+
+test('Azure alert groups display the real subject of their latest occurrence, never the internal "STATE" grouping placeholder', () => {
+  const messages = [
+    { id: 's2', from: 'azure@example.com', subject: 'Azure: Deactivated Severity: 0 SAV No Historian Read', receivedAt: '2026-11-17T12:39:00Z', category: 'azure' },
+    { id: 's1', from: 'azure@example.com', subject: 'Azure: Activated Severity: 0 SAV No Historian Read', receivedAt: '2026-11-17T02:24:00Z', category: 'azure' },
+    { id: 'f1', from: 'azure@example.com', subject: "Alert 'XPI_ProjectStatus' was fired", receivedAt: '2026-11-18T05:00:00Z', category: 'azure' }
+  ];
+  const groups = grouping.groupMessagesIntoAlerts(messages);
+  assert.equal(groups.length, 2, 'firing/resolved variants must still group together');
+  groups.forEach(g => assert.doesNotMatch(g.sampleSubject, /\bSTATE\b/));
+  assert.equal(groups.find(g => /Historian/.test(g.sampleSubject)).sampleSubject, 'Azure: Deactivated Severity: 0 SAV No Historian Read');
+  assert.equal(groups.find(g => /XPI/.test(g.sampleSubject)).sampleSubject, "Alert 'XPI_ProjectStatus' was fired");
+});
