@@ -10,7 +10,7 @@ const router = express.Router();
 // sopController.getSopAsset).
 router.get('/asset', getSopAsset);
 router.use(authenticateToken);
-router.get('/suggestion', requirePermission('view_mailbox'), getSopSuggestion);
-router.get('/library', requirePermission('view_mailbox'), getSopLibrary);
-router.get('/page/:id', requirePermission('view_mailbox'), getSopPage);
+router.get('/suggestion', requirePermission('view_sop_library'), getSopSuggestion);
+router.get('/library', requirePermission('view_sop_library'), getSopLibrary);
+router.get('/page/:id', requirePermission('view_sop_library'), getSopPage);
 module.exports = router;

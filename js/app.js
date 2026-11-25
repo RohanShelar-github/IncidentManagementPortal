@@ -3218,7 +3218,9 @@ function navigateInternal(page, el) {
     customer360: 'view_customer360',
     datamanagement: 'manage_data',
     alertCompliance: 'view_alert_compliance_report',
-    sopLibrary: 'view_mailbox'
+    sopLibrary: 'view_sop_library',
+    csoIncidents: 'view_cso_incidents',
+    coralogixAlerts: 'manage_coralogix_alerts'
   };
   // Dashboard blocked separately so it doesn't interfere with initial load
   if (page === 'dashboard' && !hasPermission('view_dashboard')) {
@@ -3238,7 +3240,7 @@ function navigateInternal(page, el) {
   pageEl.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   if (el) el.classList.add('active');
-  const titles = { home: 'Home', dashboard: 'Dashboard', incidents: 'Incident Management', mailbox: 'Operations', drafts: 'Draft Review', reports: 'Reports', users: 'User Management', roles: 'Role Management', customer360: 'Customer 360', alertCompliance: 'Alert Compliance', sopLibrary: 'SOP Library' };
+  const titles = { home: 'Home', dashboard: 'Dashboard', incidents: 'Incident Management', mailbox: 'Operations', drafts: 'Draft Review', reports: 'Reports', users: 'User Management', roles: 'Role Management', customer360: 'Customer 360', alertCompliance: 'Alert Compliance', sopLibrary: 'SOP Library', csoIncidents: 'Jira Ticket Management', coralogixAlerts: 'Alert Management' };
   if (page === 'home') renderHomePage();
   var _tbt = document.getElementById('topbarTitle'); if (_tbt) _tbt.textContent = titles[page] || page;
   if (page === 'incidents') renderIncidentTable();
@@ -3264,6 +3266,8 @@ function navigateInternal(page, el) {
   }
   if (page === 'alertCompliance') loadAlertComplianceReport();
   if (page === 'sopLibrary') loadSopLibrary();
+  if (page === 'csoIncidents') loadCsoIncidents();
+  if (page === 'coralogixAlerts') loadCoralogixAlerts();
   updateStatusBar();
   closeSidebar();
 }
@@ -4417,6 +4421,634 @@ function openSopLibraryPage(page) {
     .catch(function (error) { loading.textContent = error.message; });
 }
 
+// ─── CSO INCIDENTS (customer-raised Jira tickets) ─────────────
+// Same tree-of-customers / content-pane shape as SOP Library (reuses its
+// .sop-library-* CSS — a generic two-pane layout, nothing SOP-specific about
+// it). Each ticket row opens the shared renderJiraTicketPanel, the same
+// panel embedded in the Operations mailbox detail view below for a
+// Customer Raised Ticket email, so both surfaces show/act on identical data.
+var csoIncidentsData = [];
+var csoIncidentsExpanded = {}; // customer name (lowercased) -> bool
+var csoIncidentsActiveKey = null;
+
+function loadCsoIncidents(forceRefresh, callback) {
+  var tree = document.getElementById('csoIncidentsTree');
+  if (tree && !csoIncidentsData.length) tree.innerHTML = '<div class="mailbox-empty">Loading CSO Incidents…</div>';
+  var params = forceRefresh ? '?refresh=true' : '';
+  fetch(window.APP_CONFIG.API_BASE_URL + '/jira/cso-incidents' + params, { headers: { Authorization: 'Bearer ' + sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY) } })
+    .then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to load CSO Incidents'); return data.data; }); })
+    .then(function (data) {
+      if (!data.configured) { if (tree) tree.innerHTML = '<div class="mailbox-empty">Jira integration is not configured.</div>'; if (callback) callback(null); return; }
+      csoIncidentsData = data.customers || [];
+      renderCsoIncidentsTree();
+      if (callback) callback(null);
+    })
+    .catch(function (error) { if (tree) tree.innerHTML = '<div class="mailbox-empty">' + error.message + '</div>'; if (callback) callback(error); });
+}
+
+function refreshCsoIncidents(event) {
+  if (event && event.preventDefault) event.preventDefault();
+  setPageRefreshState('csoIncidents', true);
+  loadCsoIncidents(true, function (error) {
+    setPageRefreshState('csoIncidents', false, error ? (error.message || 'Refresh failed') : '');
+    showToast(error ? ('Refresh failed: ' + error.message) : 'CSO Incidents refreshed', error ? 'error' : 'success');
+  });
+}
+
+function renderCsoIncidentsTree() {
+  var tree = document.getElementById('csoIncidentsTree'); if (!tree) return;
+  var query = String((document.getElementById('csoIncidentsSearch') || {}).value || '').trim().toLowerCase();
+  var customers = csoIncidentsData;
+  if (query) {
+    customers = csoIncidentsData.map(function (entry) {
+      var customerMatches = entry.customer.toLowerCase().indexOf(query) > -1;
+      var tickets = customerMatches ? entry.tickets : entry.tickets.filter(function (t) { return t.key.toLowerCase().indexOf(query) > -1 || (t.summary || '').toLowerCase().indexOf(query) > -1; });
+      return { customer: entry.customer, tickets: tickets };
+    }).filter(function (entry) { return entry.tickets.length; });
+    customers.forEach(function (entry) { csoIncidentsExpanded[entry.customer.toLowerCase()] = true; });
+  }
+  tree.innerHTML = '';
+  if (!customers.length) { tree.innerHTML = '<div class="mailbox-empty">' + (csoIncidentsData.length ? 'No tickets match this search.' : 'No customer-raised tickets found yet.') + '</div>'; return; }
+  customers.forEach(function (entry) {
+    var key = entry.customer.toLowerCase();
+    var expanded = !!csoIncidentsExpanded[key];
+    var row = document.createElement('div'); row.className = 'sop-library-customer-row';
+    var label = document.createElement('span'); label.textContent = entry.customer + ' (' + entry.tickets.length + ')';
+    var caret = document.createElement('span'); caret.textContent = expanded ? '▾' : '▸';
+    row.append(label, caret);
+    var ticketsWrap = document.createElement('div'); ticketsWrap.className = 'sop-library-pages-tree' + (expanded ? ' expanded' : '');
+    entry.tickets.forEach(function (ticket) {
+      var ticketRow = document.createElement('div'); ticketRow.className = 'sop-library-page-row';
+      var ticketKey = document.createElement('strong'); ticketKey.textContent = ticket.key + ' ';
+      var ticketSummary = document.createElement('span'); ticketSummary.textContent = ticket.summary || '';
+      ticketRow.append(ticketKey, ticketSummary);
+      ticketRow.title = ticket.status || '';
+      if (csoIncidentsActiveKey && csoIncidentsActiveKey === ticket.key) ticketRow.classList.add('active');
+      ticketRow.onclick = function () { openCsoIncidentTicket(ticket.key); };
+      ticketsWrap.appendChild(ticketRow);
+    });
+    row.onclick = function () { csoIncidentsExpanded[key] = !csoIncidentsExpanded[key]; renderCsoIncidentsTree(); };
+    tree.append(row, ticketsWrap);
+  });
+}
+
+function openCsoIncidentTicket(issueKey) {
+  csoIncidentsActiveKey = issueKey;
+  renderCsoIncidentsTree();
+  var content = document.getElementById('csoIncidentsContent'); if (!content) return;
+  renderJiraTicketPanel(content, issueKey);
+}
+
+// ─── CORALOGIX ALERT MANAGEMENT ───────────────────────────────
+// Snooze (disable for 1/3/24 hours, auto re-enabled server-side by
+// coralogixSnoozeScheduler.js — Coralogix's own API has no native
+// time-boxed snooze, confirmed against its public SDK) and tune
+// (threshold/wait-time) a real Coralogix alert. Every write here reaches
+// the live Coralogix API directly — there is no local shadow copy.
+var coralogixAlertsData = [];
+var coralogixAlertsSearch = '';
+var coralogixAlertsStatusFilter = '';
+var coralogixCurrentPage = 1;
+var coralogixPerPage = 25;
+var coralogixMetricTimeWindows = [];
+var coralogixLogsTimeWindows = [];
+var coralogixMetricConditionTypes = [];
+var coralogixLogsConditionTypes = [];
+var coralogixTuneAlertId = null;
+var coralogixSelectedGroup = null; // null = All Customers; '__others__' = generic/universal alerts; otherwise a customer name
+
+function loadCoralogixAlerts(forceRefresh, callback) {
+  var tbody = document.getElementById('coralogixAlertsTableBody');
+  if (tbody && !coralogixAlertsData.length) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px">Loading alerts…</td></tr>';
+  var params = forceRefresh ? '?refresh=true' : '';
+  fetch(window.APP_CONFIG.API_BASE_URL + '/coralogix/alerts' + params, { headers: { Authorization: 'Bearer ' + sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY) } })
+    .then(function (response) { return response.json().then(function (data) { if (!response.ok || !data.success) throw new Error(data.message || 'Unable to load Coralogix alerts'); return data.data; }); })
+    .then(function (data) {
+      if (!data.configured) { if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px">Coralogix integration is not configured.</td></tr>'; if (callback) callback(null); return; }
+      coralogixAlertsData = data.alerts || [];
+      coralogixMetricTimeWindows = data.metricTimeWindows || [];
+      coralogixLogsTimeWindows = data.logsTimeWindows || [];
+      coralogixMetricConditionTypes = data.metricConditionTypes || [];
+      coralogixLogsConditionTypes = data.logsConditionTypes || [];
+      renderCoralogixAlertsGroupTree();
+      renderCoralogixAlertsTable();
+      if (callback) callback(null);
+    })
+    .catch(function (error) { if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--danger)">' + error.message + '</td></tr>'; if (callback) callback(error); });
+}
+
+function refreshCoralogixAlerts(event) {
+  if (event && event.preventDefault) event.preventDefault();
+  setPageRefreshState('coralogixAlerts', true);
+  loadCoralogixAlerts(true, function (error) {
+    setPageRefreshState('coralogixAlerts', false, error ? (error.message || 'Refresh failed') : '');
+    showToast(error ? ('Refresh failed: ' + error.message) : 'Coralogix alerts refreshed', error ? 'error' : 'success');
+  });
+}
+
+function coralogixAlertsFilterChanged() {
+  coralogixCurrentPage = 1;
+  renderCoralogixAlertsTable();
+}
+
+function coralogixAlertsChangePerPage(val) {
+  coralogixPerPage = parseInt(val, 10) || 25;
+  coralogixCurrentPage = 1;
+  renderCoralogixAlertsTable();
+}
+
+function coralogixFilteredAlerts() {
+  var query = String((document.getElementById('coralogixAlertsSearch') || {}).value || '').trim().toLowerCase();
+  var status = String((document.getElementById('coralogixAlertsStatusFilter') || {}).value || '');
+  return coralogixAlertsData.filter(function (a) {
+    if (coralogixSelectedGroup === '__others__' && a.customer) return false;
+    if (coralogixSelectedGroup && coralogixSelectedGroup !== '__others__' && a.customer !== coralogixSelectedGroup) return false;
+    if (query && a.name.toLowerCase().indexOf(query) === -1) return false;
+    if (status === 'enabled' && !a.enabled) return false;
+    if (status === 'disabled' && a.enabled) return false;
+    if (status === 'snoozed' && !a.snoozedUntil) return false;
+    return true;
+  });
+}
+
+// Groups alerts by customer (attributed server-side — see
+// coralogixController.attachCustomerInfo), with every alert matching no
+// known customer (a universal/generic alert) collapsed into one "Others"
+// node, pinned last regardless of alphabetical order since it's a
+// catch-all, not a real customer. Each customer/Others node expands to
+// list its alerts by name directly in the tree (not just a separate
+// click-to-filter-the-table interaction) — clicking one of those narrows
+// the table to exactly that alert.
+var coralogixGroupExpanded = {}; // group key (customer name or '__others__') -> bool
+
+function coralogixSelectGroup(group, alertName) {
+  coralogixSelectedGroup = group;
+  coralogixAlertsSearch = alertName || '';
+  coralogixCurrentPage = 1;
+  var title = document.getElementById('coralogixAlertsGroupTitle');
+  if (title) title.textContent = group === null ? 'All Customers' : group === '__others__' ? 'Others (generic / universal alerts)' : group;
+  var searchInput = document.getElementById('coralogixAlertsSearch');
+  if (searchInput) searchInput.value = coralogixAlertsSearch;
+  renderCoralogixAlertsGroupTree();
+  renderCoralogixAlertsTable();
+}
+
+function renderCoralogixAlertsGroupTree() {
+  var tree = document.getElementById('coralogixAlertsGroupTree'); if (!tree) return;
+  var byCustomer = {};
+  var othersAlerts = [];
+  coralogixAlertsData.forEach(function (a) { if (a.customer) { (byCustomer[a.customer] = byCustomer[a.customer] || []).push(a); } else othersAlerts.push(a); });
+  var customerNames = Object.keys(byCustomer).sort(function (a, b) { return a.localeCompare(b); });
+
+  var allActive = coralogixSelectedGroup === null;
+  var html = '<div class="sop-library-page-row' + (allActive ? ' active' : '') + '" onclick="coralogixSelectGroup(null)">All Customers (' + coralogixAlertsData.length + ')</div>';
+
+  var groupBlock = function (key, label, alerts) {
+    var expanded = !!coralogixGroupExpanded[key];
+    var active = coralogixSelectedGroup === key;
+    var row = '<div class="sop-library-customer-row' + (active ? ' active' : '') + '" onclick="coralogixToggleGroupExpand(\'' + key.replace(/'/g, "\\'") + '\')">'
+      + '<span>' + escapeMetricHtml(label) + ' (' + alerts.length + ')</span><span>' + (expanded ? '▾' : '▸') + '</span></div>';
+    var children = '<div class="sop-library-pages-tree' + (expanded ? ' expanded' : '') + '">'
+      + alerts.map(function (a) {
+        return '<div class="coralogix-alert-tree-row" title="' + escapeMetricHtml(a.name) + '" onclick="event.stopPropagation(); coralogixSelectGroup(\'' + key.replace(/'/g, "\\'") + '\', \'' + a.name.replace(/'/g, "\\'").replace(/"/g, '&quot;') + '\')">' + escapeMetricHtml(a.name) + '</div>';
+      }).join('')
+      + '</div>';
+    return row + children;
+  };
+
+  html += customerNames.map(function (name) { return groupBlock(name, name, byCustomer[name]); }).join('');
+  html += groupBlock('__others__', 'Others', othersAlerts);
+  tree.innerHTML = html;
+}
+
+function coralogixToggleGroupExpand(key) {
+  coralogixGroupExpanded[key] = !coralogixGroupExpanded[key];
+  coralogixSelectGroup(key);
+}
+
+function coralogixStatusBadge(alert) {
+  if (alert.snoozedUntil) return '<span class="badge badge-high">Snoozed until ' + escapeMetricHtml(mailboxDate(alert.snoozedUntil)) + '</span>';
+  return alert.enabled ? '<span class="badge badge-closed">Enabled</span>' : '<span class="badge badge-critical">Disabled</span>';
+}
+
+function renderCoralogixAlertsTable() {
+  var tbody = document.getElementById('coralogixAlertsTableBody'); if (!tbody) return;
+  var rows = coralogixFilteredAlerts();
+  var countEl = document.getElementById('coralogixAlertsRowCount');
+  if (countEl) countEl.textContent = rows.length + ' alert' + (rows.length === 1 ? '' : 's');
+  var totalPages = Math.max(1, Math.ceil(rows.length / coralogixPerPage));
+  if (coralogixCurrentPage > totalPages) coralogixCurrentPage = totalPages;
+  if (coralogixCurrentPage < 1) coralogixCurrentPage = 1;
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px">No alerts match this search.</td></tr>';
+    coralogixRenderPagination(0);
+    return;
+  }
+  var start = (coralogixCurrentPage - 1) * coralogixPerPage;
+  var pageRows = rows.slice(start, start + coralogixPerPage);
+  tbody.innerHTML = pageRows.map(function (a) {
+    var actions = '';
+    if (a.snoozedUntil) {
+      actions = '<button class="btn btn-secondary btn-sm" onclick="coralogixUnsnoozeAlert(\'' + escapeMetricHtml(a.id) + '\', this)" title="Cancel the snooze and re-enable this alert now">Unsnooze</button>';
+    } else if (a.enabled) {
+      // One "Snooze ▾" dropdown with the three fixed duration presets —
+      // matches Coralogix's own snooze UI, instead of three always-visible
+      // bare "1H"/"3H"/"24H" buttons with no label.
+      var safeName = escapeMetricHtml(a.name).replace(/'/g, '&#39;');
+      actions = '<div class="coralogix-snooze-dropdown-wrap" style="position:relative;display:inline-block">'
+        + '<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); coralogixToggleSnoozeMenu(this)">Snooze ▾</button>'
+        + '<div class="coralogix-snooze-menu">'
+        + [[60, '1 hour'], [180, '3 hours'], [1440, '24 hours']].map(function (pair) {
+          return '<div class="coralogix-snooze-menu-item" onclick="coralogixSnoozeAlert(\'' + escapeMetricHtml(a.id) + '\', \'' + safeName + '\', ' + pair[0] + ', this)">Snooze for ' + pair[1] + '</div>';
+        }).join('')
+        + '</div></div>';
+    } else {
+      actions = '<button class="btn btn-secondary btn-sm" onclick="coralogixUnsnoozeAlert(\'' + escapeMetricHtml(a.id) + '\', this)" title="Re-enable this alert">Enable</button>';
+    }
+    actions += '<button class="btn btn-secondary btn-sm" title="Edit this alert\'s name, description, query and (where supported) threshold/wait time" onclick="coralogixOpenTuneModal(\'' + escapeMetricHtml(a.id) + '\')">Edit</button>';
+    // The row itself opens a read-only detail view (status, description,
+    // query, threshold) — the same "click a row to view, click Edit to
+    // change it" split already used elsewhere (e.g. Alert Compliance).
+    // The actions cell stops that click from also bubbling up to the row.
+    return '<tr onclick="coralogixOpenDetailModal(\'' + escapeMetricHtml(a.id) + '\')" style="cursor:pointer">'
+      + '<td style="max-width:360px">' + escapeMetricHtml(a.name) + '</td>'
+      + '<td>' + escapeMetricHtml((a.type || '').replace('ALERT_DEF_TYPE_', '').replace(/_/g, ' ')) + '</td>'
+      + '<td>' + escapeMetricHtml((a.priority || '').replace('ALERT_DEF_PRIORITY_', '')) + '</td>'
+      + '<td>' + (a.tunable ? escapeMetricHtml(String(a.threshold)) + ' / ' + escapeMetricHtml(a.timeWindowLabel) : '<span style="color:var(--text-muted)">—</span>') + '</td>'
+      + '<td>' + coralogixStatusBadge(a) + '</td>'
+      + '<td onclick="event.stopPropagation()"><div style="display:flex;gap:4px;flex-wrap:wrap">' + actions + '</div></td>'
+      + '</tr>';
+  }).join('');
+  coralogixRenderPagination(rows.length);
+}
+
+function coralogixRenderPagination(total) {
+  var totalPages = Math.max(1, Math.ceil(total / coralogixPerPage));
+  var start = total === 0 ? 0 : (coralogixCurrentPage - 1) * coralogixPerPage;
+  var end = Math.min(start + coralogixPerPage, total);
+  var infoEl = document.getElementById('coralogixAlertsPaginationInfo');
+  if (infoEl) infoEl.textContent = total === 0 ? 'No alerts found' : 'Showing ' + (start + 1) + '–' + end + ' of ' + total + ' alerts';
+  var container = document.getElementById('coralogixAlertsPaginationBtns'); if (!container) return;
+  container.innerHTML = '';
+  var prev = document.createElement('button'); prev.className = 'pg-btn'; prev.innerHTML = '&#8592;'; prev.disabled = coralogixCurrentPage === 1;
+  prev.onclick = function () { coralogixCurrentPage -= 1; renderCoralogixAlertsTable(); };
+  var next = document.createElement('button'); next.className = 'pg-btn'; next.innerHTML = '&#8594;'; next.disabled = coralogixCurrentPage >= totalPages;
+  next.onclick = function () { coralogixCurrentPage += 1; renderCoralogixAlertsTable(); };
+  container.append(prev, next);
+}
+
+function coralogixToggleSnoozeMenu(button) {
+  var menu = button.nextElementSibling; if (!menu) return;
+  var wasOpen = menu.classList.contains('open');
+  document.querySelectorAll('.coralogix-snooze-menu.open').forEach(function (el) { el.classList.remove('open'); });
+  if (!wasOpen) menu.classList.add('open');
+}
+document.addEventListener('click', function (e) {
+  if (!e.target.closest('.coralogix-snooze-dropdown-wrap')) {
+    document.querySelectorAll('.coralogix-snooze-menu.open').forEach(function (el) { el.classList.remove('open'); });
+  }
+}, true);
+
+function coralogixSnoozeAlert(id, name, minutes, button) {
+  var original = button.textContent; button.disabled = true; button.textContent = '…';
+  var token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  fetch(window.APP_CONFIG.API_BASE_URL + '/coralogix/alerts/' + encodeURIComponent(id) + '/snooze', {
+    method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ durationMinutes: minutes, alertName: name })
+  }).then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.success) throw new Error(d.message || 'Unable to snooze this alert'); return d.data; }); })
+    .then(function (data) {
+      showToast('Alert snoozed', 'success');
+      var row = coralogixAlertsData.find(function (a) { return a.id === id; });
+      if (row) row.snoozedUntil = data.snoozedUntil;
+      renderCoralogixAlertsTable();
+    })
+    .catch(function (error) { showToast(error.message, 'error'); button.disabled = false; button.textContent = original; });
+}
+
+function coralogixUnsnoozeAlert(id, button) {
+  var original = button.textContent; button.disabled = true; button.textContent = '…';
+  var token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  fetch(window.APP_CONFIG.API_BASE_URL + '/coralogix/alerts/' + encodeURIComponent(id) + '/unsnooze', {
+    method: 'POST', headers: { Authorization: 'Bearer ' + token }
+  }).then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.success) throw new Error(d.message || 'Unable to re-enable this alert'); }); })
+    .then(function () {
+      showToast('Alert enabled', 'success');
+      var row = coralogixAlertsData.find(function (a) { return a.id === id; });
+      if (row) { row.snoozedUntil = null; row.enabled = true; }
+      renderCoralogixAlertsTable();
+    })
+    .catch(function (error) { showToast(error.message, 'error'); button.disabled = false; button.textContent = original; });
+}
+
+// Opens the Edit modal for ANY alert (not just tunable ones) — fetches the
+// full detail (description/query aren't sent in the 485-row list response,
+// see coralogixService.toAlertDetail) fresh from Coralogix, so the editor
+// always starts from the real current content, never a stale list copy.
+// Read-only detail view, opened by clicking the alert row itself (the
+// Snooze/Unsnooze/Edit buttons in the actions cell stop that click from
+// bubbling up) — same "click a row to view, click Edit to change it" split
+// already used for Alert Compliance's rows. Fetches the full detail fresh
+// (description/query aren't in the lighter list response), so it's never a
+// stale copy either.
+var coralogixDetailAlertId = null;
+
+function coralogixOpenDetailModal(id) {
+  coralogixDetailAlertId = id;
+  var title = document.getElementById('coralogixDetailTitle'); if (title) title.textContent = 'Loading…';
+  var badges = document.getElementById('coralogixDetailBadges'); if (badges) badges.innerHTML = '';
+  var meta = document.getElementById('coralogixDetailMetaGrid'); if (meta) meta.innerHTML = '';
+  var descriptionEl = document.getElementById('coralogixDetailDescription'); if (descriptionEl) descriptionEl.textContent = '';
+  var queryEl = document.getElementById('coralogixDetailQuery'); if (queryEl) queryEl.textContent = '';
+  var conditionTextElInit = document.getElementById('coralogixDetailConditionText'); if (conditionTextElInit) conditionTextElInit.textContent = '';
+  openModal('coralogixDetailModal');
+  var token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  fetch(window.APP_CONFIG.API_BASE_URL + '/coralogix/alerts/' + encodeURIComponent(id), { headers: { Authorization: 'Bearer ' + token } })
+    .then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.success) throw new Error(d.message || 'Unable to load this alert'); return d.data; }); })
+    .then(function (alert) {
+      if (title) title.textContent = alert.name;
+      if (badges) {
+        badges.innerHTML = coralogixStatusBadge(alert)
+          + '<span class="badge badge-medium">' + escapeMetricHtml((alert.type || '').replace('ALERT_DEF_TYPE_', '').replace(/_/g, ' ')) + '</span>'
+          + '<span class="badge badge-medium">' + escapeMetricHtml((alert.priority || '').replace('ALERT_DEF_PRIORITY_', '')) + '</span>';
+      }
+      if (meta) {
+        var fields = [['Customer', alert.customer || '—'], ['Threshold', alert.tunable ? (alert.threshold + ' / ' + alert.timeWindowLabel) : '—'], ['Last Updated', acFormatTimestamp(alert.updatedTime)]];
+        meta.innerHTML = fields.map(function (f) { return '<div class="detail-field"><div class="detail-field-label">' + escapeMetricHtml(f[0]) + '</div><div class="detail-field-value">' + escapeMetricHtml(f[1]) + '</div></div>'; }).join('');
+      }
+      if (descriptionEl) descriptionEl.textContent = alert.description || 'No description.';
+      var querySection = document.getElementById('coralogixDetailQuerySection');
+      if (querySection) querySection.style.display = alert.query === null ? 'none' : '';
+      if (queryEl) queryEl.textContent = alert.query || '';
+      // Mirrors Coralogix's own "Conditions" panel wording exactly (e.g.
+      // "When the query returns a value of less than 1 for at least 10
+      // minutes" / "When there is no data: Set OK" / "Auto retire
+      // undetected values: Never") — confirmed live against this real
+      // alert's own condition fields.
+      var conditionsSection = document.getElementById('coralogixDetailConditionsSection');
+      if (conditionsSection) conditionsSection.style.display = alert.conditionText ? '' : 'none';
+      var conditionTextEl = document.getElementById('coralogixDetailConditionText');
+      if (conditionTextEl) conditionTextEl.textContent = alert.conditionText || '';
+      var noDataEl = document.getElementById('coralogixDetailNoData');
+      if (noDataEl) noDataEl.textContent = (alert.undetectedValues && alert.undetectedValues.noDataLabel) || '—';
+      var autoRetireEl = document.getElementById('coralogixDetailAutoRetire');
+      if (autoRetireEl) autoRetireEl.textContent = (alert.undetectedValues && alert.undetectedValues.autoRetireLabel) || '—';
+    })
+    .catch(function (error) { if (title) title.textContent = 'Alert Detail'; showToast(error.message, 'error'); });
+}
+
+function coralogixEditFromDetail() {
+  var id = coralogixDetailAlertId; if (!id) return;
+  closeModal('coralogixDetailModal');
+  coralogixOpenTuneModal(id);
+}
+
+function coralogixOpenTuneModal(id) {
+  var listAlert = coralogixAlertsData.find(function (a) { return a.id === id; }); if (!listAlert) return;
+  coralogixTuneAlertId = id;
+  var title = document.getElementById('coralogixTuneTitle'); if (title) title.textContent = 'Loading…';
+  var nameInput = document.getElementById('coralogixTuneName');
+  var descriptionInput = document.getElementById('coralogixTuneDescription');
+  var queryInput = document.getElementById('coralogixTuneQuery');
+  if (nameInput) nameInput.value = '';
+  if (descriptionInput) descriptionInput.value = '';
+  if (queryInput) queryInput.value = '';
+  openModal('coralogixTuneModal');
+  var token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  fetch(window.APP_CONFIG.API_BASE_URL + '/coralogix/alerts/' + encodeURIComponent(id), { headers: { Authorization: 'Bearer ' + token } })
+    .then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.success) throw new Error(d.message || 'Unable to load this alert'); return d.data; }); })
+    .then(function (alert) {
+      if (title) title.textContent = 'Edit — ' + alert.name;
+      if (nameInput) nameInput.value = alert.name;
+      if (descriptionInput) descriptionInput.value = alert.description || '';
+      var querySection = document.getElementById('coralogixTuneQuerySection');
+      if (querySection) querySection.style.display = alert.query === null ? 'none' : '';
+      if (queryInput) queryInput.value = alert.query || '';
+      var thresholdSection = document.getElementById('coralogixTuneThresholdSection');
+      if (thresholdSection) thresholdSection.style.display = alert.tunable ? 'flex' : 'none';
+      var thresholdInput = document.getElementById('coralogixTuneThreshold'); if (thresholdInput) thresholdInput.value = alert.threshold;
+      var windowSelect = document.getElementById('coralogixTuneTimeWindow');
+      if (windowSelect) {
+        var options = alert.type === 'ALERT_DEF_TYPE_LOGS_THRESHOLD' ? coralogixLogsTimeWindows : coralogixMetricTimeWindows;
+        windowSelect.innerHTML = options.map(function (w) { return '<option value="' + w.value + '"' + (w.value === alert.timeWindowValue ? ' selected' : '') + '>' + escapeMetricHtml(w.label) + '</option>'; }).join('');
+      }
+      var conditionTypeSelect = document.getElementById('coralogixTuneConditionType');
+      if (conditionTypeSelect) {
+        var conditionOptions = alert.type === 'ALERT_DEF_TYPE_LOGS_THRESHOLD' ? coralogixLogsConditionTypes : coralogixMetricConditionTypes;
+        conditionTypeSelect.innerHTML = conditionOptions.map(function (c) { return '<option value="' + c.value + '"' + (c.value === alert.conditionType ? ' selected' : '') + '>' + escapeMetricHtml(c.label) + '</option>'; }).join('');
+      }
+    })
+    .catch(function (error) { if (title) title.textContent = 'Edit Alert'; showToast(error.message, 'error'); });
+}
+
+function coralogixSaveTune() {
+  var id = coralogixTuneAlertId; if (!id) return;
+  var body = {
+    name: document.getElementById('coralogixTuneName').value,
+    description: document.getElementById('coralogixTuneDescription').value
+  };
+  var querySection = document.getElementById('coralogixTuneQuerySection');
+  if (querySection && querySection.style.display !== 'none') body.query = document.getElementById('coralogixTuneQuery').value;
+  var thresholdSection = document.getElementById('coralogixTuneThresholdSection');
+  if (thresholdSection && thresholdSection.style.display !== 'none') {
+    body.threshold = document.getElementById('coralogixTuneThreshold').value;
+    body.timeWindowValue = document.getElementById('coralogixTuneTimeWindow').value;
+    body.conditionType = document.getElementById('coralogixTuneConditionType').value;
+  }
+  var saveBtn = document.getElementById('coralogixTuneSaveBtn');
+  var original = saveBtn.textContent; saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+  var token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  fetch(window.APP_CONFIG.API_BASE_URL + '/coralogix/alerts/' + encodeURIComponent(id), {
+    method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+  }).then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.success) throw new Error(d.message || 'Unable to update this alert'); }); })
+    .then(function () {
+      showToast('Alert updated', 'success');
+      closeModal('coralogixTuneModal');
+      loadCoralogixAlerts(true);
+    })
+    .catch(function (error) { showToast(error.message, 'error'); })
+    .finally(function () { saveBtn.disabled = false; saveBtn.textContent = original; });
+}
+
+// Sanitizes Jira's own rendered comment HTML (expand=renderedBody — already
+// resolved from Atlassian Document Format, same idea as Confluence's
+// body.view) the same way sopPageSafeHtml sanitizes Confluence content:
+// strip scripts/forms/event handlers, allow only safe href/src schemes,
+// wrap in a small themed document for the sandboxed iframe.
+// Up to two initials from a display name — same convention as the sidebar
+// avatar (currentUserName split on spaces, first letter of each part).
+function jiraInitials(name) {
+  var parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  return parts.map(function (p) { return p[0] || ''; }).join('').substring(0, 2).toUpperCase() || '?';
+}
+
+// A small fixed palette, picked deterministically from the author's name so
+// the same person always gets the same avatar color across comments —
+// mirrors Jira's own per-person avatar coloring, without needing their real
+// profile photos (Jira's API would require OAuth/session for those, the
+// same restriction already hit for embedded images — see
+// rewriteConfluenceImageSrcs's comment in confluenceService.js).
+var JIRA_AVATAR_COLORS = ['#0052cc', '#00875a', '#974ff7', '#ff5630', '#ffab00', '#6554c0', '#00a3bf', '#de350b'];
+function jiraAvatarColor(name) {
+  var str = String(name || ''); var hash = 0;
+  for (var i = 0; i < str.length; i += 1) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  return JIRA_AVATAR_COLORS[hash % JIRA_AVATAR_COLORS.length];
+}
+
+// Shared by the description and every comment body — both are Jira's own
+// rendered HTML for customer/agent-authored rich text, sanitized the same
+// way sopPageSafeHtml sanitizes Confluence content: strip scripts/forms/
+// event handlers, allow only safe href/src schemes.
+function jiraSanitizeFragment(rawHtml) {
+  var documentValue = new DOMParser().parseFromString(String(rawHtml || ''), 'text/html');
+  documentValue.querySelectorAll('script,iframe,object,embed,form,input,button,textarea,select,meta,base,link,style').forEach(function (node) { node.remove(); });
+  documentValue.querySelectorAll('*').forEach(function (node) {
+    Array.from(node.attributes).forEach(function (attribute) {
+      var name = attribute.name.toLowerCase(), raw = String(attribute.value || '').trim(), scheme = raw.toLowerCase();
+      if (name.indexOf('on') === 0 || name === 'srcdoc') node.removeAttribute(attribute.name);
+      else if ((name === 'href' || name === 'src') && !/^(https:|mailto:|data:image\/)/i.test(raw)) node.removeAttribute(attribute.name);
+      else if (name === 'style' && /expression\s*\(|javascript:|behavior\s*:/i.test(scheme)) node.removeAttribute(attribute.name);
+    });
+    if (node.tagName === 'A') { node.setAttribute('target', '_blank'); node.setAttribute('rel', 'noopener noreferrer'); }
+  });
+  return documentValue.body.innerHTML;
+}
+
+function jiraFragmentThemeCss(palette, useLightTheme) {
+  return 'html,body{margin:0;background:' + palette.bg + ';color:' + palette.text + ';font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:13px;line-height:1.5}'
+    + 'body{padding:14px 16px;box-sizing:border-box}'
+    + 'p{margin:0 0 8px}a,a:visited{color:' + palette.link + ';text-decoration:none}a:hover{text-decoration:underline}'
+    // Jira ops-ticket content commonly embeds a small key/value table
+    // (confirmed against real ticket markup: .confluenceTable/-Th/-Td
+    // classes, reused from Confluence's own renderer) — otherwise unstyled
+    // table/td/th render with no borders/spacing at all.
+    + 'table{border-collapse:collapse;width:100%;margin:6px 0}td,th{border:1px solid ' + palette.border + ';padding:5px 8px;text-align:left;vertical-align:top}th{background:' + (useLightTheme ? '#f4f5f7' : '#22272b') + '}';
+}
+
+function jiraThemePalette(useLightTheme) {
+  try { useLightTheme = !!useLightTheme || localStorage.getItem('mc_theme') === 'light'; } catch (_) { useLightTheme = !!useLightTheme; }
+  return useLightTheme
+    ? { bg: '#ffffff', text: '#172b4d', muted: '#44546f', border: '#dfe1e6', link: '#0052cc' }
+    : { bg: '#1d2125', text: '#dcdfe4', muted: '#9fadbc', border: '#454f59', link: '#85b8ff' };
+}
+
+function jiraDescriptionSafeHtml(html, useLightTheme) {
+  var palette = jiraThemePalette(useLightTheme);
+  var body = jiraSanitizeFragment(html) || '<div style="color:' + palette.muted + '">No description.</div>';
+  return '<!doctype html><html><head><meta charset="utf-8"><style>' + jiraFragmentThemeCss(palette, useLightTheme) + '</style></head><body>' + body + '</body></html>';
+}
+
+function jiraCommentsSafeHtml(comments, useLightTheme) {
+  var palette = jiraThemePalette(useLightTheme);
+  var blocks = (comments || []).map(function (comment) {
+    return '<div class="jira-comment">'
+      + '<div class="jira-comment-avatar" style="background:' + jiraAvatarColor(comment.author) + '">' + escapeMetricHtml(jiraInitials(comment.author)) + '</div>'
+      + '<div class="jira-comment-main">'
+      + '<div class="jira-comment-meta"><span class="jira-comment-author">' + escapeMetricHtml(comment.author) + '</span><span class="jira-comment-date">' + escapeMetricHtml(mailboxDate(comment.created)) + '</span></div>'
+      + '<div class="jira-comment-body">' + jiraSanitizeFragment(comment.html) + '</div>'
+      + '</div></div>';
+  });
+  var themeCss = jiraFragmentThemeCss(palette, useLightTheme)
+    + '.jira-comment{display:flex;gap:10px;padding:12px 0;border-bottom:1px solid ' + palette.border + '}.jira-comment:last-child{border-bottom:0}'
+    + '.jira-comment-avatar{flex-shrink:0;width:28px;height:28px;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}'
+    + '.jira-comment-main{flex:1;min-width:0}'
+    + '.jira-comment-meta{margin-bottom:4px}'
+    + '.jira-comment-author{font-weight:700;color:' + palette.text + ';font-size:12.5px;margin-right:8px}'
+    + '.jira-comment-date{font-size:11.5px;color:' + palette.muted + '}';
+  return '<!doctype html><html><head><meta charset="utf-8"><style>' + themeCss + '</style></head><body>' + (blocks.length ? blocks.join('') : '<div style="color:' + palette.muted + '">No comments yet.</div>') + '</body></html>';
+}
+
+// Shared by both the CSO Incidents page's content pane and the Operations
+// mailbox detail view (for a Customer Raised Ticket email) — one Jira ticket
+// panel implementation, not two, since both act on identical data.
+function renderJiraTicketPanel(container, issueKey, options) {
+  if (!container || !issueKey) return;
+  var commentsOnly = !!(options && options.commentsOnly);
+  container.innerHTML = '<div class="mailbox-empty">Loading ticket…</div>';
+  var token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  var authHeaders = { Authorization: 'Bearer ' + token };
+  var base = window.APP_CONFIG.API_BASE_URL + '/jira/issue/' + encodeURIComponent(issueKey);
+  Promise.all([
+    fetch(base, { headers: authHeaders }).then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.success) throw new Error(d.message || 'Unable to load this ticket'); return d.data; }); }),
+    fetch(base + '/transitions', { headers: authHeaders }).then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.success) throw new Error(d.message || 'Unable to load status options'); return d.data.transitions || []; }); }),
+    fetch(base + '/comments', { headers: authHeaders }).then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.success) throw new Error(d.message || 'Unable to load comments'); return d.data.comments || []; }); })
+  ]).then(function (results) {
+    var issue = results[0], transitions = results[1], comments = results[2];
+    container.innerHTML = '';
+    var panel = document.createElement('div'); panel.className = 'jira-ticket-panel';
+
+    var header = document.createElement('div'); header.className = 'jira-ticket-header';
+    var titleRow = document.createElement('div'); titleRow.className = 'jira-ticket-title-row';
+    var keyEl = document.createElement('strong'); keyEl.textContent = issue.key;
+    var openLink = document.createElement('a'); openLink.href = issue.url; openLink.target = '_blank'; openLink.rel = 'noopener'; openLink.className = 'btn btn-secondary btn-sm'; openLink.textContent = 'Open in Jira ↗';
+    titleRow.append(keyEl, openLink);
+    var summaryEl = document.createElement('div'); summaryEl.className = 'jira-ticket-summary'; summaryEl.textContent = issue.summary || '';
+    header.append(titleRow, summaryEl);
+
+    var statusRow = document.createElement('div'); statusRow.className = 'jira-ticket-status-row';
+    // Jira's own status-category colors (To Do = gray, In Progress = blue,
+    // Done = green), not this app's generic accent color — the whole point
+    // of this screen is to look like the real Jira issue view.
+    var statusBadge = document.createElement('span'); statusBadge.className = 'jira-ticket-status-badge status-' + (issue.statusCategory || 'new'); statusBadge.textContent = issue.status || 'Unknown';
+    var select = document.createElement('select'); select.className = 'jira-ticket-transition-select';
+    if (!transitions.length) { var opt = document.createElement('option'); opt.textContent = 'No status changes available'; select.appendChild(opt); select.disabled = true; }
+    transitions.forEach(function (transition) { var opt = document.createElement('option'); opt.value = transition.id; opt.textContent = transition.name; select.appendChild(opt); });
+    var updateBtn = document.createElement('button'); updateBtn.type = 'button'; updateBtn.className = 'btn btn-primary btn-sm'; updateBtn.textContent = 'Update Status'; updateBtn.disabled = !transitions.length;
+    updateBtn.onclick = function () { jiraUpdateTicketStatus(issueKey, select.value, container, updateBtn); };
+    statusRow.append(statusBadge, select, updateBtn);
+    if (issue.assignee) { var assigneeEl = document.createElement('span'); assigneeEl.style.cssText = 'color:var(--text-muted);font-size:12.5px'; assigneeEl.textContent = 'Assignee: ' + issue.assignee; statusRow.appendChild(assigneeEl); }
+
+    var descriptionSection = document.createElement('div'); descriptionSection.className = 'jira-ticket-description-section';
+    var descriptionTitle = document.createElement('div'); descriptionTitle.className = 'jira-ticket-comments-title'; descriptionTitle.textContent = 'Description';
+    var descriptionFrame = document.createElement('iframe'); descriptionFrame.className = 'jira-ticket-description-frame';
+    descriptionFrame.setAttribute('sandbox', ''); descriptionFrame.setAttribute('referrerpolicy', 'no-referrer'); descriptionFrame.title = 'Ticket description';
+    descriptionSection.append(descriptionTitle, descriptionFrame);
+
+    var commentsSection = document.createElement('div'); commentsSection.className = 'jira-ticket-comments-section';
+    var commentsTitle = document.createElement('div'); commentsTitle.className = 'jira-ticket-comments-title'; commentsTitle.textContent = 'Comments (' + comments.length + ')';
+    var commentAvatar = document.createElement('div'); commentAvatar.className = 'jira-ticket-comment-avatar'; commentAvatar.textContent = jiraInitials(currentUserName);
+    var commentInput = document.createElement('textarea'); commentInput.className = 'jira-ticket-comment-input'; commentInput.placeholder = 'Add a comment…';
+    var addBtn = document.createElement('button'); addBtn.type = 'button'; addBtn.className = 'btn btn-primary btn-sm'; addBtn.textContent = 'Add Comment';
+    addBtn.onclick = function () { jiraAddTicketComment(issueKey, commentInput, container, addBtn); };
+    var commentForm = document.createElement('div'); commentForm.className = 'jira-ticket-comment-form'; commentForm.append(commentAvatar, commentInput, addBtn);
+    var frame = document.createElement('iframe'); frame.className = 'jira-ticket-comments-frame';
+    frame.setAttribute('sandbox', ''); frame.setAttribute('referrerpolicy', 'no-referrer'); frame.title = 'Ticket comments';
+    commentsSection.append(commentsTitle, commentForm, frame);
+
+    // "Comments only" (the table's 💬 icon) shows just the comment thread —
+    // the ticket's key/summary/status/description are already visible from
+    // the table row itself, so repeating them here would just be noise for
+    // what's specifically a "read/add a comment" action.
+    if (commentsOnly) panel.appendChild(commentsSection);
+    else panel.append(header, statusRow, descriptionSection, commentsSection);
+    container.appendChild(panel);
+    var useLightTheme = document.body.classList.contains('light-mode');
+    descriptionFrame.srcdoc = jiraDescriptionSafeHtml(issue.description, useLightTheme);
+    frame.srcdoc = jiraCommentsSafeHtml(comments, useLightTheme);
+  }).catch(function (error) { container.innerHTML = '<div class="mailbox-empty">' + error.message + '</div>'; });
+}
+
+function jiraUpdateTicketStatus(issueKey, transitionId, container, button) {
+  if (!transitionId) return;
+  var original = button.textContent; button.disabled = true; button.textContent = 'Updating…';
+  var token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  fetch(window.APP_CONFIG.API_BASE_URL + '/jira/issue/' + encodeURIComponent(issueKey) + '/transitions', {
+    method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ transitionId: transitionId })
+  }).then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.success) throw new Error(d.message || 'Unable to update status'); }); })
+    .then(function () { showToast('Ticket status updated', 'success'); renderJiraTicketPanel(container, issueKey); if (document.getElementById('csoIncidentsTree')) loadCsoIncidents(true); })
+    .catch(function (error) { showToast(error.message, 'error'); button.disabled = false; button.textContent = original; });
+}
+
+function jiraAddTicketComment(issueKey, inputEl, container, button) {
+  var text = String(inputEl.value || '').trim();
+  if (!text) { showToast('Enter a comment first.', 'error'); return; }
+  var original = button.textContent; button.disabled = true; button.textContent = 'Adding…';
+  var token = sessionStorage.getItem(window.APP_CONFIG.JWT_TOKEN_KEY);
+  fetch(window.APP_CONFIG.API_BASE_URL + '/jira/issue/' + encodeURIComponent(issueKey) + '/comments', {
+    method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text })
+  }).then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.success) throw new Error(d.message || 'Unable to add comment'); }); })
+    .then(function () { showToast('Comment added', 'success'); renderJiraTicketPanel(container, issueKey); })
+    .catch(function (error) { showToast(error.message, 'error'); button.disabled = false; button.textContent = original; });
+}
+
 // The Operations inbox receives recipient data from Graph as message.to. Keep
 // it visible in the selected-message header, just as Sent Items already does.
 function openMailboxMessage(id) {
@@ -4457,6 +5089,14 @@ function openMailboxMessage(id) {
       var wrap = document.createElement('div'); wrap.className = 'mailbox-detail-body-wrap';
       var frame = document.createElement('iframe'); frame.className = 'mailbox-rich-frame'; frame.setAttribute('sandbox', 'allow-popups allow-popups-to-escape-sandbox'); frame.setAttribute('referrerpolicy', 'no-referrer'); frame.title = 'Safe rich email preview'; frame.srcdoc = mailboxSafeRichHtml(message.body || message.preview || 'This message has no readable text body.', document.body.classList.contains('light-mode'));
       wrap.appendChild(frame); detail.append(head, wrap);
+      // Customer Raised Ticket — same shared Jira ticket panel the CSO
+      // Incidents page uses, so viewing/acting on this ticket from the mail
+      // it arrived as and from the standalone page are identical.
+      if (message.category === 'jira' && message.jiraIssueKey && hasPermission('view_cso_incidents')) {
+        var jiraSection = document.createElement('div'); jiraSection.className = 'mailbox-jira-ticket-section';
+        detail.appendChild(jiraSection);
+        renderJiraTicketPanel(jiraSection, message.jiraIssueKey);
+      }
     })
     .catch(function (error) { detail.innerHTML = '<div class="mailbox-empty"></div>'; detail.firstChild.textContent = error.message; });
 }
@@ -4512,9 +5152,17 @@ function switchRole(role) {
   el = document.getElementById('alertComplianceNav');
   if (el) el.style.display = can('view_alert_compliance_report') ? '' : 'none';
 
-  // SOP Library nav — same gate as the Operations mailbox it's linked from
+  // SOP Library nav — own dedicated permission, independent of the mailbox
   el = document.getElementById('sopLibraryNav');
-  if (el) el.style.display = can('view_mailbox') ? '' : 'none';
+  if (el) el.style.display = can('view_sop_library') ? '' : 'none';
+
+  // CSO Incidents nav — own dedicated permission
+  el = document.getElementById('csoIncidentsNav');
+  if (el) el.style.display = can('view_cso_incidents') ? '' : 'none';
+
+  // Coralogix Alerts nav — own dedicated permission
+  el = document.getElementById('coralogixAlertsNav');
+  if (el) el.style.display = can('manage_coralogix_alerts') ? '' : 'none';
 
   // Data management — roles with manage_data permission
   el = document.getElementById('dataMgmtNav');
@@ -4664,13 +5312,16 @@ const PERM_LABELS = {
   view_alert_compliance_report: 'View Alert Compliance Report',
   delete_alert_compliance_alerts: 'Delete Alert Compliance Alerts',
   customize_dashboard_layout: 'Customize Dashboard Layout',
+  view_sop_library: 'View SOP Library',
+  view_cso_incidents: 'View CSO Incidents',
+  manage_coralogix_alerts: 'Manage Coralogix Alerts',
 };
 
 let roles = [
   {
     key: 'admin', name: 'Admin', icon: '🛡', color: 'purple', system: true,
     desc: 'Full access to all portal features including user and role management.',
-    perms: ['view_dashboard', ...DASHBOARD_CARD_PERMISSIONS, 'view_incidents', 'create_incidents', 'edit_incidents', 'close_incidents', 'delete_incidents', 'view_reports', 'export_reports', 'view_customer360', 'view_mailbox', 'send_mailbox', 'delete_mailbox', 'view_drafts', 'delete_drafts', 'manage_users', 'manage_roles', 'assign_roles', 'manage_data', 'manage_customer_csm', 'view_alert_compliance_report', 'delete_alert_compliance_alerts', 'customize_dashboard_layout']
+    perms: ['view_dashboard', ...DASHBOARD_CARD_PERMISSIONS, 'view_incidents', 'create_incidents', 'edit_incidents', 'close_incidents', 'delete_incidents', 'view_reports', 'export_reports', 'view_customer360', 'view_mailbox', 'send_mailbox', 'delete_mailbox', 'view_drafts', 'delete_drafts', 'manage_users', 'manage_roles', 'assign_roles', 'manage_data', 'manage_customer_csm', 'view_alert_compliance_report', 'delete_alert_compliance_alerts', 'customize_dashboard_layout', 'view_sop_library', 'view_cso_incidents', 'manage_coralogix_alerts']
   },
   {
     key: 'cso', name: 'CSO', icon: '🌐', color: 'green', system: false,
@@ -12177,8 +12828,22 @@ function populateAlertComplianceCustomerFilter() {
   if (names.indexOf(current) >= 0) select.value = current;
 }
 
+// Recomputed from the currently FILTERED rows (same acRowMatchesFilters set
+// the table itself renders), not the server's one-time, whole-window
+// summary — otherwise these tiles would keep showing counts for every
+// category/customer/date even while the table below is narrowed down to,
+// say, just Customer Raised Tickets. Mirrors getAlertComplianceReport's own
+// summary field definitions exactly (operationsAlertReportController.js),
+// just scoped to the visible rows instead of the full report.
 function renderAlertComplianceSummary() {
-  const s = alertComplianceReportSummary || { wentQuiet: 0, activelyRepeating: 0, confirmedResolved: 0, incidentCreated: 0, manuallyResolved: 0 };
+  const rows = alertComplianceReportData.filter(acRowMatchesFilters);
+  const s = {
+    wentQuiet: rows.filter(function (r) { return r.state === 'went_quiet'; }).length,
+    activelyRepeating: rows.filter(function (r) { return r.state === 'actively_repeating'; }).length,
+    confirmedResolved: rows.filter(function (r) { return r.state === 'confirmed_resolved'; }).length,
+    incidentCreated: rows.filter(function (r) { return Boolean(r.incidentRef) || Boolean(r.incidentSubstatusRef); }).length,
+    manuallyResolved: rows.filter(function (r) { return r.state === 'manually_resolved'; }).length
+  };
   var set = function (id, val) { var el = document.getElementById(id); if (el) el.textContent = val; };
   set('acStatQuiet', s.wentQuiet || 0);
   set('acStatRepeating', s.activelyRepeating || 0);
@@ -12336,14 +13001,27 @@ function renderAlertComplianceTable() {
     tbody.innerHTML = '<tr><td colspan="' + colCount + '" style="text-align:center;color:var(--text-muted);padding:20px">No alert activity in the selected window</td></tr>';
     acUpdateBulkDeleteButton();
     acRenderPagination(0);
+    renderAlertComplianceSummary();
     return;
   }
   const sortedRows = acSortRows(rows);
   const pageStart = (acCurrentPage - 1) * acPerPage;
   const pageRows = sortedRows.slice(pageStart, pageStart + acPerPage);
   tbody.innerHTML = pageRows.map(function (r) {
-    const stateLabel = acTableStateLabel(r);
-    const stateClass = ALERT_COMPLIANCE_STATE_CLASS[r.state] || 'badge-progress';
+    // A Customer Raised Ticket's real, live Jira status (fetched by the
+    // backend alongside the rest of the report — see getAlertComplianceReport)
+    // takes over the STATE column entirely, since the local state value
+    // stops being kept up to date once a ticket's own detail view shows the
+    // live Jira panel instead of a local editor for it (same reasoning as
+    // the detail modal's header badge). Rendered with this table's own
+    // rounded badge-critical/badge-high/badge-closed pill styles (same as
+    // every other row), not the Jira-lozenge look used inside the ticket
+    // panel itself — that distinct "looks like real Jira" styling was a
+    // deliberate, separate choice for the detail view, not for this table.
+    const hasLiveJiraStatus = r.category === 'jira' && r.jiraIssueKey && r.jiraStatus;
+    const stateLabel = hasLiveJiraStatus ? r.jiraStatus : acTableStateLabel(r);
+    const jiraStatusBadgeClass = { done: 'badge-closed', indeterminate: 'badge-high', new: 'badge-critical' }[r.jiraStatusCategory] || 'badge-critical';
+    const stateCellHtml = '<span class="badge ' + (hasLiveJiraStatus ? jiraStatusBadgeClass : (ALERT_COMPLIANCE_STATE_CLASS[r.state] || 'badge-progress')) + '">' + escapeMetricHtml(stateLabel) + '</span>';
     // The incident link must stop the click from bubbling up to the row's
     // own onclick — otherwise navigating to the incident would also pop
     // open this alert's detail modal right behind it.
@@ -12374,7 +13052,7 @@ function renderAlertComplianceTable() {
       + '<td>' + escapeMetricHtml(r.customer || '—') + '</td>'
       + '<td>' + acFormatTimestamp(r.firstSeen) + '</td>'
       + '<td>' + acFormatTimestamp(r.lastSeen) + '</td>'
-      + '<td><span class="badge ' + stateClass + '">' + escapeMetricHtml(stateLabel) + '</span></td>'
+      + '<td>' + stateCellHtml + '</td>'
       + '<td>' + incidentCell + '</td>'
       + '<td>' + commentCell + '</td>'
       + '</tr>';
@@ -12387,6 +13065,12 @@ function renderAlertComplianceTable() {
   }
   acUpdateBulkDeleteButton();
   acRenderPagination(rows.length);
+  // Keeps the summary tiles in lockstep with whatever the table is showing
+  // right now (same acRowMatchesFilters set) for every caller of this
+  // function — delete, resolve, substatus update, sort, pagination, filter
+  // changes — without needing each of those call sites to remember to
+  // refresh the tiles separately too.
+  renderAlertComplianceSummary();
 }
 
 function acChangePerPage(val) {
@@ -12568,11 +13252,17 @@ function acOpenAlertDetail(fingerprintKey, commentsOnly) {
   const title = document.getElementById('adTitle');
   if (title) title.textContent = commentsOnly ? 'Comments — ' + row.subject : row.subject;
 
+  // A Customer Raised Ticket shown via the live Jira panel below already
+  // displays its real, current status there (in Jira's own color-coded
+  // lozenge) — showing the local row.state badge here too would be a second,
+  // stale copy (that local field stopped being updated once the live panel
+  // replaced its editor), so it's left out to avoid the two disagreeing.
+  const showJiraPanel = row.category === 'jira' && !!row.jiraIssueKey;
   const stateLabel = acStateLabel(row);
   const stateClass = ALERT_COMPLIANCE_STATE_CLASS[row.state] || 'badge-progress';
   const badges = document.getElementById('adBadges');
   if (badges) {
-    badges.innerHTML = '<span class="badge ' + stateClass + '">' + escapeMetricHtml(stateLabel) + '</span>'
+    badges.innerHTML = (showJiraPanel ? '' : '<span class="badge ' + stateClass + '">' + escapeMetricHtml(stateLabel) + '</span>')
       + '<span class="badge badge-medium">' + escapeMetricHtml(acCategoryLabel(row.category)) + '</span>'
       + acIncidentBadgeHtml(row);
   }
@@ -12631,15 +13321,28 @@ function acOpenAlertDetail(fingerprintKey, commentsOnly) {
   const resolveBtn = document.getElementById('adResolveBtn');
   if (resolveBtn) resolveBtn.style.display = (!commentsOnly && row.state === 'went_quiet') ? '' : 'none';
 
-  // Customer Raised Tickets (category 'jira') get a simple manually-set
-  // Open / In Progress / Resolved status instead of the alert activity
-  // state — shown/edited here, not via the "Mark as Resolved" flow above.
+  // A Customer Raised Ticket (category 'jira') with a resolvable Jira issue
+  // key shows the real, live Jira ticket (status, transitions, comments —
+  // the same shared panel the CSO Incidents page and the mailbox detail
+  // view use) instead of this report's own local open/in_progress/resolved
+  // status and local comment thread below: pulled fresh from Jira every
+  // time this modal opens, so it can never show stale data relative to the
+  // real ticket. Falls back to the local sections when no key could be
+  // resolved from the subject (should not normally happen for this
+  // category), so the alert is never left with no controls at all.
+  const jiraSection = document.getElementById('adJiraTicketSection');
   const ticketSection = document.getElementById('adTicketStatusSection');
+  const localCommentsSection = document.getElementById('acLocalCommentsSection');
+  const submitCommentBtn = document.getElementById('acSubmitCommentBtn');
+  if (jiraSection) jiraSection.style.display = showJiraPanel ? '' : 'none';
   if (ticketSection) {
-    ticketSection.style.display = row.category === 'jira' ? '' : 'none';
+    ticketSection.style.display = (row.category === 'jira' && !showJiraPanel) ? '' : 'none';
     const ticketSelect = document.getElementById('adTicketStatusSelect');
     if (ticketSelect && row.category === 'jira') ticketSelect.value = row.state || 'open';
   }
+  if (localCommentsSection) localCommentsSection.style.display = showJiraPanel ? 'none' : '';
+  if (submitCommentBtn) submitCommentBtn.style.display = showJiraPanel ? 'none' : '';
+  if (showJiraPanel) renderJiraTicketPanel(jiraSection, row.jiraIssueKey, { commentsOnly: !!commentsOnly });
 
   // Only offered for resolved alerts with no incidentRef auto-linked —
   // where whether a real incident is still needed is genuinely ambiguous
@@ -12661,7 +13364,7 @@ function acOpenAlertDetail(fingerprintKey, commentsOnly) {
   if (deleteBtn) deleteBtn.style.display = (!commentsOnly && hasPermission('delete_alert_compliance_alerts')) ? '' : 'none';
 
   openModal('alertDetailModal');
-  acLoadComments(fingerprintKey);
+  if (!showJiraPanel) acLoadComments(fingerprintKey);
 }
 
 // Opens the same modal as acOpenAlertDetail, but scoped to just the

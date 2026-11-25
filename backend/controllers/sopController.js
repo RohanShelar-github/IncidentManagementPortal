@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const pool = require('../config/database');
 const { jwtSecret } = require('../config/security');
 const { matchingCustomersByName } = require('./mailboxController');
+const { extractJiraIssueKey } = require('../services/operationsMailClassificationService');
 const { confluenceConfigured, fetchConfluenceAsset, findSopCandidates, getSopPageContent, listSopLibrary, rewriteConfluenceImageSrcs } = require('../services/confluenceService');
 
 // Best-effort customer resolution for the SOP suggestion only — this is
@@ -12,11 +13,40 @@ const { confluenceConfigured, fetchConfluenceAsset, findSopCandidates, getSopPag
 // (mailboxController.prepareMailboxIncident) without that flow's full
 // Jira-project-code precedence handling, which exists there to pick exactly
 // one customer for a created incident, not to narrow a Confluence search.
+// A Customer Raised Ticket's subject never names the customer (e.g. "A new
+// support issue CD-187 was reported by the customer") — only its Jira issue
+// key's project prefix does (confirmed live: same gap already fixed for
+// Alert Compliance and Coralogix customer attribution), so that's tried
+// first for category 'jira', falling back to subject-name matching only if
+// the project code doesn't resolve to exactly one customer.
 async function resolveAlertCustomerName(category, subject) {
   if (category === 'azure' || category === 'ngcplantsmonitoring') return 'NGC';
-  const [customers] = await pool.query("SELECT customer_name FROM customers WHERE is_active = 1 ORDER BY customer_name");
+  const [customers] = await pool.query("SELECT customer_name, jira_project_code FROM customers WHERE is_active = 1 ORDER BY customer_name");
+  if (category === 'jira') {
+    const projectCode = extractJiraIssueKey(subject).split('-')[0].toUpperCase();
+    if (projectCode) {
+      const codeMatches = customers.filter((c) => String(c.jira_project_code || '').trim().toUpperCase() === projectCode);
+      if (codeMatches.length === 1) return codeMatches[0].customer_name;
+    }
+  }
   const matches = matchingCustomersByName(customers, subject);
   return matches.length === 1 ? matches[0].customer_name : null;
+}
+
+// A Customer Raised Ticket isn't about a specific alert type the way a
+// Coralogix/Azure alert is — every customer has one fixed, general-purpose
+// runbook for it instead (confirmed live: 24 of 25 real customers have a
+// page titled "... SOP on/for handling CSO Incident"), so keyword-searching
+// the email's own text (just Jira's generic notification wrapper wording,
+// with no alert-specific content to search on) would never find it
+// reliably. Looked up directly from the cached SOP library by category
+// instead of a fresh Confluence search.
+async function findCsoIncidentHandlingSop(customer) {
+  if (!customer) return [];
+  const library = await listSopLibrary();
+  const entry = library.find((c) => c.customer.toLowerCase() === customer.toLowerCase());
+  const page = entry?.pages.find((p) => /cso incident/i.test(p.category));
+  return page ? [{ id: page.id, title: page.title, url: page.url }] : [];
 }
 
 const getSopSuggestion = async (req, res) => {
@@ -26,7 +56,7 @@ const getSopSuggestion = async (req, res) => {
     const subject = String(req.query.subject || '').trim();
     if (!subject) return res.status(400).json({ success: false, message: 'subject is required' });
     const customer = await resolveAlertCustomerName(category, subject);
-    const candidates = await findSopCandidates({ customer, subject });
+    const candidates = category === 'jira' ? await findCsoIncidentHandlingSop(customer) : await findSopCandidates({ customer, subject });
     res.json({ success: true, data: { configured: true, customer, candidates } });
   } catch (error) {
     console.error('SOP suggestion error:', error.message);

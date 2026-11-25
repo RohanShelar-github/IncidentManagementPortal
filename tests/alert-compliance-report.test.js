@@ -324,6 +324,21 @@ test('acResolveAlert updates local state, hides the resolve button, and adjusts 
   assert.match(frontend, /alertComplianceReportSummary\.manuallyResolved = \(alertComplianceReportSummary\.manuallyResolved \|\| 0\) \+ 1;/);
 });
 
+test('the summary tiles (Went Quiet, Actively Repeating, Confirmed Resolved, Incident Created, Manually Resolved) are recomputed from the currently FILTERED rows, not the server\'s one-time whole-window summary — otherwise they would stay showing all-category counts even once the table is narrowed to one category/customer/date range', () => {
+  assert.match(frontend, /function renderAlertComplianceSummary\(\) \{\s*\n\s*const rows = alertComplianceReportData\.filter\(acRowMatchesFilters\);/);
+  assert.match(frontend, /wentQuiet: rows\.filter\(function \(r\) \{ return r\.state === 'went_quiet'; \}\)\.length,/);
+  assert.match(frontend, /activelyRepeating: rows\.filter\(function \(r\) \{ return r\.state === 'actively_repeating'; \}\)\.length,/);
+  assert.match(frontend, /confirmedResolved: rows\.filter\(function \(r\) \{ return r\.state === 'confirmed_resolved'; \}\)\.length,/);
+  assert.match(frontend, /incidentCreated: rows\.filter\(function \(r\) \{ return Boolean\(r\.incidentRef\) \|\| Boolean\(r\.incidentSubstatusRef\); \}\)\.length,/);
+  assert.match(frontend, /manuallyResolved: rows\.filter\(function \(r\) \{ return r\.state === 'manually_resolved'; \}\)\.length/);
+  // Called from inside renderAlertComplianceTable itself, so every existing
+  // caller (filter change, clear filters, sort, pagination, delete, resolve,
+  // substatus update) keeps the tiles in sync automatically, not just the
+  // ones updated alongside this change.
+  assert.match(frontend, /acRenderPagination\(rows\.length\);\s*\n[\s\S]{0,400}?renderAlertComplianceSummary\(\);\s*\n\}/);
+  assert.match(frontend, /acRenderPagination\(0\);\s*\n\s*renderAlertComplianceSummary\(\);\s*\n\s*return;/);
+});
+
 test('resolution comments are visually tagged RESOLVED in the comment/audit trail', () => {
   assert.match(frontend, /c\.isResolution \? ' <span class="badge badge-closed"[^']*RESOLVED/);
 });
@@ -425,7 +440,7 @@ test('the frontend category filter and display labels recognize Customer Raised 
 });
 
 test('every Azure alert is attributed to NGC regardless of subject text, since NGC is the only customer hosted on Azure', () => {
-  assert.match(reportController, /const customer = group\.category === 'azure'\s*\n\s*\? 'NGC'\s*\n\s*: \(customerMatches\[0\] \? customerMatches\[0\]\.customer_name : null\);/);
+  assert.match(reportController, /const customer = group\.category === 'azure'\s*\n\s*\? 'NGC'\s*\n\s*: \(jiraProjectCustomers\.length === 1 \? jiraProjectCustomers\[0\]\.customer_name : \(customerMatches\[0\] \? customerMatches\[0\]\.customer_name : null\)\);/);
 });
 
 // ── Requirement: table STATE column shows only the real activity state; ──
@@ -511,11 +526,60 @@ test('the frontend recognizes the ticket status values as distinct, labeled stat
   assert.match(html, /<option value="resolved">Resolved \(Ticket\)<\/option>/);
 });
 
-test('the ticket-status section and select exist, hidden by default, shown only for jira rows', () => {
+test('the ticket-status section and select exist, hidden by default, shown only as a fallback for jira rows with no resolvable Jira issue key (the live Jira ticket panel is shown instead when a key resolves)', () => {
   assert.match(html, /id="adTicketStatusSection" style="display:none/);
   assert.match(html, /id="adTicketStatusSelect"/);
-  assert.match(frontend, /ticketSection\.style\.display = row\.category === 'jira' \? '' : 'none';/);
+  assert.match(frontend, /ticketSection\.style\.display = \(row\.category === 'jira' && !showJiraPanel\) \? '' : 'none';/);
   assert.match(frontend, /if \(ticketSelect && row\.category === 'jira'\) ticketSelect\.value = row\.state \|\| 'open';/);
+});
+
+test('getAlertComplianceReport overrides commentCount with the real Jira comment total for jira-category rows — the local operations_alert_comments count stays stuck at 0 for these rows once their detail view shows the live Jira panel instead of a local comment box', () => {
+  assert.match(reportController, /if \(summary\) \{ r\.jiraStatus = summary\.status; r\.jiraStatusCategory = summary\.statusCategory; r\.commentCount = summary\.commentCount; \}/);
+});
+
+test('getAlertComplianceReport exposes jiraIssueKey (extracted from the subject, via the same extractJiraIssueKey the mailbox customer-matching flow already uses) only for jira-category rows', () => {
+  assert.match(reportController, /const \{ extractJiraIssueKey \} = require\('\.\.\/services\/operationsMailClassificationService'\);/);
+  assert.match(reportController, /const jiraIssueKey = group\.category === 'jira' \? extractJiraIssueKey\(group\.sampleSubject\) : '';/);
+  assert.match(reportController, /\n\s*jiraIssueKey,\n/);
+});
+
+test('getAlertComplianceReport resolves a Customer Raised Ticket\'s customer from its Jira issue key\'s project prefix (customers.jira_project_code) — the same authoritative project-code precedence mailboxController.prepareMailboxIncident already uses — falling back to subject-name matching only when the project code is shared by more than one customer or resolves to none', () => {
+  assert.match(reportController, /SELECT customer_name, jira_project_code FROM customers WHERE is_active = 1/);
+  assert.match(reportController, /const jiraProjectCode = jiraIssueKey\.split\('-'\)\[0\]\.toUpperCase\(\);/);
+  assert.match(reportController, /const jiraProjectCustomers = jiraProjectCode\s*\n\s*\? customerRows\.filter\(\(c\) => String\(c\.jira_project_code \|\| ''\)\.trim\(\)\.toUpperCase\(\) === jiraProjectCode\)\s*\n\s*: \[\];/);
+});
+
+test('the header STATE badge is suppressed for a Customer Raised Ticket shown via the live Jira panel — row.state stops being updated once the panel replaces its editor, so showing it would be a second, stale status next to the panel\'s own real one', () => {
+  assert.match(frontend, /badges\.innerHTML = \(showJiraPanel \? '' : '<span class="badge ' \+ stateClass \+ '">' \+ escapeMetricHtml\(stateLabel\) \+ '<\/span>'\)/);
+});
+
+test('getAlertComplianceReport fetches each Customer Raised Ticket\'s real, live Jira status (one call per distinct ticket, never per occurrence) alongside the rest of the report, and never breaks the report if a fetch fails', () => {
+  assert.match(reportController, /const \{ getIssueSummary, jiraConfigured \} = require\('\.\.\/services\/jiraService'\);/);
+  assert.match(reportController, /const jiraRows = report\.filter\(\(r\) => r\.category === 'jira' && r\.jiraIssueKey\);/);
+  assert.match(reportController, /const uniqueKeys = \[\.\.\.new Set\(jiraRows\.map\(\(r\) => r\.jiraIssueKey\)\)\];/);
+  assert.match(reportController, /catch \(error\) \{ console\.warn\('Alert Compliance: live Jira status fetch skipped for', issueKey, error\.message\); \}/);
+});
+
+test('the table\'s STATE column shows the real Jira status for a Customer Raised Ticket row, styled with the SAME rounded badge-critical/badge-high/badge-closed pill classes every other row uses — not the Jira-lozenge look, which is reserved for the ticket detail panel', () => {
+  assert.match(frontend, /const hasLiveJiraStatus = r\.category === 'jira' && r\.jiraIssueKey && r\.jiraStatus;/);
+  assert.match(frontend, /const stateLabel = hasLiveJiraStatus \? r\.jiraStatus : acTableStateLabel\(r\);/);
+  assert.match(frontend, /const jiraStatusBadgeClass = \{ done: 'badge-closed', indeterminate: 'badge-high', new: 'badge-critical' \}\[r\.jiraStatusCategory\] \|\| 'badge-critical';/);
+  assert.match(frontend, /const stateCellHtml = '<span class="badge ' \+ \(hasLiveJiraStatus \? jiraStatusBadgeClass : \(ALERT_COMPLIANCE_STATE_CLASS\[r\.state\] \|\| 'badge-progress'\)\) \+ '">' \+ escapeMetricHtml\(stateLabel\) \+ '<\/span>';/);
+  assert.match(frontend, /\+ '<td>' \+ stateCellHtml \+ '<\/td>'/);
+});
+
+test('a Customer Raised Ticket with a resolvable Jira issue key shows the live Jira ticket panel instead of the local ticket-status/comments sections, and that panel is kept outside #adDetailSections so it still shows in comments-only mode', () => {
+  assert.match(html, /<div id="adJiraTicketSection" style="display:none;margin-bottom:16px"><\/div>/);
+  assert.match(html, /<div id="acLocalCommentsSection">/);
+  assert.match(html, /<button class="btn btn-primary" id="acSubmitCommentBtn" onclick="acSubmitComment\(\)">Add Comment<\/button>/);
+  const detailSectionsBody = html.slice(html.indexOf('<div id="adDetailSections">'), html.indexOf('id="adJiraTicketSection"'));
+  assert.ok(detailSectionsBody.includes('</div>'), 'adDetailSections must close before adJiraTicketSection, not contain it');
+  assert.match(frontend, /const showJiraPanel = row\.category === 'jira' && !!row\.jiraIssueKey;/);
+  assert.match(frontend, /if \(jiraSection\) jiraSection\.style\.display = showJiraPanel \? '' : 'none';/);
+  assert.match(frontend, /if \(localCommentsSection\) localCommentsSection\.style\.display = showJiraPanel \? 'none' : '';/);
+  assert.match(frontend, /if \(submitCommentBtn\) submitCommentBtn\.style\.display = showJiraPanel \? 'none' : '';/);
+  assert.match(frontend, /if \(showJiraPanel\) renderJiraTicketPanel\(jiraSection, row\.jiraIssueKey, \{ commentsOnly: !!commentsOnly \}\);/);
+  assert.match(frontend, /if \(!showJiraPanel\) acLoadComments\(fingerprintKey\);/);
 });
 
 test('acUpdateTicketStatus posts to /ticket-status without requiring a comment (unlike acResolveAlert)', () => {
@@ -695,7 +759,8 @@ test('acStateLabel: confirmed_resolved/manually_resolved with an (auto-linked or
 });
 
 test('the table uses acTableStateLabel, and the detail modal + acResolveAlert\'s local badge update use acStateLabel, instead of the raw ALERT_COMPLIANCE_STATE_LABELS lookup, so the incident-aware label is consistent everywhere the STATE badge is rendered', () => {
-  assert.match(frontend, /tbody\.innerHTML = pageRows\.map\(function \(r\) \{\s*\n\s*const stateLabel = acTableStateLabel\(r\);/);
+  assert.match(frontend, /tbody\.innerHTML = pageRows\.map\(function \(r\) \{/);
+  assert.match(frontend, /const stateLabel = hasLiveJiraStatus \? r\.jiraStatus : acTableStateLabel\(r\);/);
   assert.match(frontend, /const stateLabel = acStateLabel\(row\);\s*\n\s*const stateClass = ALERT_COMPLIANCE_STATE_CLASS\[row\.state\] \|\| 'badge-progress';\s*\n\s*const badges = document\.getElementById\('adBadges'\);\s*\n\s*if \(badges\) \{/);
   assert.match(frontend, /const badges = document\.getElementById\('adBadges'\);\s*\n\s*if \(badges && row\) \{\s*\n\s*const stateLabel = acStateLabel\(row\);/);
   // acUpdateTicketStatus deals with open/in_progress/resolved ticket
@@ -809,8 +874,9 @@ test('acTableStateLabel relabels went_quiet as "Active" but otherwise delegates 
   assert.match(frontend, /function acTableStateLabel\(r\) \{\s*\n\s*if \(r\.state === 'went_quiet'\) return 'Active';\s*\n\s*return acStateLabel\(r\);\s*\n\}/);
 });
 
-test('the table row uses acTableStateLabel, while the detail modal open and acResolveAlert\'s local badge update still use the unmodified acStateLabel — so "Went Quiet — Unconfirmed" only ever appears once you open the alert', () => {
-  assert.match(frontend, /tbody\.innerHTML = pageRows\.map\(function \(r\) \{\s*\n\s*const stateLabel = acTableStateLabel\(r\);/);
+test('the table row falls back to acTableStateLabel for every non-jira (or jira-without-a-live-status) row, while the detail modal open and acResolveAlert\'s local badge update still use the unmodified acStateLabel — so "Went Quiet — Unconfirmed" only ever appears once you open the alert', () => {
+  assert.match(frontend, /tbody\.innerHTML = pageRows\.map\(function \(r\) \{/);
+  assert.match(frontend, /const stateLabel = hasLiveJiraStatus \? r\.jiraStatus : acTableStateLabel\(r\);/);
   // acOpenAlertDetail's badge build, acResolveAlert's local badge refresh,
   // and acUpdateIncidentSubstatus's local badge refresh must be the only
   // remaining acStateLabel(row) call sites — acTableStateLabel is only for

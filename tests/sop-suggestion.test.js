@@ -12,12 +12,25 @@ const sopRoutes = fs.readFileSync(path.join(root, 'backend', 'routes', 'sopRoute
 const sopController = fs.readFileSync(path.join(root, 'backend', 'controllers', 'sopController.js'), 'utf8');
 const frontend = fs.readFileSync(path.join(root, 'js', 'app.js'), 'utf8');
 const confluenceService = require(path.join(root, 'backend', 'services', 'confluenceService.js'));
+const roleController = fs.readFileSync(path.join(root, 'backend', 'controllers', 'roleController.js'), 'utf8');
+const sopPermissionMigration = fs.readFileSync(path.join(root, 'backend', 'sql', '049_sop_library_permission.sql'), 'utf8');
 
-test('the SOP route is mounted, additive, authenticated and gated behind view_mailbox', () => {
+test('the migration adds view_sop_library and grants it to admin only', () => {
+  assert.match(sopPermissionMigration, /INSERT INTO permissions\(permission_key, permission_name\) VALUES\s*\n\('view_sop_library', 'View SOP Library'\)/);
+  assert.match(sopPermissionMigration, /SELECT r\.id, 'view_sop_library' FROM roles r WHERE r\.role_key IN \('admin'\);/);
+  assert.doesNotMatch(sopPermissionMigration, /'admin', '(cso|pmo|aoc|engineer|stakeholder)'/, 'must be admin-only, not also granted to another role');
+});
+
+test('roleController validates view_sop_library as a real permission key, and Role Management has a checkbox for it', () => {
+  assert.match(roleController, /'view_sop_library'/);
+  assert.match(html, /<input type="checkbox" value="view_sop_library"\/> View SOP Library/);
+});
+
+test('the SOP route is mounted, additive, authenticated and gated behind view_sop_library', () => {
   assert.match(server, /const sopRoutes = require\('\.\/routes\/sopRoutes'\);/);
   assert.match(server, /app\.use\('\/api\/sop', sopRoutes\);/);
   assert.match(sopRoutes, /router\.use\(authenticateToken\);/);
-  assert.match(sopRoutes, /router\.get\('\/suggestion', requirePermission\('view_mailbox'\), getSopSuggestion\);/);
+  assert.match(sopRoutes, /router\.get\('\/suggestion', requirePermission\('view_sop_library'\), getSopSuggestion\);/);
 });
 
 test('getSopSuggestion requires a subject, reuses matchingCustomersByName, and never throws the integration being unconfigured as an error', () => {
@@ -28,6 +41,33 @@ test('getSopSuggestion requires a subject, reuses matchingCustomersByName, and n
 
 test("azure/ngcplantsmonitoring alerts resolve to NGC without a DB lookup, since NGC is the only customer hosted on Azure (same assumption the incident-prefill flow already makes)", () => {
   assert.match(sopController, /if \(category === 'azure' \|\| category === 'ngcplantsmonitoring'\) return 'NGC';/);
+});
+
+test('a Customer Raised Ticket (category \'jira\') resolves its customer from the Jira issue key\'s project prefix, not subject-name matching — its subject never names the customer at all (e.g. "A new support issue CD-187 was reported by the customer"), only the issue key does, same gap already fixed for Alert Compliance and Coralogix customer attribution', () => {
+  assert.match(sopController, /const \{ extractJiraIssueKey \} = require\('\.\.\/services\/operationsMailClassificationService'\);/);
+  assert.match(sopController, /if \(category === 'jira'\) \{/);
+  assert.match(sopController, /const projectCode = extractJiraIssueKey\(subject\)\.split\('-'\)\[0\]\.toUpperCase\(\);/);
+  assert.match(sopController, /const codeMatches = customers\.filter\(\(c\) => String\(c\.jira_project_code \|\| ''\)\.trim\(\)\.toUpperCase\(\) === projectCode\);/);
+});
+
+test('a Customer Raised Ticket is never keyword-searched for its SOP — every customer has one fixed "handling CSO Incident" runbook instead of an alert-specific page (confirmed live: 24 of 25 real customers have one), so findCsoIncidentHandlingSop looks it up directly from the cached SOP library by category rather than running a fresh, unreliable Confluence keyword search against Jira\'s generic notification wrapper text', () => {
+  assert.match(sopController, /async function findCsoIncidentHandlingSop\(customer\) \{/);
+  assert.match(sopController, /const entry = library\.find\(\(c\) => c\.customer\.toLowerCase\(\) === customer\.toLowerCase\(\)\);/);
+  assert.match(sopController, /const page = entry\?\.pages\.find\(\(p\) => \/cso incident\/i\.test\(p\.category\)\);/);
+  assert.match(sopController, /const candidates = category === 'jira' \? await findCsoIncidentHandlingSop\(customer\) : await findSopCandidates\(\{ customer, subject \}\);/);
+});
+
+test('live: the exact reported bug (CD-187, "A new support issue CD-187 was reported by the customer") now resolves to Christie Digital\'s real "SOP on handling CSO Incident" page', async (t) => {
+  if (!confluenceService.confluenceConfigured()) { t.skip('ATLASSIAN_* credentials not loaded in this run'); return; }
+  const sopControllerModule = require(path.join(root, 'backend', 'controllers', 'sopController.js'));
+  const result = await new Promise((resolve) => {
+    const req = { query: { category: 'jira', subject: 'A new support issue CD-187 was reported by the customer' } };
+    const res = { json: resolve, status: () => ({ json: resolve }) };
+    sopControllerModule.getSopSuggestion(req, res);
+  });
+  assert.equal(result.data.customer, 'Christie Digital');
+  assert.equal(result.data.candidates.length, 1);
+  assert.match(result.data.candidates[0].title, /handling CSO Incident/i);
 });
 
 test('alertSearchText strips known provider wrappers down to the alert\'s distinctive wording', () => {
@@ -98,13 +138,13 @@ test('frontend: the Find SOP button only appears on exactly the messages that wo
   assert.match(frontend, /navigateToSopLibrary\(result\.customer, best \? best\.id : null\);/);
 });
 
-test('frontend: SOP Library page, nav item and permission gating (same view_mailbox gate as the mailbox this feature is linked from)', () => {
+test('frontend: SOP Library page, nav item and permission gating (own dedicated view_sop_library permission, independent of the mailbox)', () => {
   assert.match(html, /<div class="nav-item" id="sopLibraryNav" onclick="navigate\('sopLibrary', this\)">/);
   assert.match(html, /<div class="page" id="page-sopLibrary">/);
   assert.match(html, /<input id="sopLibrarySearch"/);
-  assert.match(frontend, /sopLibrary: 'view_mailbox'/);
+  assert.match(frontend, /sopLibrary: 'view_sop_library'/);
   assert.match(frontend, /if \(page === 'sopLibrary'\) loadSopLibrary\(\);/);
-  assert.match(frontend, /el = document\.getElementById\('sopLibraryNav'\);\s*\n\s*if \(el\) el\.style\.display = can\('view_mailbox'\) \? '' : 'none';/);
+  assert.match(frontend, /el = document\.getElementById\('sopLibraryNav'\);\s*\n\s*if \(el\) el\.style\.display = can\('view_sop_library'\) \? '' : 'none';/);
 });
 
 test('frontend: navigateToSopLibrary expands the matched customer and sets a one-shot highlight before navigating; loadSopLibrary handles the unconfigured case without throwing', () => {
@@ -218,9 +258,9 @@ test('frontend: sopPageSafeHtml clears floats on headings/tables/macro panels, s
   assert.match(frontend, /'\.panel\{clear:both;border:1px solid ' \+ palette\.border \+ ';/);
 });
 
-test('backend: the SOP Library and page-content routes are mounted and gated behind view_mailbox; the asset proxy is deliberately NOT (it is loaded via <img src>, which cannot send an Authorization header)', () => {
-  assert.match(sopRoutes, /router\.get\('\/library', requirePermission\('view_mailbox'\), getSopLibrary\);/);
-  assert.match(sopRoutes, /router\.get\('\/page\/:id', requirePermission\('view_mailbox'\), getSopPage\);/);
+test('backend: the SOP Library and page-content routes are mounted and gated behind view_sop_library; the asset proxy is deliberately NOT (it is loaded via <img src>, which cannot send an Authorization header)', () => {
+  assert.match(sopRoutes, /router\.get\('\/library', requirePermission\('view_sop_library'\), getSopLibrary\);/);
+  assert.match(sopRoutes, /router\.get\('\/page\/:id', requirePermission\('view_sop_library'\), getSopPage\);/);
   assert.match(sopRoutes, /router\.get\('\/asset', getSopAsset\);\s*\n\s*router\.use\(authenticateToken\);/);
   assert.match(sopController, /if \(!confluenceConfigured\(\)\) return res\.json\(\{ success: true, data: \{ configured: false, customers: \[\] \} \}\);/);
 });

@@ -20,6 +20,9 @@ const operationsAlertReportRoutes = require('./routes/operationsAlertReportRoute
 // Safe to remove this line + the app.use below to fully revert the feature.
 const dashboardLayoutRoutes = require('./routes/dashboardLayoutRoutes');
 const sopRoutes = require('./routes/sopRoutes');
+const jiraRoutes = require('./routes/jiraRoutes');
+const coralogixRoutes = require('./routes/coralogixRoutes');
+const { startCoralogixSnoozeScheduler } = require('./services/coralogixSnoozeScheduler');
 const { startMailboxNotificationPolling } = require('./controllers/mailboxController');
 const { startUiServer } = require('../server-ui');
 const pool = require('./config/database');
@@ -71,6 +74,8 @@ app.use('/api/mailbox', mailboxRoutes);
 app.use('/api/operations-alerts', operationsAlertReportRoutes);
 app.use('/api/dashboard-layout', dashboardLayoutRoutes);
 app.use('/api/sop', sopRoutes);
+app.use('/api/jira', jiraRoutes);
+app.use('/api/coralogix', coralogixRoutes);
 
 // Health check endpoint
 app.get('/api/health', async (req, res) => {
@@ -111,6 +116,7 @@ app.use((err, req, res, next) => {
 // Start server
 app.listen(PORT, HOST, () => {
   startMailboxNotificationPolling();
+  startCoralogixSnoozeScheduler();
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║   Incident Management Portal - Backend Server Started     ║

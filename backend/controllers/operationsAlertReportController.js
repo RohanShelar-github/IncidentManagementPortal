@@ -19,6 +19,8 @@ const { listMailboxFolderMessages, getInboxMessage, sendCriticalIncidentEmail, m
 const { attachMailboxIncidentLinks, matchingCustomersByName, plainMailText } = require('./mailboxController');
 const { notifyUsers, findMentionedUsers } = require('../services/notificationService');
 const { groupMessagesIntoAlerts, deriveAlertState, fingerprintKey, deriveAlertSeverity } = require('../services/operationsAlertGroupingService');
+const { extractJiraIssueKey } = require('../services/operationsMailClassificationService');
+const { getIssueSummary, jiraConfigured } = require('../services/jiraService');
 
 // Alert bodies never change once sent, so a resolved severity can be cached
 // for a long time — avoids re-fetching the same historical message's full
@@ -71,7 +73,7 @@ const getAlertComplianceReport = async (req, res) => {
       annotated.filter((m) => m.incidentCreated).map((m) => [m.id, { ref: m.incidentRef, status: m.incidentStatus || null }])
     );
 
-    const [customerRows] = await pool.query('SELECT customer_name FROM customers WHERE is_active = 1');
+    const [customerRows] = await pool.query('SELECT customer_name, jira_project_code FROM customers WHERE is_active = 1');
 
     // Alert groups are now scoped per IST calendar day (see
     // operationsAlertGroupingService.groupMessagesIntoAlerts), so the same
@@ -92,6 +94,21 @@ const getAlertComplianceReport = async (req, res) => {
         state = 'confirmed_resolved';
       }
       const customerMatches = matchingCustomersByName(customerRows, group.sampleSubject);
+      // A Customer Raised Ticket's subject never names the customer (e.g.
+      // "A new support issue TOR-337 was reported by the customer") —
+      // subject matching alone would always leave these rows blank. Its
+      // Jira issue key's project prefix IS the authoritative customer link
+      // (customers.jira_project_code, the same field/precedence rule
+      // mailboxController.prepareMailboxIncident already uses to pick a
+      // customer for an incident created from one of these tickets) — used
+      // only when it resolves to exactly one customer, so a project code
+      // shared by more than one customer record falls back to subject
+      // matching rather than guessing.
+      const jiraIssueKey = group.category === 'jira' ? extractJiraIssueKey(group.sampleSubject) : '';
+      const jiraProjectCode = jiraIssueKey.split('-')[0].toUpperCase();
+      const jiraProjectCustomers = jiraProjectCode
+        ? customerRows.filter((c) => String(c.jira_project_code || '').trim().toUpperCase() === jiraProjectCode)
+        : [];
       // Azure alert subjects rarely name a customer explicitly (e.g. "Azure:
       // Activated Severity: 0 SHO No Historian Read"), so subject matching
       // alone leaves most Azure rows blank. NGC is the only customer hosted
@@ -99,7 +116,7 @@ const getAlertComplianceReport = async (req, res) => {
       // subject text.
       const customer = group.category === 'azure'
         ? 'NGC'
-        : (customerMatches[0] ? customerMatches[0].customer_name : null);
+        : (jiraProjectCustomers.length === 1 ? jiraProjectCustomers[0].customer_name : (customerMatches[0] ? customerMatches[0].customer_name : null));
       return {
         fingerprint: group.fingerprint,
         fingerprintKey: fingerprintKey(group.fingerprint),
@@ -107,6 +124,11 @@ const getAlertComplianceReport = async (req, res) => {
         category: group.category,
         customer,
         subject: group.sampleSubject,
+        // Lets the frontend show the real, live Jira ticket (status,
+        // transitions, comments) instead of this report's own local
+        // open/in_progress/resolved status + comment thread for Customer
+        // Raised Tickets — see renderJiraTicketPanel in js/app.js.
+        jiraIssueKey,
         firstSeen: group.firstSeen,
         lastSeen: group.lastSeen,
         occurrenceCount: group.occurrenceCount,
@@ -170,6 +192,32 @@ const getAlertComplianceReport = async (req, res) => {
       );
       const statusByKey = new Map(ticketStatusRows.map((row) => [row.fingerprint_key, row.status]));
       report.forEach((r) => { if (r.category === 'jira') r.state = statusByKey.get(r.fingerprintKey) || 'open'; });
+
+      // The table's STATE column shows this row's REAL, current Jira status
+      // (not the local open/in_progress/resolved value above, which stops
+      // being updated once a ticket's detail view starts showing the live
+      // Jira panel instead of its editor) — fetched fresh on every report
+      // load, one call per distinct ticket, same as the detail panel itself.
+      // Never breaks the report if Jira is unreachable/unconfigured: a row
+      // simply keeps falling back to its local state in that case.
+      if (jiraConfigured()) {
+        const jiraRows = report.filter((r) => r.category === 'jira' && r.jiraIssueKey);
+        const uniqueKeys = [...new Set(jiraRows.map((r) => r.jiraIssueKey))];
+        const summaryByKey = new Map();
+        await Promise.all(uniqueKeys.map(async (issueKey) => {
+          try { summaryByKey.set(issueKey, await getIssueSummary(issueKey)); }
+          catch (error) { console.warn('Alert Compliance: live Jira status fetch skipped for', issueKey, error.message); }
+        }));
+        jiraRows.forEach((r) => {
+          const summary = summaryByKey.get(r.jiraIssueKey);
+          // Overrides the commentCount set further above (from the local
+          // operations_alert_comments table) — this report no longer writes
+          // local comments for a ticket with a live Jira panel, so that
+          // count would otherwise stay stuck at 0 regardless of how many
+          // real comments the Jira ticket has.
+          if (summary) { r.jiraStatus = summary.status; r.jiraStatusCategory = summary.statusCategory; r.commentCount = summary.commentCount; }
+        });
+      }
 
       // Manual, optional tracking of whether a real incident is still
       // pending for a resolved-but-not-linked alert (see

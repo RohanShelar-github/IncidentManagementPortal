@@ -12,7 +12,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&amp;family=DM+Mono:wght@300;400;500&amp;family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&amp;display=swap" rel="stylesheet"/>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<link href="./css/styles.css?v=20260905-mail-filter1" rel="stylesheet"/></head>
+<link href="./css/styles.css?v=20261112-logo-sub-bright" rel="stylesheet"/></head>
 <body class="auth-pending">
 <!-- ─── LOGIN SCREEN ──────────────────────────────────────────── -->
 <div id="loginScreen">
@@ -84,6 +84,16 @@
 <span class="nav-icon">📖</span><span class="nav-label"> SOP Library</span>
 </div>
 <!-- /SOP LIBRARY NAV -->
+<!-- CSO INCIDENTS: additive nav item, safe to delete to revert -->
+<div class="nav-item" id="csoIncidentsNav" onclick="navigate('csoIncidents', this)">
+<span class="nav-icon">🎫</span><span class="nav-label"> Jira Ticket Management</span>
+</div>
+<!-- /CSO INCIDENTS NAV -->
+<!-- CORALOGIX ALERTS: additive nav item, safe to delete to revert -->
+<div class="nav-item" id="coralogixAlertsNav" onclick="navigate('coralogixAlerts', this)">
+<span class="nav-icon">🔔</span><span class="nav-label"> Alert Management</span>
+</div>
+<!-- /CORALOGIX ALERTS NAV -->
 <div class="nav-section">Reporting</div>
 <div class="nav-item" id="reportsNav" onclick="navigate('reports', this)">
 <span class="nav-icon">◈</span><span class="nav-label"> Reports</span>
@@ -284,7 +294,7 @@
 <span class="breadcrumb-sep">›</span>
 <span class="breadcrumb-item active">Dashboard</span>
 </div>
-<div class="page-header-title">Overview</div>
+
 <div class="page-header-sub" style="display:flex;align-items:center;gap:8px">
             Real-time incident monitoring —
             <span id="dashLastUpdated" style="color:var(--text-muted)">Last updated just now</span>
@@ -651,11 +661,11 @@
 </div>
 <!-- ─── INCIDENTS ─────────────────────────────────────── -->
 <div class="page" id="page-mailbox">
-<div class="page-header"><div><div class="breadcrumb"><span class="breadcrumb-item" onclick="navigate('dashboard', document.getElementById('dashNav'))">Home</span><span class="breadcrumb-sep">›</span><span class="breadcrumb-item active">Mailbox</span></div><div class="page-header-title">Operations Mailbox</div><div class="page-header-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>Microsoft 365 inbox and reply workspace for the AOC service mailbox</span><span style="color:var(--text-muted)">-</span><span id="mailboxLastUpdated" style="color:var(--text-muted)">Last updated just now</span><span id="mailboxRefreshBtn" onclick="refreshPageContent(event,'mailbox')" onmouseout="this.style.color='var(--text-muted)';this.style.background='transparent'" onmouseover="this.style.color='var(--accent)';this.style.background='rgba(79,142,247,0.12)'" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--text-muted);transition:color .2s,background .2s;flex-shrink:0" title="Refresh"><svg fill="none" height="13" id="mailboxRefreshIcon" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" style="transition:transform .7s ease" viewbox="0 0 24 24" width="13"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg></span></div></div></div>
+<div class="page-header"><div><div class="breadcrumb"><span class="breadcrumb-item" onclick="navigate('dashboard', document.getElementById('dashNav'))">Home</span><span class="breadcrumb-sep">›</span><span class="breadcrumb-item active">Mailbox</span></div><div class="page-header-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>Microsoft 365 inbox and reply workspace for the AOC service mailbox</span><span style="color:var(--text-muted)">-</span><span id="mailboxLastUpdated" style="color:var(--text-muted)">Last updated just now</span><span id="mailboxRefreshBtn" onclick="refreshPageContent(event,'mailbox')" onmouseout="this.style.color='var(--text-muted)';this.style.background='transparent'" onmouseover="this.style.color='var(--accent)';this.style.background='rgba(79,142,247,0.12)'" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--text-muted);transition:color .2s,background .2s;flex-shrink:0" title="Refresh"><svg fill="none" height="13" id="mailboxRefreshIcon" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" style="transition:transform .7s ease" viewbox="0 0 24 24" width="13"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg></span></div></div></div>
 <div class="mailbox-layout"><section class="mailbox-list-card"><div class="mailbox-list-head"><div class="mailbox-list-title"><input id="mailboxSelectAll" type="checkbox" aria-label="Select all emails" onchange="toggleMailboxSelectAll(this.checked)"/><strong>Inbox</strong></div><div class="mailbox-list-actions"><button id="mailboxBulkDeleteBtn" class="btn btn-danger btn-sm" onclick="deleteSelectedMailboxMessages()" style="display:none">Delete selected</button><span id="mailboxCount" class="mailbox-count">Loading…</span></div></div><div id="mailboxList" class="mailbox-list"><div class="mailbox-empty">Loading messages…</div></div><div id="mailboxLoadMoreWrap" style="display:none;text-align:center;padding:10px"><button id="mailboxLoadMoreBtn" class="btn btn-secondary btn-sm" onclick="loadMoreMailbox()">Load older messages</button></div></section><section class="mailbox-message-card" id="mailboxDetail"><div class="mailbox-empty">Select an email to read it here.</div></section></div>
 </div>
 <div class="page" id="page-drafts">
-<div class="page-header"><div><div class="breadcrumb"><span class="breadcrumb-item" onclick="navigate('dashboard', document.getElementById('dashNav'))">Home</span><span class="breadcrumb-sep">›</span><span class="breadcrumb-item active">Draft Review</span></div><div class="page-header-title">Draft Review</div><div class="page-header-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>Saved alert details waiting for the 10-minute review window. No incident or notification email has been created.</span><span style="color:var(--text-muted)">-</span><span id="draftsLastUpdated" style="color:var(--text-muted)">Last updated just now</span><span id="draftsRefreshBtn" onclick="refreshPageContent(event,'drafts')" onmouseout="this.style.color='var(--text-muted)';this.style.background='transparent'" onmouseover="this.style.color='var(--accent)';this.style.background='rgba(79,142,247,0.12)'" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--text-muted);transition:color .2s,background .2s;flex-shrink:0" title="Refresh"><svg fill="none" height="13" id="draftsRefreshIcon" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" style="transition:transform .7s ease" viewbox="0 0 24 24" width="13"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg></span></div></div></div>
+<div class="page-header"><div><div class="breadcrumb"><span class="breadcrumb-item" onclick="navigate('dashboard', document.getElementById('dashNav'))">Home</span><span class="breadcrumb-sep">›</span><span class="breadcrumb-item active">Draft Review</span></div><div class="page-header-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>Saved alert details waiting for the 10-minute review window. No incident or notification email has been created.</span><span style="color:var(--text-muted)">-</span><span id="draftsLastUpdated" style="color:var(--text-muted)">Last updated just now</span><span id="draftsRefreshBtn" onclick="refreshPageContent(event,'drafts')" onmouseout="this.style.color='var(--text-muted)';this.style.background='transparent'" onmouseover="this.style.color='var(--accent)';this.style.background='rgba(79,142,247,0.12)'" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--text-muted);transition:color .2s,background .2s;flex-shrink:0" title="Refresh"><svg fill="none" height="13" id="draftsRefreshIcon" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" style="transition:transform .7s ease" viewbox="0 0 24 24" width="13"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg></span></div></div></div>
 <div id="draftBulkActions" style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin:-4px 0 14px"><label id="draftSelectAllWrap" style="display:none;font-size:12px;color:var(--text-muted);cursor:pointer"><input id="draftSelectAll" type="checkbox" aria-label="Select all drafts" onchange="toggleDraftSelectAll(this.checked)"/> Select all</label><button id="draftBulkDeleteBtn" class="btn btn-danger btn-sm" onclick="deleteSelectedIncidentDrafts()" style="display:none">Delete selected</button></div>
 <div id="draftReviewBanner" style="display:none;margin-bottom:16px;padding:12px 14px;border:1px solid var(--border);border-radius:9px;background:var(--surface2);color:var(--text);font-size:13px"></div>
 <div id="draftReviewList" style="display:grid;gap:12px"><div class="mailbox-empty">Loading drafts…</div></div>
@@ -668,7 +678,7 @@
 <span class="breadcrumb-sep">›</span>
 <span class="breadcrumb-item active">Incidents</span>
 </div>
-<div class="page-header-title">Incident Management</div>
+
 <div class="page-header-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span id="incidentCount">Loading...</span><span style="color:var(--text-muted)">-</span><span id="incidentsLastUpdated" style="color:var(--text-muted)">Last updated just now</span>
 <span id="incidentsRefreshBtn" onclick="refreshPageContent(event,'incidents')" onmouseout="this.style.color='var(--text-muted)';this.style.background='transparent'" onmouseover="this.style.color='var(--accent)';this.style.background='rgba(79,142,247,0.12)'" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--text-muted);transition:color .2s,background .2s;flex-shrink:0" title="Refresh">
 <svg fill="none" height="13" id="incidentsRefreshIcon" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" style="transition:transform .7s ease" viewbox="0 0 24 24" width="13">
@@ -815,7 +825,7 @@
 <span class="breadcrumb-sep">›</span>
 <span class="breadcrumb-item active">Reports</span>
 </div>
-<div class="page-header-title">Reports</div>
+
 <div class="page-header-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>Generate custom reports for stakeholders and operations</span><span style="color:var(--text-muted)">-</span><span id="reportsLastUpdated" style="color:var(--text-muted)">Last updated just now</span>
 <span id="reportsRefreshBtn" onclick="refreshPageContent(event,'reports')" onmouseout="this.style.color='var(--text-muted)';this.style.background='transparent'" onmouseover="this.style.color='var(--accent)';this.style.background='rgba(79,142,247,0.12)'" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--text-muted);transition:color .2s,background .2s;flex-shrink:0" title="Refresh">
 <svg fill="none" height="13" id="reportsRefreshIcon" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" style="transition:transform .7s ease" viewbox="0 0 24 24" width="13">
@@ -978,7 +988,7 @@
 <span class="breadcrumb-sep">›</span>
 <span class="breadcrumb-item active">Users</span>
 </div>
-<div class="page-header-title">User Management</div>
+
 <div class="page-header-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>Manage roles and access control</span><span style="color:var(--text-muted)">-</span><span id="usersLastUpdated" style="color:var(--text-muted)">Last updated just now</span>
 <span id="usersRefreshBtn" onclick="refreshPageContent(event,'users')" onmouseout="this.style.color='var(--text-muted)';this.style.background='transparent'" onmouseover="this.style.color='var(--accent)';this.style.background='rgba(79,142,247,0.12)'" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--text-muted);transition:color .2s,background .2s;flex-shrink:0" title="Refresh">
 <svg fill="none" height="13" id="usersRefreshIcon" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" style="transition:transform .7s ease" viewbox="0 0 24 24" width="13">
@@ -1102,7 +1112,7 @@
 <span class="breadcrumb-sep">›</span>
 <span class="breadcrumb-item active">Data Management</span>
 </div>
-<div class="page-header-title">Data Management</div>
+
 <div class="page-header-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>Manage customers and area categories</span><span style="color:var(--text-muted)">-</span><span id="datamanagementLastUpdated" style="color:var(--text-muted)">Last updated just now</span>
 <span id="datamanagementRefreshBtn" onclick="refreshPageContent(event,'datamanagement')" onmouseout="this.style.color='var(--text-muted)';this.style.background='transparent'" onmouseover="this.style.color='var(--accent)';this.style.background='rgba(79,142,247,0.12)'" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--text-muted);transition:color .2s,background .2s;flex-shrink:0" title="Refresh">
 <svg fill="none" height="13" id="datamanagementRefreshIcon" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" style="transition:transform .7s ease" viewbox="0 0 24 24" width="13">
@@ -1180,7 +1190,7 @@
 <span class="breadcrumb-sep">›</span>
 <span class="breadcrumb-item active">Roles</span>
 </div>
-<div class="page-header-title">Role Management</div>
+
 <div class="page-header-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>Define roles and their permissions across the portal</span><span style="color:var(--text-muted)">-</span><span id="rolesLastUpdated" style="color:var(--text-muted)">Last updated just now</span>
 <span id="rolesRefreshBtn" onclick="refreshPageContent(event,'roles')" onmouseout="this.style.color='var(--text-muted)';this.style.background='transparent'" onmouseover="this.style.color='var(--accent)';this.style.background='rgba(79,142,247,0.12)'" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--text-muted);transition:color .2s,background .2s;flex-shrink:0" title="Refresh">
 <svg fill="none" height="13" id="rolesRefreshIcon" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" style="transition:transform .7s ease" viewbox="0 0 24 24" width="13">
@@ -1204,7 +1214,7 @@
 <div class="page-header" style="margin-bottom:20px">
 <div>
 <div class="breadcrumb"><span class="breadcrumb-item" onclick="_showC360Picker()" style="cursor:pointer">Customer 360</span><span class="breadcrumb-sep">›</span><span class="breadcrumb-item active" id="c360BreadCust">Customer</span></div>
-<div class="page-header-title" id="c360Title">Customer 360</div>
+
 <div class="page-header-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span id="c360Sub">Full incident history and health metrics</span><span style="color:var(--text-muted)">-</span><span id="customer360LastUpdated" style="color:var(--text-muted)">Last updated just now</span>
 <span id="customer360RefreshBtn" onclick="refreshPageContent(event,'customer360')" onmouseout="this.style.color='var(--text-muted)';this.style.background='transparent'" onmouseover="this.style.color='var(--accent)';this.style.background='rgba(79,142,247,0.12)'" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--text-muted);transition:color .2s,background .2s;flex-shrink:0" title="Refresh">
 <svg fill="none" height="13" id="customer360RefreshIcon" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" style="transition:transform .7s ease" viewbox="0 0 24 24" width="13">
@@ -1306,7 +1316,7 @@
 <span class="breadcrumb-sep">›</span>
 <span class="breadcrumb-item active">Alert Compliance</span>
 </div>
-<div class="page-header-title">Alert Compliance Report</div>
+
 <div class="page-header-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>Operations mailbox alerts that never became an incident, grouped and tracked to closure</span><span style="color:var(--text-muted)">-</span><span id="alertComplianceLastUpdated" style="color:var(--text-muted)">Last updated just now</span>
 <span id="alertComplianceRefreshBtn" onclick="refreshPageContent(event,'alertCompliance')" onmouseout="this.style.color='var(--text-muted)';this.style.background='transparent'" onmouseover="this.style.color='var(--accent)';this.style.background='rgba(79,142,247,0.12)'" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--text-muted);transition:color .2s,background .2s;flex-shrink:0" title="Refresh">
 <svg fill="none" height="13" id="alertComplianceRefreshIcon" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" style="transition:transform .7s ease" viewbox="0 0 24 24" width="13">
@@ -1445,7 +1455,7 @@
 <span class="breadcrumb-sep">›</span>
 <span class="breadcrumb-item active">SOP Library</span>
 </div>
-<div class="page-header-title">SOP Library</div>
+
 <div class="page-header-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>Confluence runbooks for every customer, grouped by alert category</span><span style="color:var(--text-muted)">-</span><span id="sopLibraryLastUpdated" style="color:var(--text-muted)">Last updated just now</span>
 <span id="sopLibraryRefreshBtn" onclick="refreshSopLibrary(event)" onmouseout="this.style.color='var(--text-muted)';this.style.background='transparent'" onmouseover="this.style.color='var(--accent)';this.style.background='rgba(79,142,247,0.12)'" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--text-muted);transition:color .2s,background .2s;flex-shrink:0" title="Refresh">
 <svg fill="none" height="13" id="sopLibraryRefreshIcon" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" style="transition:transform .7s ease" viewbox="0 0 24 24" width="13">
@@ -1468,6 +1478,172 @@
 </div>
 </div>
 <!-- /SOP LIBRARY -->
+<!-- CSO INCIDENTS: additive page, safe to delete to revert -->
+<div class="page" id="page-csoIncidents">
+<div class="page-header">
+<div>
+<div class="breadcrumb" id="bc_page-csoIncidents">
+<span class="breadcrumb-item" onclick="navigate('dashboard', document.getElementById('dashNav'))">🏠 Home</span>
+<span class="breadcrumb-sep">›</span>
+<span class="breadcrumb-item active">Jira Ticket Management</span>
+</div>
+
+<div class="page-header-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>Customer-raised Jira tickets for every customer, with live status and comments</span><span style="color:var(--text-muted)">-</span><span id="csoIncidentsLastUpdated" style="color:var(--text-muted)">Last updated just now</span>
+<span id="csoIncidentsRefreshBtn" onclick="refreshCsoIncidents(event)" onmouseout="this.style.color='var(--text-muted)';this.style.background='transparent'" onmouseover="this.style.color='var(--accent)';this.style.background='rgba(79,142,247,0.12)'" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--text-muted);transition:color .2s,background .2s;flex-shrink:0" title="Refresh">
+<svg fill="none" height="13" id="csoIncidentsRefreshIcon" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" style="transition:transform .7s ease" viewbox="0 0 24 24" width="13">
+<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+<path d="M21 3v5h-5"></path>
+<path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+<path d="M8 16H3v5"></path>
+</svg>
+</span></div>
+</div>
+</div>
+<div class="sop-library-layout">
+<aside class="sop-library-sidebar">
+<input id="csoIncidentsSearch" type="text" placeholder="Search by customer or ticket…" oninput="renderCsoIncidentsTree()" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 14px;color:var(--text);font-size:13px;outline:none;margin-bottom:10px"/>
+<div id="csoIncidentsTree" class="sop-library-tree"></div>
+</aside>
+<div class="sop-library-content" id="csoIncidentsContent">
+<div class="mailbox-empty">Select a ticket on the left to view it here.</div>
+</div>
+</div>
+</div>
+<!-- /CSO INCIDENTS -->
+<!-- CORALOGIX ALERTS: additive page, safe to delete to revert -->
+<div class="page" id="page-coralogixAlerts">
+<div class="page-header">
+<div>
+<div class="breadcrumb" id="bc_page-coralogixAlerts">
+<span class="breadcrumb-item" onclick="navigate('dashboard', document.getElementById('dashNav'))">🏠 Home</span>
+<span class="breadcrumb-sep">›</span>
+<span class="breadcrumb-item active">Alert Management</span>
+</div>
+
+<div class="page-header-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>Snooze or tune a real Coralogix alert — changes write straight through to Coralogix</span><span style="color:var(--text-muted)">-</span><span id="coralogixAlertsLastUpdated" style="color:var(--text-muted)">Last updated just now</span>
+<span id="coralogixAlertsRefreshBtn" onclick="refreshCoralogixAlerts(event)" onmouseout="this.style.color='var(--text-muted)';this.style.background='transparent'" onmouseover="this.style.color='var(--accent)';this.style.background='rgba(79,142,247,0.12)'" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;cursor:pointer;color:var(--text-muted);transition:color .2s,background .2s;flex-shrink:0" title="Refresh">
+<svg fill="none" height="13" id="coralogixAlertsRefreshIcon" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" style="transition:transform .7s ease" viewbox="0 0 24 24" width="13">
+<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+<path d="M21 3v5h-5"></path>
+<path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+<path d="M8 16H3v5"></path>
+</svg>
+</span></div>
+</div>
+</div>
+<div class="sop-library-layout">
+<aside class="sop-library-sidebar">
+<div id="coralogixAlertsGroupTree" class="sop-library-tree"></div>
+</aside>
+<div style="flex:1;min-width:0">
+<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+<input id="coralogixAlertsSearch" type="text" placeholder="Search by alert name…" oninput="coralogixAlertsFilterChanged()" style="flex:1;min-width:220px;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 14px;color:var(--text);font-size:13px;outline:none"/>
+<select id="coralogixAlertsStatusFilter" onchange="coralogixAlertsFilterChanged()" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px">
+<option value="">All Statuses</option>
+<option value="enabled">Enabled</option>
+<option value="disabled">Disabled</option>
+<option value="snoozed">Snoozed</option>
+</select>
+</div>
+<div class="chart-card">
+<div class="chart-header">
+<div class="chart-title" id="coralogixAlertsGroupTitle">All Customers</div>
+<span id="coralogixAlertsRowCount" style="font-size:12px;color:var(--text-muted)"></span>
+</div>
+<table>
+<thead><tr><th>Name</th><th>Type</th><th>Priority</th><th>Threshold</th><th>Status</th><th>Snooze / Tune</th></tr></thead>
+<tbody id="coralogixAlertsTableBody"></tbody>
+</table>
+<div class="pagination-bar">
+<div class="pg-perpage">
+            Rows per page:
+            <select id="coralogixAlertsPerPageSelect" onchange="coralogixAlertsChangePerPage(this.value)">
+<option value="10">10</option>
+<option selected="" value="25">25</option>
+<option value="50">50</option>
+<option value="100">100</option>
+</select>
+</div>
+<span class="pagination-info" id="coralogixAlertsPaginationInfo">Showing all results</span>
+<div class="pagination-controls" id="coralogixAlertsPaginationBtns"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- /CORALOGIX ALERTS -->
+<!-- CORALOGIX DETAIL MODAL: additive, safe to delete to revert -->
+<div class="modal-overlay" id="coralogixDetailModal">
+<div class="modal" style="max-width:640px">
+<div class="modal-header">
+<div class="modal-title" id="coralogixDetailTitle">Alert Detail</div>
+<div class="modal-close" onclick="closeModal('coralogixDetailModal')">✕</div>
+</div>
+<div class="modal-body">
+<div id="coralogixDetailBadges" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"></div>
+<div class="detail-fields-grid" id="coralogixDetailMetaGrid" style="margin-bottom:16px"></div>
+<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">Description</div>
+<div id="coralogixDetailDescription" style="white-space:pre-wrap;font-size:13px;color:var(--text);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:16px;max-height:220px;overflow-y:auto"></div>
+<div id="coralogixDetailQuerySection" style="margin-bottom:16px">
+<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">Query</div>
+<pre id="coralogixDetailQuery" style="white-space:pre-wrap;font-family:var(--font-mono,monospace);font-size:12.5px;color:var(--text);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin:0;max-height:180px;overflow-y:auto"></pre>
+</div>
+<div id="coralogixDetailConditionsSection">
+<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">Conditions</div>
+<div id="coralogixDetailConditionText" style="font-size:13px;color:var(--text);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px"></div>
+<div style="display:flex;gap:24px;flex-wrap:wrap;font-size:12.5px;color:var(--text-muted)">
+<div>When there is no data: <strong id="coralogixDetailNoData" style="color:var(--text)"></strong></div>
+<div>Auto retire undetected values: <strong id="coralogixDetailAutoRetire" style="color:var(--text)"></strong></div>
+</div>
+</div>
+</div>
+<div class="modal-footer">
+<button class="btn btn-primary" onclick="coralogixEditFromDetail()">Edit</button>
+</div>
+</div>
+</div>
+<!-- /CORALOGIX DETAIL MODAL -->
+<!-- CORALOGIX TUNE MODAL: additive, safe to delete to revert -->
+<div class="modal-overlay" id="coralogixTuneModal">
+<div class="modal" style="max-width:640px">
+<div class="modal-header">
+<div class="modal-title" id="coralogixTuneTitle">Edit Alert</div>
+<div class="modal-close" onclick="closeModal('coralogixTuneModal')">✕</div>
+</div>
+<div class="modal-body">
+<div class="form-group form-full">
+<label class="form-label">Name</label>
+<input type="text" id="coralogixTuneName" style="width:100%"/>
+</div>
+<div class="form-group form-full">
+<label class="form-label">Description</label>
+<textarea id="coralogixTuneDescription" rows="6" style="width:100%;font-family:inherit"></textarea>
+</div>
+<div class="form-group form-full" id="coralogixTuneQuerySection">
+<label class="form-label">Query</label>
+<textarea id="coralogixTuneQuery" rows="6" style="width:100%;font-family:var(--font-mono,monospace);font-size:12.5px"></textarea>
+</div>
+<div class="form-group form-full" id="coralogixTuneThresholdSection" style="display:flex;gap:14px">
+<div style="flex:1">
+<label class="form-label">Comparison</label>
+<select id="coralogixTuneConditionType" style="width:100%"></select>
+</div>
+<div style="flex:1">
+<label class="form-label">Threshold</label>
+<input type="number" id="coralogixTuneThreshold" step="any" min="0" style="width:100%"/>
+</div>
+<div style="flex:1">
+<label class="form-label">Wait Time</label>
+<select id="coralogixTuneTimeWindow" style="width:100%"></select>
+</div>
+</div>
+</div>
+<div class="modal-footer">
+<button class="btn btn-primary" id="coralogixTuneSaveBtn" onclick="coralogixSaveTune()">Save</button>
+</div>
+</div>
+</div>
+<!-- /CORALOGIX TUNE MODAL -->
 <!-- ALERT COMPLIANCE DETAIL MODAL: additive, safe to delete to revert -->
 <div class="modal-overlay" id="alertDetailModal">
 <div class="modal" style="max-width:720px">
@@ -1507,6 +1683,18 @@
 <div id="adOccurrenceList" style="display:flex;flex-direction:column;gap:3px;max-height:140px;overflow-y:auto;margin-bottom:14px;font-size:12px"></div>
 <div id="adEmailViewer" style="margin-bottom:20px"></div>
 </div>
+<!-- CSO INCIDENTS: a Customer Raised Ticket (category 'jira') with a resolvable
+     Jira issue key shows the real, live Jira ticket here (status, transitions,
+     comments) instead of the local Ticket Status section above and the local
+     Comments section below — pulled fresh from Jira every time this modal
+     opens, so it's never a second copy that can drift from the real ticket.
+     Kept OUTSIDE #adDetailSections (unlike adTicketStatusSection) so it still
+     shows in "comments-only" mode (the 💬 icon) — it holds this ticket's only
+     comments. Falls back to the local sections when no key could be resolved
+     from the subject. Safe to delete this div to revert. -->
+<div id="adJiraTicketSection" style="display:none;margin-bottom:16px"></div>
+<!-- /CSO INCIDENTS -->
+<div id="acLocalCommentsSection">
 <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Comments</div>
 <div id="acCommentsList" style="display:flex;flex-direction:column;gap:2px;max-height:220px;overflow-y:auto;margin-bottom:14px"></div>
 <div class="form-group form-full" style="margin:0;position:relative">
@@ -1515,8 +1703,9 @@
 <textarea id="acCommentInput" onblur="setTimeout(function(){closeMentionDropdown('acMentionDropdown')},200)" oninput="handleMentionInput(this,'acMentionDropdown')" onkeydown="handleAcCommentKey(event)" placeholder="Explain the cause of this alert, or why an incident was or wasn't created… use @name to mention" rows="3" style="width:100%"></textarea>
 </div>
 </div>
+</div>
 <div class="modal-footer">
-<button class="btn btn-primary" onclick="acSubmitComment()">Add Comment</button>
+<button class="btn btn-primary" id="acSubmitCommentBtn" onclick="acSubmitComment()">Add Comment</button>
 <button class="btn btn-primary" id="adResolveBtn" onclick="acResolveAlert()" style="display:none;background:var(--danger);border-color:var(--danger)" title="Optionally add a comment above describing the action taken or root cause">Mark as Resolved</button>
 <button class="btn btn-sm" id="adDeleteBtn" onclick="acDeleteAlert()" style="display:none;background:transparent;color:#f75c7c;border:none;font-size:15px;padding:3px 7px" title="Delete alert — admin only" aria-label="Delete alert">&#128465;</button>
 </div>
@@ -1866,6 +2055,15 @@
             </label>
 <label class="perm-check" onclick="togglePerm(this)">
 <input type="checkbox" value="send_mailbox"/> Send Mailbox Replies
+            </label>
+<label class="perm-check" onclick="togglePerm(this)">
+<input type="checkbox" value="view_sop_library"/> View SOP Library
+            </label>
+<label class="perm-check" onclick="togglePerm(this)">
+<input type="checkbox" value="view_cso_incidents"/> View CSO Incidents
+            </label>
+<label class="perm-check" onclick="togglePerm(this)">
+<input type="checkbox" value="manage_coralogix_alerts"/> Manage Coralogix Alerts
             </label>
 <label class="perm-check" onclick="togglePerm(this)">
 <input type="checkbox" value="delete_mailbox"/> Delete Mailbox Emails
@@ -2641,5 +2839,5 @@
 <div class="ai-chat-suggestions"><button onclick="askAiSuggestion(this)">Show open Critical incidents</button><button onclick="askAiSuggestion(this)">Summarize recent incidents</button></div>
 <footer class="ai-chat-compose"><textarea id="aiChatInput" rows="2" maxlength="2000" placeholder="Ask about incidents..." onkeydown="handleAiChatKey(event)"></textarea><button id="aiChatSend" onclick="sendAiChatMessage()">Send</button></footer>
 </section>
-<script src="./js/reportingMetrics.js"></script><script src="./js/incidentReportExcel.js"></script><script src="./js/app.js?v=20261111-sop-clear-floats"></script><script src="./config/config.js"></script></body>
+<script src="./js/reportingMetrics.js"></script><script src="./js/incidentReportExcel.js"></script><script src="./js/app.js?v=20261111-alert-comparison-edit"></script><script src="./config/config.js"></script></body>
 </html>
